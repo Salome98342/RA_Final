@@ -1,0 +1,33 @@
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom' // <- quita BrowserRouter
+import Login from '@/pages/Login'
+import Estudiante from '@/pages/Estudiante'
+import Recuperar from './pages/Recuperar'
+import DocenteCursos from '@/pages/docente/Cursos'
+import DocenteRAs from '@/pages/docente/RAs'
+import DocenteCrearActividad from '@/pages/docente/CrearActividad'
+import DocenteCalificar from '@/pages/docente/Calificar'
+import Profile from '@/pages/Profile'
+import DocenteRecursos from '@/pages/docente/Recursos'
+
+const App: React.FC = () => {
+  return (
+    // Quitar BrowserRouter aquí, ya está en main.tsx
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/recuperar" element={<Recuperar />} />
+      <Route path="/docente" element={<DocenteCursos />} />
+      <Route path="/docente/:curso/ras" element={<DocenteRAs />} />
+      <Route path="/docente/:curso/ra/:raId/crear-actividad" element={<DocenteCrearActividad />} />
+      <Route path="/docente/:curso/ra/:raId/calificar" element={<DocenteCalificar />} />
+      <Route path="/docente/:curso/recursos" element={<DocenteRecursos />} />
+      <Route path="/estudiante" element={<Estudiante />} />
+      <Route path="/perfil" element={<Profile />} />
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  )
+}
+
+export default App

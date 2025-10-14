@@ -1,0 +1,114 @@
+/* ====== ANIMACIONES Y TRANSICIONES ====== */
+
+/* Fondo animado SOLO en páginas de login/recuperar */
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(-45deg, #dadada, #f3f3f3, #e4e4e4, #f8f8f8);
+  background-size: 400% 400%;
+  animation: gradientBG 12s ease infinite;
+}
+
+/* Elimina el fondo animado global del body */
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Entrada suave de la caja de login */
+.login-box {
+    animation: fadeInUp 1.2s ease forwards;
+    opacity: 0;
+    transform: translateY(40px);
+}
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* Botón con efecto de presión */
+.login-box button {
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+.login-box button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 15px rgba(200, 16, 46, 0.5);
+}
+
+/* Inputs con animación al foco */
+.login-box input:focus {
+    border-color: #C8102E;
+    box-shadow: 0 0 8px rgba(200, 16, 46, 0.3);
+    transition: all 0.3s ease;
+}
+
+/* Enlace con efecto deslizante */
+.extra a {
+    position: relative;
+    overflow: hidden;
+}
+
+.extra a::after {
+    content: "";
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: #C8102E;
+    transition: width 0.3s ease;
+}
+
+.extra a:hover::after {
+    width: 100%;
+}
+
+/* Dropdown con efecto de aparición */
+.dropdown-list {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.dropdown:hover .dropdown-list {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+
+.mensaje {
+  position: fixed;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  opacity: 0;
+  transition: all 0.5s ease;
+  z-index: 9999;
+}
+
+.mensaje.visible {
+  top: 20px;
+  opacity: 1;
+}
+
+.mensaje.error {
+  background: #ff4d4d;
+  color: white;
+}
+
+.mensaje.ok {
+  background: #4caf50;
+  color: white;
+}
+
+/* ====== FIN ANIMACIONES Y TRANSICIONES ====== */
+/* ====== ESTILOS BASE ====== */
