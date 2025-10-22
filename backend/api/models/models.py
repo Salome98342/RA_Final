@@ -243,3 +243,19 @@ class Recurso(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class RaActividadIndicador(models.Model):
+    """
+    Relación N a N entre una relación RA-Actividad y los Indicadores de Logro del mismo RA.
+    Permite asignar una misma actividad a múltiples indicadores.
+    """
+    id = models.BigAutoField(primary_key=True)
+    ra_actividad = models.ForeignKey(RaActividad, on_delete=models.CASCADE, db_column="id_ra_actividad", related_name="indicadores_rel")
+    indicador = models.ForeignKey(IndicadoresDeLogro, on_delete=models.CASCADE, db_column="id_ind", related_name="ra_actividades_rel")
+
+    class Meta:
+        db_table = "ra_actividad_indicador"
+        constraints = [
+            models.UniqueConstraint(fields=["ra_actividad", "indicador"], name="uq_ra_actividad_indicador"),
+        ]

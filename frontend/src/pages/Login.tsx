@@ -57,10 +57,7 @@ export default function Login() {
     }
   };
 
-  const handleForgot = (e: React.MouseEvent) => {
-    e.preventDefault();
-    showToast("Contacto de soporte: mesa.ayuda@univalle.edu", "ok");
-  };
+  // Recuperación de contraseña ahora navega a /recuperar
 
   return (
     <div>
@@ -101,7 +98,7 @@ export default function Login() {
           </form>
 
           <div className="extra">
-            <Link to="/recuperar" id="forgotLink" onClick={handleForgot}>
+            <Link to="/recuperar" id="forgotLink">
               ¿Olvidó su contraseña y/o usuario?
             </Link>
           </div>

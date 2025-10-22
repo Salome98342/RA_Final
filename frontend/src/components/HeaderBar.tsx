@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { useSession } from '@/state/SessionContext'
 import { getFullProfile } from '@/services/auth'  // <-- cambiar import
 import { useNavigate } from 'react-router-dom'
+import NotificationsBell from '@/components/NotificationsBell'
 
 type Props = { roleLabel: string }
 const HeaderBar: React.FC<Props> = ({ roleLabel }) => {
@@ -34,6 +35,7 @@ const HeaderBar: React.FC<Props> = ({ roleLabel }) => {
           <div>{name}</div>
           <div className="text-uppercase fw-semibold">{roleLabel}</div>
         </div>
+        <NotificationsBell />
         <button className="avatar" aria-label="Perfil" onClick={()=>navigate('/perfil')}>
           <i className="bi bi-person" />
         </button>

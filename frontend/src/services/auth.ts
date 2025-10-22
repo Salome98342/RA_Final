@@ -32,6 +32,10 @@ export async function requestPasswordReset(email: string) {
   await api.post(endpoints.auth.forgot, { email })
 }
 
+export async function resetPassword(token: string, password: string) {
+  await api.post(endpoints.auth.reset, { token, password })
+}
+
 export async function getFullProfile(): Promise<ProfileDetails> {
   const { data } = await api.get(endpoints.auth.profile)
   const u = data.user || {}

@@ -13,6 +13,7 @@ export type Activity = {
   tipoActividadId?: string
   tipoActividad?: string
   fechaCierre?: string | null
+  indicadores?: { id: string; descripcion: string; porcentaje: number }[]
 }
 export type Grade = { estudiante: string; actividad: string; nota: number | null }
 

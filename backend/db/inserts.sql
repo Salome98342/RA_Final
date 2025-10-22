@@ -1,4 +1,3 @@
-
 -- Elimina todos los datos de las tablas, respetando claves foráneas (de hijos a padres)
 -- Luego reinicia las secuencias de los IDs autoincrementales
 
@@ -464,6 +463,10 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (20, 40, 3.9, 'Proyecto sólido',  40)
 ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
 
-
 COMMIT;
+
+SELECT id_ra, ROUND(SUM(porcentaje_ra_actividad),2) AS total
+FROM ra_actividad
+GROUP BY id_ra
+ORDER BY id_ra;
 

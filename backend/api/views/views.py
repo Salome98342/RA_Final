@@ -3,14 +3,15 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.permissions import AllowAny
 from django.core import signing
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
+from django.core.mail import send_mail
 from django.conf import settings
 from django.db.models import Avg, Sum
 import datetime
 
 from ..models.models import (
     TipoDocumento, TipoActividad, Programa, Docente, Estudiante, Asignatura,
-    Task, ResultadoDeAprendizaje, Matricula, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, PeriodoAcademico, Recurso
+    Task, ResultadoDeAprendizaje, Matricula, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, PeriodoAcademico, Recurso, RaActividadIndicador
 )
 from ..serializers.serializers import (
     TipoDocumentoSerializer, TipoActividadSerializer, ProgramaSerializer,
@@ -19,6 +20,7 @@ from ..serializers.serializers import (
 )
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
+RESET_TOKEN_MAX_AGE = 60 * 60  # 1 hora
 
 def _normalize_login_payload(data: dict):
     email = data.get("email") or data.get("correo")
@@ -111,6 +113,34 @@ def password_forgot_view(request):
     email = (request.data or {}).get("email")
     if not email:
         return Response({"message": "Email requerido"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Buscar usuario por correo (estudiante o docente)
+    u = Estudiante.objects.filter(correo=email).first()
+    rol = "estudiante"
+    if not u:
+        u = Docente.objects.filter(correo=email).first()
+        rol = "docente" if u else None
+
+    # Siempre responder 200 para evitar enumeración de usuarios
+    if u and rol:
+        payload = {"kind": "pwdreset", "rol": rol, "id": u.pk, "ts": datetime.datetime.utcnow().timestamp()}
+        token = signing.dumps(payload)
+        front = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        reset_url = f"{front}/reset?token={token}"
+        subject = "Recuperación de contraseña"
+        message = (
+            "Hola,\n\n"
+            "Recibimos una solicitud para restablecer tu contraseña.\n"
+            f"Usa el siguiente enlace (válido por 1 hora):\n{reset_url}\n\n"
+            "Si no fuiste tú, puedes ignorar este mensaje.\n"
+            "— Universidad del Valle"
+        )
+        try:
+            send_mail(subject, message, getattr(settings, "DEFAULT_FROM_EMAIL", None), [email], fail_silently=True)
+        except Exception:
+            # En desarrollo con console backend no debería fallar; igual no exponemos detalles
+            pass
+
     return Response({"ok": True})
 
 @api_view(["POST"])
@@ -121,6 +151,33 @@ def password_reset_view(request):
     new_pass = (request.data or {}).get("password")
     if not token or not new_pass:
         return Response({"message": "Token y password requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+    if len(str(new_pass)) < 6:
+        return Response({"message": "La nueva contraseña debe tener al menos 6 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        data = signing.loads(token, max_age=RESET_TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"message": "Token inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if data.get("kind") != "pwdreset":
+        return Response({"message": "Token inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+    rol = data.get("rol")
+    uid = data.get("id")
+
+    if rol == "docente":
+        u = Docente.objects.filter(pk=uid).first()
+        if not u:
+            return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+        u.contrasenia_docente = make_password(new_pass)
+        u.save(update_fields=["contrasenia_docente"])
+    else:
+        u = Estudiante.objects.filter(pk=uid).first()
+        if not u:
+            return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+        u.contrasena_estudiante = make_password(new_pass)
+        u.save(update_fields=["contrasena_estudiante"])
+
     return Response({"ok": True})
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -295,10 +352,19 @@ def ra_actividades_view(request, ra_id: int):
         id_matricula = request.query_params.get("id_matricula")
         rels = (RaActividad.objects
                 .filter(ra_id=ra_id)
-                .select_related("actividad__tipo_actividad"))
+                .select_related("actividad__tipo_actividad")
+                .prefetch_related("indicadores_rel__indicador"))
         out = []
         for rel in rels:
             act = rel.actividad
+            inds = [
+                {
+                    "id_ind": rir.indicador_id,
+                    "descripcion": rir.indicador.descripcion,
+                    "porcentaje_ind": float(rir.indicador.porcentaje_ind),
+                }
+                for rir in rel.indicadores_rel.all()
+            ]
             row = {
                 "id_actividad": act.id_actividad,
                 "id_ra_actividad": rel.id_ra_actividad,
@@ -308,6 +374,7 @@ def ra_actividades_view(request, ra_id: int):
                 "id_tipo_actividad": act.tipo_actividad_id,
                 "tipo_actividad": getattr(act.tipo_actividad, "descripcion", None),
                 "fecha_cierre": act.fecha_cierre,
+                "indicadores": inds,
             }
             if id_matricula:
                 nota = (NotasActividad.objects
@@ -327,6 +394,7 @@ def ra_actividades_view(request, ra_id: int):
     porcentaje_ra_actividad = body.get("porcentaje_ra_actividad")
     descripcion = body.get("descripcion")
     fecha_cierre = body.get("fecha_cierre")
+    indicadores = body.get("indicadores")  # Lista opcional de ids de indicadores
 
     if not (nombre and id_tipo is not None and porcentaje_actividad is not None and porcentaje_ra_actividad is not None):
         return Response({"message": "Campos requeridos: nombre_actividad, id_tipo_actividad, porcentaje_actividad, porcentaje_ra_actividad"},
@@ -355,6 +423,12 @@ def ra_actividades_view(request, ra_id: int):
         fecha_cierre=fecha_cierre_dt,
     )
     rel = RaActividad.objects.create(actividad=act, ra_id=ra_id, porcentaje_ra_actividad=porcentaje_ra_actividad)
+    # Asignar indicadores (opcionales), validando que pertenezcan al mismo RA
+    if isinstance(indicadores, (list, tuple)) and len(indicadores) > 0:
+        valid_inds = set(IndicadoresDeLogro.objects.filter(ra_id=ra_id, id_ind__in=indicadores).values_list("id_ind", flat=True))
+        bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
+        if bulk:
+            RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
     return Response({
         "id_actividad": act.id_actividad,
         "id_ra_actividad": rel.id_ra_actividad,

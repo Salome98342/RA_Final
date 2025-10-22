@@ -34,6 +34,12 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+# Base URL del frontend para enlaces (recuperación de contraseña, etc.)
+# En desarrollo tomamos la primera URL permitida por CORS o fallback a localhost:5173
+FRONTEND_URL = (
+    CORS_ALLOWED_ORIGINS[0] if CORS_ALLOWED_ORIGINS else "http://localhost:5173"
+)
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -142,3 +148,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": None,
 }
+
+# Email (desarrollo): imprime los correos en la consola
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "no-reply@univalle.local"
