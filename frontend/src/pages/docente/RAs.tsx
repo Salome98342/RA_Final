@@ -7,7 +7,7 @@ import RaCard from '@/components/RaCard'
 // import SearchPill from '@/components/SearchPill'
 import StudentList from '@/components/StudentList'
 import type { RA, Indicator, Activity, Student } from '@/types'
-import { getRAsByCourse, getIndicatorsByRA, getActivitiesByRA, getStudentsByCourse, getPeriodosByCourse } from '@/services/api'
+import { getRAsByCourse, getIndicatorsByRA, getActivitiesByRA, getStudentsByCourse, getPeriodosByCourse, getRAValidation, getAsignaturaValidation } from '@/services/api'
 
 const DocenteRAs: React.FC = () => {
   const { curso } = useParams<{curso: string}>()
@@ -20,11 +20,19 @@ const DocenteRAs: React.FC = () => {
   const [err, setErr] = useState<string | null>(null)
   const [periodos, setPeriodos] = useState<{id:string; descripcion:string}[]>([])
   const [periodoSel, setPeriodoSel] = useState<string>('')
+  const [asigVal, setAsigVal] = useState<{ ras: { suma: number; ok: boolean; faltante: number } } | null>(null)
+  const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
 
   useEffect(() => {
     if (!curso) return
     setErr(null)
-    getRAsByCourse(curso).then(setRas).catch(()=>setErr('No se pudieron cargar los RA'))
+    getRAsByCourse(curso)
+      .then(async (rows) => {
+        setRas(rows)
+        // Validación de la asignatura: suma de RAs debe ser 100
+        try { setAsigVal(await getAsignaturaValidation(curso)) } catch { setAsigVal(null) }
+      })
+      .catch(()=>setErr('No se pudieron cargar los RA'))
   }, [curso])
 
   useEffect(() => { if(curso){ getPeriodosByCourse(curso).then(setPeriodos).catch(()=>setPeriodos([])) } }, [curso])
@@ -32,8 +40,9 @@ const DocenteRAs: React.FC = () => {
   const openRADetails = async (ra: RA) => {
     setSelectedRA(ra)
     try {
-      const [inds, acts] = await Promise.all([getIndicatorsByRA(ra.id), getActivitiesByRA(ra.id)])
+      const [inds, acts, val] = await Promise.all([getIndicatorsByRA(ra.id), getActivitiesByRA(ra.id), getRAValidation(ra.id)])
       setIndicators(inds); setActivities(acts)
+      setRaVal(val)
     } catch { setIndicators([]); setActivities([]) }
   }
 
@@ -49,6 +58,18 @@ const DocenteRAs: React.FC = () => {
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente'); if (k==='recursos' && curso) navigate(`/docente/${curso}/recursos`) }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]} />
         <main className="dash-content">
           <div className="content-title">RA - {curso}</div>
+          {asigVal && (
+            <div className={`alert ${asigVal.ras.ok ? 'alert-success' : 'alert-warning'}`} role="status">
+              Suma de RAs: <strong>{asigVal.ras.suma.toFixed(2)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${asigVal.ras.faltante.toFixed(2)}% para llegar a 100%.`}
+            </div>
+          )}
+          {asigVal && (
+            <div className="progress mb-3" aria-label="Progreso RAs a 100%">
+              <div className={`progress-bar ${asigVal.ras.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, asigVal.ras.suma))}%` }} aria-valuenow={asigVal.ras.suma} aria-valuemin={0} aria-valuemax={100}>
+                {asigVal.ras.suma.toFixed(0)}%
+              </div>
+            </div>
+          )}
           {err && <div className="alert alert-danger">{err}</div>}
           <CardGrid>
             {ras.map((ra, idx) => (
@@ -59,6 +80,30 @@ const DocenteRAs: React.FC = () => {
           {selectedRA && (
             <div className="mt-3">
               <div className="content-title">Detalle de RA: {selectedRA.titulo}</div>
+              {raVal && (
+                <div className="row g-3 mb-2">
+                  <div className="col-md-6">
+                    <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
+                      Actividades: <strong>{raVal.actividades.suma.toFixed(2)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${raVal.actividades.faltante.toFixed(2)}%`}
+                    </div>
+                    <div className="progress" aria-label="Progreso actividades a 100%">
+                      <div className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }} aria-valuenow={raVal.actividades.suma} aria-valuemin={0} aria-valuemax={100}>
+                        {raVal.actividades.suma.toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className={`alert ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
+                      Indicadores: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong>. {raVal.indicadores.ok ? '¡Listo!' : `Falta ${raVal.indicadores.faltante.toFixed(2)}%`}
+                    </div>
+                    <div className="progress" aria-label="Progreso indicadores a 100%">
+                      <div className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }} aria-valuenow={raVal.indicadores.suma} aria-valuemin={0} aria-valuemax={100}>
+                        {raVal.indicadores.suma.toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="row g-3">
                 <div className="col-md-6">
                   <div className="ra-card"><div className="ra-card-body">
@@ -89,7 +134,9 @@ const DocenteRAs: React.FC = () => {
                                 {act.fechaCierre ? ` · Cierra: ${new Date(act.fechaCierre).toLocaleDateString()}` : ''}
                               </div>
                             </div>
-                            <span className="badge bg-secondary">{act.porcentaje}%</span>
+                            <span className="badge bg-secondary" title="Aporte al RA">
+                              {act.porcentajeRA != null ? act.porcentajeRA : act.porcentaje}%
+                            </span>
                           </li>
                         ))}
                       </ul>

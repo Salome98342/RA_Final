@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
+import { SkeletonCard } from '@/components/Skeleton'
 import { useNavigate } from 'react-router-dom'
 import { getCourses } from '@/services/api'
 import type { Course } from '@/types'
@@ -46,7 +47,11 @@ const DocenteCursos: React.FC = () => {
           <div className="content-title">Cursos - Filtrar por código de carrera</div>
           <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
           {err && <div className="alert alert-danger">{err}</div>}
-          {loading ? <div className="text-muted">Cargando…</div> : (
+          {loading ? (
+            <CardGrid>
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            </CardGrid>
+          ) : (
             <CardGrid>
               {filtered.map((c, idx) => (
                 <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />

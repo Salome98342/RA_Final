@@ -3,6 +3,16 @@ import type { Course, RA, Indicator, Activity, Student, Periodo } from '@/types'
 import { endpoints } from '@/connections/endpoints'
 import { api } from '@/connections/http'
 
+// Tipos auxiliares
+export type NotificationItem = {
+  id: string
+  kind?: 'grade' | 'resource' | 'deadline' | 'message' | string
+  text: string
+  date?: string
+  read?: boolean
+  link?: string
+}
+
 // Cursos
 export async function getCourses(): Promise<Course[]> {
   const { data } = await api.get<any[]>(endpoints.asignaturas.list)
@@ -51,6 +61,7 @@ export async function createActivityForRA(raId: string, payload: {
   porcentaje_ra_actividad: number
   descripcion?: string
   fecha_cierre?: string
+  indicadores?: Array<number | string>
 }): Promise<Activity> {
   const { data } = await api.post(endpoints.ras.actividades(raId), payload)
   return {
@@ -121,7 +132,31 @@ export async function getActivitiesByRA(raId: string, opts?: { matriculaId?: str
     tipoActividadId: it.id_tipo_actividad != null ? String(it.id_tipo_actividad) : undefined,
     tipoActividad: it.tipo_actividad ?? undefined,
     fechaCierre: it.fecha_cierre ?? null,
+    // Enriquecimiento: lista de indicadores asignados a la actividad dentro del RA
+    indicadores: Array.isArray(it.indicadores)
+      ? it.indicadores.map((r: any) => ({
+          id: String(r.id_ind ?? r.id),
+          descripcion: String(r.descripcion ?? ''),
+          porcentaje: Number(r.porcentaje_ind ?? r.porcentaje ?? 0),
+        }))
+      : undefined,
   }))
+}
+
+// Validaciones y progreso
+export async function getRAValidation(raId: string): Promise<{
+  actividades: { suma: number; ok: boolean; faltante: number }
+  indicadores: { suma: number; ok: boolean; faltante: number }
+}> {
+  const { data } = await api.get(endpoints.validacion.ra(raId))
+  return data
+}
+
+export async function getAsignaturaValidation(codigo: string): Promise<{
+  ras: { suma: number; ok: boolean; faltante: number }
+}> {
+  const { data } = await api.get(endpoints.validacion.asignatura(codigo))
+  return data
 }
 
 // Recursos por curso
@@ -143,4 +178,17 @@ export async function uploadRecurso(courseId: string, file: File, titulo?: strin
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data
+}
+
+// Notificaciones
+export async function getNotifications(): Promise<NotificationItem[]> {
+  const { data } = await api.get<any[]>(endpoints.notificaciones)
+  return (data || []).map((n: any) => ({
+    id: String(n.id ?? n.uuid ?? Math.random()),
+    kind: n.kind || n.tipo || undefined,
+    text: n.text || n.mensaje || n.descripcion || 'Nueva notificación',
+    date: n.date || n.created_at || n.fecha || undefined,
+    read: Boolean(n.read ?? n.visto ?? false),
+    link: n.link || n.url || undefined,
+  }))
 }

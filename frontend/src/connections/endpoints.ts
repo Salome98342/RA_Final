@@ -24,6 +24,10 @@ export const endpoints = {
     indicadores: (id: string) => `/ras/${id}/indicadores/`,
     actividades: (id: string) => `/ras/${id}/actividades/`,
   },
+  validacion: {
+    ra: (id: string) => `/validacion/ra/${id}`,
+    asignatura: (codigo: string) => `/validacion/asignatura/${codigo}`,
+  },
   notas: '/notas',
   notificaciones: '/notificaciones',
 }

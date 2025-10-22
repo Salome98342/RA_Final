@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom' // <- quita BrowserRo
 import Login from '@/pages/Login'
 import Estudiante from '@/pages/Estudiante'
 import Recuperar from './pages/Recuperar'
+import Reset from './pages/Reset'
 import DocenteCursos from '@/pages/docente/Cursos'
 import DocenteRAs from '@/pages/docente/RAs'
 import DocenteCrearActividad from '@/pages/docente/CrearActividad'
@@ -17,6 +18,7 @@ const App: React.FC = () => {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/recuperar" element={<Recuperar />} />
+  <Route path="/reset" element={<Reset />} />
       <Route path="/docente" element={<DocenteCursos />} />
       <Route path="/docente/:curso/ras" element={<DocenteRAs />} />
       <Route path="/docente/:curso/ra/:raId/crear-actividad" element={<DocenteCrearActividad />} />

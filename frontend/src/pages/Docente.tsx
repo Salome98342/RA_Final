@@ -5,7 +5,7 @@ import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
 import StudentList from '@/components/StudentList'
-import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, getActivitiesByRA, createActivityForRA, upsertGrade, getIndicatorChart } from '@/services/api'
+import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, getActivitiesByRA, createActivityForRA, upsertGrade, getIndicatorChart, getRAValidation } from '@/services/api'
 import type { Course, RA, Indicator, Activity, Student } from '@/types'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '@/state/SessionContext'
@@ -28,8 +28,11 @@ const Docente: React.FC = () => {
   const [selectedActivity, setSelectedActivity] = useState<string>('')
   // Crear actividad
   const [newAct, setNewAct] = useState({ nombre: '', tipo: '1', pctAct: '', pctRA: '' })
+  const [newActError, setNewActError] = useState<string | null>(null)
+  const [savingNewAct, setSavingNewAct] = useState(false)
   // Calificación
   const [grade, setGrade] = useState({ nota: '', retro: '', indicadorId: '' })
+  const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
   const chartRef = useRef<HTMLCanvasElement | null>(null)
   const chartInstance = useRef<Chart | null>(null)
   const [params, setParams] = useSearchParams()
@@ -79,16 +82,19 @@ const Docente: React.FC = () => {
     setView('ra')
     setSelectedActivity('')
     try {
-      const [inds, acts] = await Promise.all([
+      const [inds, acts, val] = await Promise.all([
         getIndicatorsByRA(ra.id),
-        getActivitiesByRA(ra.id)
+        getActivitiesByRA(ra.id),
+        getRAValidation(ra.id)
       ])
       setIndicators(inds)
       setActivities(acts)
+      setRaVal(val)
     } catch (e) {
       console.warn('No se pudo cargar detalle de RA', e)
       setIndicators([])
       setActivities([])
+      setRaVal(null)
     }
   }
 
@@ -124,17 +130,40 @@ const Docente: React.FC = () => {
 
   const submitNewActivity = async () => {
     if (!selectedRA) return
+    setNewActError(null)
     const nombre_actividad = newAct.nombre.trim()
-    if (!nombre_actividad) return
-    await createActivityForRA(selectedRA.id, {
-      nombre_actividad,
-      id_tipo_actividad: Number(newAct.tipo),
-      porcentaje_actividad: Number(newAct.pctAct),
-      porcentaje_ra_actividad: Number(newAct.pctRA),
-    })
-    setNewAct({ nombre: '', tipo: '1', pctAct: '', pctRA: '' })
-    setActivities(await getActivitiesByRA(selectedRA.id))
+    const pctAct = Number(newAct.pctAct)
+    const pctRA = Number(newAct.pctRA)
+    // Validaciones rápidas en front
+    if (!nombre_actividad) { setNewActError('Ingresa un nombre para la actividad.'); return }
+    if (Number.isNaN(pctAct) || pctAct <= 0 || pctAct > 100) { setNewActError('"% actividad" debe estar entre 0 y 100.'); return }
+    if (Number.isNaN(pctRA) || pctRA <= 0 || pctRA > 100) { setNewActError('"% en RA" debe estar entre 0 y 100.'); return }
+    try {
+      setSavingNewAct(true)
+      await createActivityForRA(selectedRA.id, {
+        nombre_actividad,
+        id_tipo_actividad: Number(newAct.tipo),
+        porcentaje_actividad: pctAct, // % interno de la actividad (rúbrica)
+        porcentaje_ra_actividad: pctRA, // Aporte de la actividad al RA
+      })
+      setNewAct({ nombre: '', tipo: '1', pctAct: '', pctRA: '' })
+      setActivities(await getActivitiesByRA(selectedRA.id))
+    } catch (err: any) {
+      // Intenta extraer detalle amigable del backend
+      const data = err?.response?.data
+      let msg = err?.response?.data?.message || err?.response?.data?.detail || 'No se pudo crear la actividad.'
+      if (!err?.response?.data?.message && !err?.response?.data?.detail && data && typeof data === 'object') {
+        const firstKey = Object.keys(data)[0]
+        const val = (firstKey && data[firstKey]) as any
+        if (typeof val === 'string') msg = `${firstKey}: ${val}`
+        else if (Array.isArray(val) && val.length) msg = `${firstKey}: ${val[0]}`
+      }
+      setNewActError(msg)
+    } finally {
+      setSavingNewAct(false)
+    }
   }
+
 
   const submitGrade = async () => {
     if (!selectedStudent || !selectedActivity || !grade.nota) return
@@ -228,11 +257,12 @@ const Docente: React.FC = () => {
                   <div className="content-title">Crear actividad para: {selectedRA.titulo}</div>
                   <div className="row g-2">
                     <div className="col-md-4"><input className="form-control" placeholder="Nombre actividad" value={newAct.nombre} onChange={e=>setNewAct(a=>({...a, nombre:e.target.value}))} /></div>
-                    <div className="col-md-2"><input className="form-control" placeholder="% Actividad" type="number" step="0.01" value={newAct.pctAct} onChange={e=>setNewAct(a=>({...a, pctAct:e.target.value}))} /></div>
-                    <div className="col-md-2"><input className="form-control" placeholder="% en RA" type="number" step="0.01" value={newAct.pctRA} onChange={e=>setNewAct(a=>({...a, pctRA:e.target.value}))} /></div>
+                    <div className="col-md-2"><input className="form-control" placeholder="% actividad" title="Peso interno de la actividad (rúbrica)" type="number" step="0.01" value={newAct.pctAct} onChange={e=>setNewAct(a=>({...a, pctAct:e.target.value}))} /></div>
+                    <div className="col-md-2"><input className="form-control" placeholder="% en RA" title="Aporte de esta actividad al RA" type="number" step="0.01" value={newAct.pctRA} onChange={e=>setNewAct(a=>({...a, pctRA:e.target.value}))} /></div>
                     <div className="col-md-2"><input className="form-control" placeholder="Tipo (id)" value={newAct.tipo} onChange={e=>setNewAct(a=>({...a, tipo:e.target.value}))} /></div>
-                    <div className="col-md-2"><button className="btn btn-danger w-100" onClick={submitNewActivity}>Crear</button></div>
+                    <div className="col-md-2"><button className="btn btn-danger w-100" disabled={savingNewAct} onClick={submitNewActivity}>{savingNewAct?'Creando…':'Crear'}</button></div>
                   </div>
+                  {newActError && <div className="alert alert-danger mt-2" role="alert">{newActError}</div>}
                 </div>
               )}
 
@@ -240,6 +270,30 @@ const Docente: React.FC = () => {
               {selectedRA && (
                 <div className="mt-3">
                   <div className="content-title">Detalle de RA: {selectedRA.titulo}</div>
+                  {raVal && (
+                    <div className="row g-3 mb-2">
+                      <div className="col-md-6">
+                        <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
+                          Actividades: <strong>{raVal.actividades.suma.toFixed(2)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${raVal.actividades.faltante.toFixed(2)}%`}
+                        </div>
+                        <div className="progress" aria-label="Progreso actividades a 100%">
+                          <div className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }} aria-valuenow={raVal.actividades.suma} aria-valuemin={0} aria-valuemax={100}>
+                            {raVal.actividades.suma.toFixed(0)}%
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className={`alert ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
+                          Indicadores: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong>. {raVal.indicadores.ok ? '¡Listo!' : `Falta ${raVal.indicadores.faltante.toFixed(2)}%`}
+                        </div>
+                        <div className="progress" aria-label="Progreso indicadores a 100%">
+                          <div className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }} aria-valuenow={raVal.indicadores.suma} aria-valuemin={0} aria-valuemax={100}>
+                            {raVal.indicadores.suma.toFixed(0)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="row g-3">
                     <div className="col-md-6">
                       <div className="ra-card">
@@ -271,7 +325,7 @@ const Docente: React.FC = () => {
                               {activities.map(act => (
                                 <li key={act.id} className="list-group-item d-flex justify-content-between align-items-center">
                                   <span>{act.nombre}</span>
-                                  <span className="badge bg-secondary">{act.porcentaje}%</span>
+                                  <span className="badge bg-secondary" title="Aporte al RA">{(act.porcentajeRA != null ? act.porcentajeRA : act.porcentaje)}%</span>
                                 </li>
                               ))}
                             </ul>

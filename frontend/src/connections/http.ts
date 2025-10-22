@@ -24,3 +24,22 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Handle 401 globally: clear token and redirect to login once
+let redirecting = false
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const status = error?.response?.status
+    if (status === 401 && !redirecting) {
+      redirecting = true
+      try { localStorage.removeItem('auth_token') } catch {}
+      if ((api.defaults.headers as any).common) {
+        delete (api.defaults.headers as any).common['Authorization']
+      }
+      // small delay to allow any UI cleanup
+      setTimeout(() => { window.location.href = '/login' }, 50)
+    }
+    return Promise.reject(error)
+  }
+)
