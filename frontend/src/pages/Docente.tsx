@@ -10,6 +10,7 @@ import type { Course, RA, Indicator, Activity, Student } from '@/types'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '@/state/SessionContext'
 import Chart from 'chart.js/auto'
+import './Docente.css'
 
 type View = 'cursos' | 'ra' | 'estudiantes'
 
@@ -205,7 +206,7 @@ const Docente: React.FC = () => {
   )
 
   return (
-    <div className="dashboard-body" style={{minHeight:'100%'}}>
+    <div className="dashboard-body dashboard-body-full-height">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar active={view === 'cursos' ? 'cursos' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
@@ -277,7 +278,15 @@ const Docente: React.FC = () => {
                           Actividades: <strong>{raVal.actividades.suma.toFixed(2)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${raVal.actividades.faltante.toFixed(2)}%`}
                         </div>
                         <div className="progress" aria-label="Progreso actividades a 100%">
-                          <div className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }} aria-valuenow={raVal.actividades.suma} aria-valuemin={0} aria-valuemax={100}>
+                          <div 
+                            className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} 
+                            role="progressbar" 
+                            style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }}
+                            aria-valuenow={Math.round(raVal.actividades.suma)} 
+                            aria-valuemin={0} 
+                            aria-valuemax={100} 
+                            aria-label={`Actividades: ${raVal.actividades.suma.toFixed(0)}%`}
+                          >
                             {raVal.actividades.suma.toFixed(0)}%
                           </div>
                         </div>
@@ -287,7 +296,15 @@ const Docente: React.FC = () => {
                           Indicadores: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong>. {raVal.indicadores.ok ? '¡Listo!' : `Falta ${raVal.indicadores.faltante.toFixed(2)}%`}
                         </div>
                         <div className="progress" aria-label="Progreso indicadores a 100%">
-                          <div className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }} aria-valuenow={raVal.indicadores.suma} aria-valuemin={0} aria-valuemax={100}>
+                          <div 
+                            className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} 
+                            role="progressbar" 
+                            style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }}
+                            aria-valuenow={Math.round(raVal.indicadores.suma)} 
+                            aria-valuemin={0} 
+                            aria-valuemax={100} 
+                            aria-label={`Indicadores: ${raVal.indicadores.suma.toFixed(0)}%`}
+                          >
                             {raVal.indicadores.suma.toFixed(0)}%
                           </div>
                         </div>
