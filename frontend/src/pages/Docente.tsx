@@ -353,13 +353,13 @@ const Docente: React.FC = () => {
                           <div className="ra-card-body">
                             <div className="fw-bold mb-2">Ingresar nota {selectedStudent ? `a ${selectedStudent.name}` : ''}</div>
                             <div className="mb-2">
-                              <select className="form-select" value={grade.indicadorId} onChange={e=>setGrade(g=>({...g, indicadorId:e.target.value}))}>
+                              <select className="form-select" value={grade.indicadorId} onChange={e=>setGrade(g=>({...g, indicadorId:e.target.value}))} title="Seleccionar indicador (opcional)" aria-label="Seleccionar indicador (opcional)">
                                 <option value="">Seleccionar indicador (opcional)</option>
                                 {indicators.map(ind => <option key={ind.id} value={ind.id}>{ind.descripcion}</option>)}
                               </select>
                             </div>
                             <div className="mb-2">
-                              <select className="form-select" value={selectedActivity} onChange={e=>setSelectedActivity(e.target.value)}>
+                              <select className="form-select" value={selectedActivity} onChange={e=>setSelectedActivity(e.target.value)} aria-label="Seleccionar actividad" title="Seleccione una actividad">
                                 <option value="">Seleccione una actividad</option>
                                 {activities.map(act => (
                                   <option key={act.id} value={act.raActividadId}>{act.nombre}</option>

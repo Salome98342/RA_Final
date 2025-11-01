@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
@@ -15,15 +15,15 @@ const DocenteRecursos: React.FC = () => {
   const [toast, setToast] = useState<{ text: string; type?: 'ok'|'error' } | null>(null)
   const dropRef = useRef<HTMLDivElement | null>(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!curso) return
     setItems(await getRecursosByCourse(curso))
-  }
-  useEffect(() => { load() }, [curso])
+  }, [curso])
+  useEffect(() => { load() }, [load])
 
   // Pegar archivo (Ctrl+V)
   useEffect(() => {
-    const onPaste = async (e: ClipboardEvent) => {
+  const onPaste = async (e: ClipboardEvent) => {
       if (!curso) return
       const f = Array.from(e.clipboardData?.files || [])[0]
       if (!f) return
@@ -31,14 +31,17 @@ const DocenteRecursos: React.FC = () => {
         await uploadRecurso(curso, f, titulo || f.name)
         setTitulo(''); await load()
         setToast({ text: 'Recurso subido (portapapeles)', type: 'ok' })
-      } catch (err:any) {
-        const msg = err?.response?.data?.detail || 'No se pudo subir el recurso'
+      } catch (err: unknown) {
+        const data = (err as { response?: { data?: unknown } })?.response?.data
+        const msg = (data && typeof data === 'object' && 'detail' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).detail === 'string')
+          ? String((data as Record<string, unknown>).detail)
+          : 'No se pudo subir el recurso'
         setToast({ text: msg, type: 'error' })
       }
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [curso, titulo])
+  }, [curso, titulo, load])
 
   const onUpload = async () => {
     if (!curso || !file) return
@@ -47,8 +50,11 @@ const DocenteRecursos: React.FC = () => {
       setFile(null); setTitulo('')
       await load()
       setToast({ text: 'Recurso subido', type: 'ok' })
-    } catch (err:any) {
-      const msg = err?.response?.data?.detail || 'No se pudo subir el recurso'
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'detail' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).detail === 'string')
+        ? String((data as Record<string, unknown>).detail)
+        : 'No se pudo subir el recurso'
       setToast({ text: msg, type: 'error' })
     }
   }
@@ -71,7 +77,7 @@ const DocenteRecursos: React.FC = () => {
   }
 
   return (
-    <div className="dashboard-body" style={{minHeight:'100%'}}>
+  <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar
@@ -83,7 +89,7 @@ const DocenteRecursos: React.FC = () => {
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
           <div className="content-title">Recursos · {curso}</div>
 
-          <div ref={dropRef} className="ra-card mb-3" style={drag?{outline:'2px dashed #C8102E', outlineOffset:6}:{}}><div className="ra-card-body">
+          <div ref={dropRef} className={`ra-card mb-3 ${drag ? 'dropzone-drag' : ''}`}><div className="ra-card-body">
             <div className="fw-bold mb-2">Subir microcurrículo</div>
             <div className="row g-2">
               <div className="col-md-5">

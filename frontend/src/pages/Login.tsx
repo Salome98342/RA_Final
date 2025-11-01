@@ -16,13 +16,14 @@ export default function Login() {
   const [toastKind, setToastKind] = useState<ToastKind>(undefined);
   const [toastVisible, setToastVisible] = useState(false);
   const ddRef = useRef<HTMLDivElement | null>(null);
+  const toastTimeout = useRef<number | null>(null);
   const navigate = useNavigate();
   const { setName, setRole, setCode } = useSession()
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (ddRef.current && !ddRef.current.contains(e.target as Node)) {
+      if (ddRef.current && !ddRef.current.contains(e.target as Node)) { 
         setLangOpen(false);
       }
     };
@@ -34,9 +35,9 @@ export default function Login() {
   const showToast = (msg: string, kind: ToastKind = undefined, ms = 2200) => {
     setToastMsg(msg);
     setToastKind(kind);
-    setToastVisible(true);
-    window.clearTimeout((showToast as any)._t);
-    (showToast as any)._t = window.setTimeout(() => setToastVisible(false), ms);
+    setToastVisible(true); 
+    if (toastTimeout.current) window.clearTimeout(toastTimeout.current);
+    toastTimeout.current = window.setTimeout(() => setToastVisible(false), ms);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,8 +52,11 @@ export default function Login() {
       setRole(profile.rol)
   setCode(profile.code ?? usuario)
       navigate(profile.rol === 'docente' ? '/docente' : '/estudiante')
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Credenciales inválidas'
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object')
+        ? String((data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message ?? 'Credenciales inválidas')
+        : 'Credenciales inválidas'
       showToast(msg, 'error')
     }
   };
@@ -111,7 +115,7 @@ export default function Login() {
               ref={ddRef}
               onClick={() => setLangOpen((v) => !v)}
               role="button"
-              aria-expanded={langOpen}
+              aria-expanded={langOpen ? 'true' : 'false'}
             >
               <div className="dropdown-selected">{lang}</div>
               <ul

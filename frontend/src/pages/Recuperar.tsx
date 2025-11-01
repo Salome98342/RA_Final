@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { requestPasswordReset } from '@/services/auth'
+import './Recuperar.css'
 
 const Recuperar: React.FC = () => {
   const [email, setEmail] = useState('')
@@ -16,8 +17,12 @@ const Recuperar: React.FC = () => {
       setError(null)
       await requestPasswordReset(email)
       setSent(true)
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo enviar el enlace. Inténtalo de nuevo.')
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
+        ? String((data as Record<string, unknown>).message)
+        : 'No se pudo enviar el enlace. Inténtalo de nuevo.'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -29,7 +34,7 @@ const Recuperar: React.FC = () => {
         <i className="bi bi-mortarboard-fill fs-3" aria-hidden="true" />
         <h1 className="m-0 h4 text-white">Universidad del Valle</h1>
       </header>
-      <main className="login-container d-flex align-items-center justify-content-center">
+        <section className="login-box fadeInUp recuperar-box">
         <section className="login-box fadeInUp" style={{ maxWidth: 460 }}>
           <h2 className="h5 mb-3">Recuperar contraseña</h2>
           {!sent ? (
@@ -57,7 +62,7 @@ const Recuperar: React.FC = () => {
             <Link to="/login">Volver al login</Link>
           </div>
         </section>
-      </main>
+      </section>
     </div>
   )
 }

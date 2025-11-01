@@ -7,7 +7,7 @@ from ..views.views import (
     DocenteViewSet, EstudianteViewSet, AsignaturaViewSet,
     ra_indicadores_view, ra_actividades_view, notas_view,
     course_student_indicators_view, profile_view,
-    notifications_view, ra_validation_view, asignatura_validation_view,
+    notifications_view, ra_validation_view, asignatura_validation_view, actividades_multi_view,
 )
 
 router = DefaultRouter()
@@ -32,6 +32,7 @@ urlpatterns = [
     path("validacion/ra/<int:ra_id>", ra_validation_view),
     path("validacion/asignatura/<str:codigo_asignatura>", asignatura_validation_view),
     path("notas", notas_view),  # POST/PUT
+    path("actividades/multi", actividades_multi_view),  # POST: crear en múltiples RAs
     path(
         "asignaturas/<str:codigo_asignatura>/estudiante/<int:id_estudiante>/indicadores",
         course_student_indicators_view,

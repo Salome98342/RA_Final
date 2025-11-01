@@ -7,9 +7,7 @@ export async function login(code: string, password: string): Promise<UserProfile
   const token: string | undefined = data?.token
   const user = data?.user || {}
   if (token) {
-    try { localStorage.setItem('auth_token', token) } catch {}
-    ;(api.defaults.headers as any).common = (api.defaults.headers as any).common || {}
-    ;(api.defaults.headers as any).common['Authorization'] = `Bearer ${token}`
+    try { localStorage.setItem('auth_token', token) } catch { /* ignore storage errors */ }
   }
   return {
     id: String(user.id ?? ''),
@@ -21,10 +19,7 @@ export async function login(code: string, password: string): Promise<UserProfile
 
 export async function logout() {
   try { await api.post(endpoints.auth.logout, {}) } finally {
-    try { localStorage.removeItem('auth_token') } catch {}
-    if ((api.defaults.headers as any).common) {
-      delete (api.defaults.headers as any).common['Authorization']
-    }
+    try { localStorage.removeItem('auth_token') } catch { /* ignore */ }
   }
 }
 

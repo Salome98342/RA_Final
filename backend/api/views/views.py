@@ -7,6 +7,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db.models import Avg, Sum
+from django.db import transaction, DatabaseError, IntegrityError
 import datetime
 
 from ..models.models import (
@@ -628,3 +629,148 @@ def notifications_view(request):
             bajas.append({"kind": "danger", "text": f'Vas bajo en {m.asignatura.nombre}: promedio {avg:.2f}/5'})
 
     return Response((proximas[:10] + bajas[:10])[:20])
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def actividades_multi_view(request):
+    """
+    Crea una sola Actividad y la asocia a múltiples RAs (del mismo curso) en una sola operación.
+    Body esperado:
+    {
+      "nombre_actividad": str,
+      "id_tipo_actividad": int,
+      "porcentaje_actividad": number,
+      "descripcion"?: str,
+      "fecha_cierre"?: "AAAA-MM-DD",
+      "ras": [
+        { "ra_id": int, "porcentaje_ra_actividad": number, "indicadores"?: [int, ...] }, ...
+      ]
+    }
+    Validaciones:
+    - Todas las RAs deben pertenecer a la misma asignatura.
+    - Para cada RA, la suma de porcentaje_ra_actividad no debe superar 100.
+    """
+    body = request.data or {}
+    nombre = body.get("nombre_actividad")
+    id_tipo = body.get("id_tipo_actividad")
+    porc_act = body.get("porcentaje_actividad")
+    descripcion = body.get("descripcion")
+    fecha_cierre = body.get("fecha_cierre")
+    ras = body.get("ras")
+
+    if not (nombre and id_tipo is not None and porc_act is not None and isinstance(ras, (list, tuple)) and len(ras) > 0):
+        return Response({
+            "message": "Campos requeridos: nombre_actividad, id_tipo_actividad, porcentaje_actividad y ras[]"
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Parsear fecha
+    fecha_cierre_dt = None
+    if fecha_cierre:
+        try:
+            fecha_cierre_dt = datetime.datetime.strptime(str(fecha_cierre), "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"message": "fecha_cierre debe tener formato AAAA-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Validar regla de negocio y constraint: fecha_cierre >= fecha_creacion (hoy)
+    hoy = datetime.date.today()
+    if fecha_cierre_dt and fecha_cierre_dt < hoy:
+        return Response({
+            "message": "fecha_cierre no puede ser anterior a la fecha de creación (hoy). Elige hoy o una fecha futura.",
+            "hoy": hoy.isoformat(),
+            "fecha_cierre": fecha_cierre_dt.isoformat(),
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Cargar RAs y validar que pertenezcan a la misma asignatura
+    ra_ids = [int(x.get("ra_id")) for x in ras if x and x.get("ra_id") is not None]
+    if not ra_ids:
+        return Response({"message": "ras debe incluir al menos un objeto con ra_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+    ra_objs = list(ResultadoDeAprendizaje.objects.filter(id_ra__in=ra_ids).select_related("asignatura"))
+    if len(ra_objs) != len(set(ra_ids)):
+        return Response({"message": "Algún ra_id no existe"}, status=status.HTTP_400_BAD_REQUEST)
+    asig_ids = {r.asignatura_id for r in ra_objs}
+    if len(asig_ids) != 1:
+        return Response({"message": "Todas las RAs deben pertenecer a la misma asignatura"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Validar porcentajes por RA
+    for item in ras:
+        try:
+            rid = int(item.get("ra_id"))
+            pct = float(item.get("porcentaje_ra_actividad"))
+        except (TypeError, ValueError):
+            return Response({"message": "Cada elemento en ras debe incluir porcentaje_ra_actividad numérico"}, status=status.HTTP_400_BAD_REQUEST)
+        suma_actual = (RaActividad.objects.filter(ra_id=rid).aggregate(v=Sum("porcentaje_ra_actividad"))['v'] or 0)
+        if float(suma_actual) + pct > 100.0:
+            return Response({
+                "message": f"El RA {rid} excede 100% con este aporte ({float(suma_actual)+pct:.2f}%). Ajusta porcentaje_ra_actividad.",
+                "ra_id": rid,
+                "suma_actual": float(suma_actual),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Validar que la suma de porcentaje_actividad de las actividades por RA NO EXCEDA 100%
+    # (se permite ir sumando en varias actividades, siempre que no pase de 100)
+    try:
+        porc_act_float = float(porc_act)
+    except (TypeError, ValueError):
+        return Response({"message": "porcentaje_actividad debe ser numérico"}, status=status.HTTP_400_BAD_REQUEST)
+
+    for item in ras:
+        rid = int(item.get("ra_id"))
+        suma_acts = (RaActividad.objects.filter(ra_id=rid).aggregate(v=Sum("actividad__porcentaje_actividad"))['v'] or 0)
+        nuevo_total = float(suma_acts) + porc_act_float
+        if nuevo_total > 100.0 + 1e-6:
+            return Response({
+                "message": f"Las actividades del RA {rid} excederían 100% con esta actividad ({nuevo_total:.2f}%). Ajusta el 'Peso de la actividad (%)' para no pasar de 100.",
+                "ra_id": rid,
+                "actual": float(suma_acts),
+                "nuevo_total": float(nuevo_total),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Crear actividad y relaciones en una transacción para consistencia
+    try:
+        with transaction.atomic():
+            act = Actividad.objects.create(
+                tipo_actividad_id=id_tipo,
+                nombre_actividad=nombre,
+                descripcion=descripcion,
+                porcentaje_actividad=porc_act,
+                fecha_creacion=hoy,
+                fecha_cierre=fecha_cierre_dt,
+            )
+
+            relaciones = []
+            for item in ras:
+                rid = int(item["ra_id"])  # seguro por validaciones previas
+                pct = float(item["porcentaje_ra_actividad"])
+                rel = RaActividad.objects.create(actividad=act, ra_id=rid, porcentaje_ra_actividad=pct)
+                relaciones.append(rel)
+                # Indicadores (opcionales) – asegurar que pertenezcan al mismo RA
+                inds = item.get("indicadores") or []
+                if isinstance(inds, (list, tuple)) and inds:
+                    valid_inds = set(IndicadoresDeLogro.objects.filter(ra_id=rid, id_ind__in=inds).values_list("id_ind", flat=True))
+                    bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
+                    if bulk:
+                        RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
+    except (IntegrityError, DatabaseError) as e:
+        # Capturar mensajes del trigger para devolver 400 legible
+        msg = str(e)
+        # Limpiar un poco el mensaje si contiene línea de RAISE
+        if ("deben sumar 100" in msg) or ("exced" in msg) or ("trg_check_sum_acts_por_ra" in msg):
+            return Response({"message": msg}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "No se pudo crear la actividad por una restricción de base de datos.", "detail": msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        "id_actividad": act.id_actividad,
+        "nombre_actividad": act.nombre_actividad,
+        "porcentaje_actividad": float(act.porcentaje_actividad),
+        "fecha_cierre": act.fecha_cierre,
+        "relaciones": [
+            {
+                "id_ra": r.ra_id,
+                "id_ra_actividad": r.id_ra_actividad,
+                "porcentaje_ra_actividad": float(r.porcentaje_ra_actividad),
+            } for r in relaciones
+        ]
+    }, status=status.HTTP_201_CREATED)

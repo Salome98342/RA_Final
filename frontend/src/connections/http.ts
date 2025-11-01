@@ -6,20 +6,23 @@ export const api = axios.create({
   withCredentials: true,
 })
 
-// Attach bearer token if saved
-const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
-if (token) {
-  (api.defaults.headers as any).common = (api.defaults.headers as any).common || {}
-  ;(api.defaults.headers as any).common['Authorization'] = `Bearer ${token}`
-}
-
-// Attach CSRF token for Django session auth if available
+// Attach tokens on every request (Authorization + CSRF when available)
 api.interceptors.request.use((config) => {
+  // Bearer token from localStorage
+  try {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (token) {
+      config.headers = config.headers || {}
+      ;(config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
+    }
+  } catch { /* ignore storage issues */ }
+
+  // CSRF token for Django session auth if available
   if (typeof document !== 'undefined') {
     const m = document.cookie.match(/csrftoken=([^;]+)/)
     if (m) {
       config.headers = config.headers || {}
-      ;(config.headers as any)['X-CSRFToken'] = m[1]
+      ;(config.headers as Record<string, string>)['X-CSRFToken'] = m[1]
     }
   }
   return config
@@ -33,10 +36,7 @@ api.interceptors.response.use(
     const status = error?.response?.status
     if (status === 401 && !redirecting) {
       redirecting = true
-      try { localStorage.removeItem('auth_token') } catch {}
-      if ((api.defaults.headers as any).common) {
-        delete (api.defaults.headers as any).common['Authorization']
-      }
+      try { localStorage.removeItem('auth_token') } catch { /* ignore */ }
       // small delay to allow any UI cleanup
       setTimeout(() => { window.location.href = '/login' }, 50)
     }

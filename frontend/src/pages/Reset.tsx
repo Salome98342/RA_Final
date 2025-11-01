@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { resetPassword } from '@/services/auth'
+import './Reset.css'
 
 const Reset: React.FC = () => {
   const loc = useLocation()
@@ -23,8 +24,12 @@ const Reset: React.FC = () => {
       setDone(true)
       // Opcional: redirigir al login tras unos segundos
       window.setTimeout(() => navigate('/login'), 2500)
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo restablecer la contraseña. Intenta de nuevo.')
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
+        ? String((data as Record<string, unknown>).message)
+        : 'No se pudo restablecer la contraseña. Intenta de nuevo.'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -35,9 +40,9 @@ const Reset: React.FC = () => {
       <header className="login-header d-flex align-items-center justify-content-center gap-2">
         <i className="bi bi-mortarboard-fill fs-3" aria-hidden="true" />
         <h1 className="m-0 h4 text-white">Universidad del Valle</h1>
-      </header>
       <main className="login-container d-flex align-items-center justify-content-center">
-        <section className="login-box fadeInUp" style={{ maxWidth: 460 }}>
+        <section className="login-box fadeInUp max-width-460">
+          <h2 className="h5 mb-3">Restablecer contraseña</h2>
           <h2 className="h5 mb-3">Restablecer contraseña</h2>
           {!done ? (
             <form onSubmit={onSubmit} autoComplete="off">
