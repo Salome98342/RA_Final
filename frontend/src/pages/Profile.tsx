@@ -24,7 +24,7 @@ const Profile: React.FC = () => {
     e.preventDefault()
     try {
       setSaving(true); setErr(null)
-      const patch: any = { correo: form.correo }
+      const patch: Partial<{ correo: string; telefono?: string; jornada?: string }> = { correo: form.correo ?? '' }
       if (p?.rol === 'docente') patch.telefono = form.telefono
       else patch.jornada = form.jornada
       const updated = await updateProfile(patch)
@@ -74,18 +74,18 @@ const Profile: React.FC = () => {
                       <div className="fw-bold mb-3">Editar datos</div>
                       <form onSubmit={onSubmit} className="d-flex flex-column gap-2">
                         <div>
-                          <label className="ra-small d-block mb-1">Correo</label>
-                          <input className="form-control" value={form.correo ?? ''} onChange={e=>setForm(f=>({...f, correo:e.target.value}))} type="email" required />
+                          <label htmlFor="correo-input" className="ra-small d-block mb-1">Correo</label>
+                          <input id="correo-input" className="form-control" placeholder="Ej: correo@ejemplo.com" title="Correo electrónico" value={form.correo ?? ''} onChange={e=>setForm(f=>({...f, correo:e.target.value}))} type="email" required />
                         </div>
                         {p.rol === 'docente' ? (
                           <div>
-                            <label className="ra-small d-block mb-1">Teléfono</label>
-                            <input className="form-control" value={form.telefono ?? ''} onChange={e=>setForm(f=>({...f, telefono:e.target.value}))} />
+                            <label htmlFor="telefono-input" className="ra-small d-block mb-1">Teléfono</label>
+                            <input id="telefono-input" className="form-control" placeholder="Ej: +57 300 1234567" title="Teléfono" value={form.telefono ?? ''} onChange={e=>setForm(f=>({...f, telefono:e.target.value}))} />
                           </div>
                         ) : (
                           <div>
-                            <label className="ra-small d-block mb-1">Jornada</label>
-                            <input className="form-control" value={form.jornada ?? ''} onChange={e=>setForm(f=>({...f, jornada:e.target.value}))} />
+                            <label htmlFor="jornada-input" className="ra-small d-block mb-1">Jornada</label>
+                            <input id="jornada-input" className="form-control" placeholder="Ej: Diurna" title="Jornada" value={form.jornada ?? ''} onChange={e=>setForm(f=>({...f, jornada:e.target.value}))} />
                           </div>
                         )}
                         <button className="btn btn-danger mt-2" disabled={saving}>
