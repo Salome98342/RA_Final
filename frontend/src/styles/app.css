@@ -17,6 +17,20 @@ body {
   background: linear-gradient(to bottom, #dadada, #f3f3f3);
 }
 
+/* Table column width helpers (avoid inline styles) */
+.table-col-40 { width: 40%; }
+.table-col-25 { width: 25%; }
+.table-col-20 { width: 20%; }
+.table-col-15 { width: 15%; }
+
+/* Misc helpers */
+.w-110px { max-width: 110px; }
+.dropzone-drag { outline: 2px dashed #C8102E; outline-offset: 6px; }
+.w-60px { width: 60px; }
+.w-160px { width: 160px; }
+.w-220px { width: 220px; }
+.w-240px { max-width: 240px; }
+
 /* ========== LOGIN (se deja igual) ========== */
 header {
   background-color: #B5121B;
@@ -160,8 +174,8 @@ header h1 {
   border-right: 1px solid rgba(0,0,0,0.08);
   padding: 18px 10px;
   display: flex; flex-direction: column; gap: 12px; align-items: center;
-  backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
 }
 .side-btn {
   width: 48px; height: 48px; border-radius: 16px; border: 1px solid var(--uv-border);

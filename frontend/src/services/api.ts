@@ -15,42 +15,68 @@ export type NotificationItem = {
 
 // Cursos
 export async function getCourses(): Promise<Course[]> {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.list)
-  return (data || []).map((it: any) => ({
-    id: String(it.codigo_asignatura),
-    nombre: it.nombre,
-    carrera: it.programa?.codigo_programa || it.programa?.nombre || String(it.programa ?? ''),
-    codigo: it.codigo_asignatura
-  }))
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.list)
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((it) => {
+    const o = it as Record<string, unknown>
+    const prog = (o.programa as Record<string, unknown> | undefined)
+    return {
+      id: String(o.codigo_asignatura ?? ''),
+      nombre: String(o.nombre ?? ''),
+      carrera: String((prog?.codigo_programa ?? prog?.nombre ?? o.programa ?? '') as string),
+      codigo: String(o.codigo_asignatura ?? ''),
+    }
+  })
 }
 
 // RAs por curso
 export async function getRAsByCourse(courseId: string): Promise<RA[]> {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.ras(courseId))
-  return (data || []).map((it: any) => ({
-    id: String(it.id_ra ?? it.id),
-    titulo: it.titulo || it.descripcion || `RA ${it.id_ra ?? it.id}`,
-    info: it.info || (it.porcentaje_ra != null ? `Peso: ${it.porcentaje_ra}%` : ''),
-    porcentajeRA: it.porcentaje_ra != null ? Number(it.porcentaje_ra) : undefined,
-  }))
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.ras(courseId))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((it) => {
+    const o = it as Record<string, unknown>
+    const id = String((o.id_ra ?? o.id) as string | number | undefined ?? '')
+    const titulo = (typeof o.titulo === 'string' && o.titulo) || (typeof o.descripcion === 'string' && o.descripcion) || `RA ${id}`
+    const pct = o.porcentaje_ra
+    return {
+      id,
+      titulo,
+      info: typeof o.info === 'string' ? o.info : (typeof pct === 'number' ? `Peso: ${pct}%` : ''),
+      porcentajeRA: typeof pct === 'number' ? pct : undefined,
+    }
+  })
 }
 
 // Estudiantes por curso (opcional: filtrar por periodo)
 export async function getStudentsByCourse(courseId: string, opts?: { periodoId?: string, periodo?: string }): Promise<Student[]> {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.estudiantes(courseId), {
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.estudiantes(courseId), {
     params: opts?.periodoId ? { id_periodo: opts.periodoId } : (opts?.periodo ? { periodo: opts.periodo } : undefined),
   })
-  return (data || []).map((s: any) => ({
-    id: String(s.id_estudiante),
-    name: `${s.nombre} ${s.apellido}`.trim(),
-    matriculaId: String(s.id_matricula),
-  }))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((s) => {
+    const o = s as Record<string, unknown>
+    const nombre = String(o.nombre ?? '')
+    const apellido = String(o.apellido ?? '')
+    return {
+      id: String(o.id_estudiante ?? ''),
+      name: `${nombre} ${apellido}`.trim(),
+      matriculaId: String(o.id_matricula ?? ''),
+    }
+  })
 }
 
 // Indicadores por RA
 export async function getIndicatorsByRA(raId: string): Promise<Indicator[]> {
-  const { data } = await api.get<any[]>(endpoints.ras.indicadores(raId))
-  return (data || []).map((it: any) => ({ id: String(it.id), descripcion: it.descripcion, porcentaje: Number(it.porcentaje_ind ?? it.porcentaje ?? 0) }))
+  const { data } = await api.get<unknown[]>(endpoints.ras.indicadores(raId))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((it) => {
+    const o = it as Record<string, unknown>
+    return {
+      id: String(o.id ?? ''),
+      descripcion: String(o.descripcion ?? ''),
+      porcentaje: Number((o.porcentaje_ind ?? o.porcentaje ?? 0) as number),
+    }
+  })
 }
 
 // Crear actividad
@@ -70,6 +96,31 @@ export async function createActivityForRA(raId: string, payload: {
     porcentaje: Number(data.porcentaje_actividad),
     porcentajeRA: Number(data.porcentaje_ra_actividad),
     raActividadId: String(data.id_ra_actividad),
+  }
+}
+
+// Crear una actividad y asociarla a múltiples RAs en un solo paso
+export async function createActivityMulti(payload: {
+  nombre_actividad: string
+  id_tipo_actividad: number | string
+  porcentaje_actividad: number
+  descripcion?: string
+  fecha_cierre?: string
+  ras: Array<{ ra_id: number | string; porcentaje_ra_actividad: number; indicadores?: Array<number | string> }>
+}): Promise<{ id: string; relaciones: Array<{ raId: string; raActividadId: string; porcentajeRA: number }> }> {
+  const { data } = await api.post(endpoints.actividades.multi, payload)
+  return {
+    id: String(data.id_actividad),
+    relaciones: Array.isArray(data.relaciones)
+      ? data.relaciones.map((r: unknown) => {
+          const o = r as Record<string, unknown>
+          return {
+            raId: String(o.id_ra ?? ''),
+            raActividadId: String(o.id_ra_actividad ?? ''),
+            porcentajeRA: Number((o.porcentaje_ra_actividad ?? 0) as number),
+          }
+        })
+      : [],
   }
 }
 
@@ -93,8 +144,8 @@ export async function upsertGrade(input: {
 
 // Gráfico indicadores estudiante en curso
 export async function getIndicatorChart(courseId: string, studentId: string) {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.indicadoresEstudiante(courseId, studentId))
-  return data as { id_ind: number; ra_id: number; descripcion: string; porcentaje_ind: number; avg_nota: number | null; avg_pct: number | null }[]
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.indicadoresEstudiante(courseId, studentId))
+  return (Array.isArray(data) ? data : []) as { id_ind: number; ra_id: number; descripcion: string; porcentaje_ind: number; avg_nota: number | null; avg_pct: number | null }[]
 }
 
 // Mi matrícula
@@ -105,42 +156,55 @@ export async function getMyMatricula(courseId: string): Promise<string | null> {
 
 // Catálogo tipos de actividad
 export async function getTiposActividad(): Promise<{ id: string; descripcion: string }[]> {
-  const { data } = await api.get<any[]>(endpoints.catalogos.tiposActividad)
-  return (data || []).map((t: any) => ({ id: String(t.id_tipo_actividad ?? t.id), descripcion: t.descripcion }))
+  const { data } = await api.get<unknown[]>(endpoints.catalogos.tiposActividad)
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((t) => {
+    const o = t as Record<string, unknown>
+    return { id: String(o.id_tipo_actividad ?? o.id ?? ''), descripcion: String(o.descripcion ?? '') }
+  })
 }
 
 // Periodos por curso
 export async function getPeriodosByCourse(courseId: string): Promise<Periodo[]> {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.periodos(courseId))
-  return (data || []).map((p: any) => ({ id: String(p.id_periodo), descripcion: p.descripcion }))
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.periodos(courseId))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((p) => {
+    const o = p as Record<string, unknown>
+    return { id: String(o.id_periodo ?? ''), descripcion: String(o.descripcion ?? '') }
+  })
 }
 
 // Actividades por RA (incluye nota si pasas matrícula)
 export async function getActivitiesByRA(raId: string, opts?: { matriculaId?: string }): Promise<Activity[]> {
-  const { data } = await api.get<any[]>(endpoints.ras.actividades(raId), {
+  const { data } = await api.get<unknown[]>(endpoints.ras.actividades(raId), {
     params: opts?.matriculaId ? { id_matricula: opts.matriculaId } : undefined,
   })
-  return (data || []).map((it: any) => ({
-    id: String(it.id_actividad ?? it.id),
-    nombre: it.nombre_actividad || it.nombre,
-    porcentaje: Number(it.porcentaje_actividad ?? it.porcentaje ?? 0),
-    porcentajeRA: Number(it.porcentaje_ra_actividad ?? 0),
-    raActividadId: String(it.id_ra_actividad ?? it.ra_actividad_id ?? ''),
-    nota: it.nota != null ? Number(it.nota) : null,
-    retroalimentacion: it.retroalimentacion ?? null,
-    indicadorId: it.id_ind != null ? String(it.id_ind) : null,
-    tipoActividadId: it.id_tipo_actividad != null ? String(it.id_tipo_actividad) : undefined,
-    tipoActividad: it.tipo_actividad ?? undefined,
-    fechaCierre: it.fecha_cierre ?? null,
-    // Enriquecimiento: lista de indicadores asignados a la actividad dentro del RA
-    indicadores: Array.isArray(it.indicadores)
-      ? it.indicadores.map((r: any) => ({
-          id: String(r.id_ind ?? r.id),
-          descripcion: String(r.descripcion ?? ''),
-          porcentaje: Number(r.porcentaje_ind ?? r.porcentaje ?? 0),
-        }))
-      : undefined,
-  }))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((it) => {
+    const o = it as Record<string, unknown>
+    const inds = Array.isArray(o.indicadores) ? (o.indicadores as unknown[]) : undefined
+    return {
+      id: String(o.id_actividad ?? o.id ?? ''),
+      nombre: String((o.nombre_actividad ?? o.nombre ?? '') as string),
+      porcentaje: Number((o.porcentaje_actividad ?? o.porcentaje ?? 0) as number),
+      porcentajeRA: Number((o.porcentaje_ra_actividad ?? 0) as number),
+      raActividadId: String((o.id_ra_actividad ?? (o as Record<string, unknown>).ra_actividad_id ?? '') as string | number),
+      nota: o.nota != null ? Number(o.nota as number) : null,
+      retroalimentacion: (o.retroalimentacion ?? null) as string | null,
+      indicadorId: o.id_ind != null ? String(o.id_ind as string | number) : null,
+      tipoActividadId: o.id_tipo_actividad != null ? String(o.id_tipo_actividad as string | number) : undefined,
+      tipoActividad: (o.tipo_actividad ?? undefined) as string | undefined,
+      fechaCierre: (o.fecha_cierre ?? null) as string | null,
+      indicadores: inds?.map((r) => {
+        const ri = r as Record<string, unknown>
+        return {
+          id: String(ri.id_ind ?? ri.id ?? ''),
+          descripcion: String(ri.descripcion ?? ''),
+          porcentaje: Number((ri.porcentaje_ind ?? ri.porcentaje ?? 0) as number),
+        }
+      }),
+    }
+  })
 }
 
 // Validaciones y progreso
@@ -161,13 +225,17 @@ export async function getAsignaturaValidation(codigo: string): Promise<{
 
 // Recursos por curso
 export async function getRecursosByCourse(courseId: string): Promise<{ id: string; titulo: string; url: string; fecha: string }[]> {
-  const { data } = await api.get<any[]>(endpoints.asignaturas.recursos(courseId))
-  return (data || []).map(r => ({
-    id: String(r.id_recurso),
-    titulo: r.titulo,
-    url: r.archivo_url || r.archivo,
-    fecha: r.fecha_subida,
-  }))
+  const { data } = await api.get<unknown[]>(endpoints.asignaturas.recursos(courseId))
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((r) => {
+    const o = r as Record<string, unknown>
+    return {
+      id: String(o.id_recurso ?? ''),
+      titulo: String(o.titulo ?? ''),
+      url: String((o.archivo_url ?? o.archivo ?? '') as string),
+      fecha: String(o.fecha_subida ?? ''),
+    }
+  })
 }
 
 export async function uploadRecurso(courseId: string, file: File, titulo?: string) {
@@ -182,13 +250,17 @@ export async function uploadRecurso(courseId: string, file: File, titulo?: strin
 
 // Notificaciones
 export async function getNotifications(): Promise<NotificationItem[]> {
-  const { data } = await api.get<any[]>(endpoints.notificaciones)
-  return (data || []).map((n: any) => ({
-    id: String(n.id ?? n.uuid ?? Math.random()),
-    kind: n.kind || n.tipo || undefined,
-    text: n.text || n.mensaje || n.descripcion || 'Nueva notificación',
-    date: n.date || n.created_at || n.fecha || undefined,
-    read: Boolean(n.read ?? n.visto ?? false),
-    link: n.link || n.url || undefined,
-  }))
+  const { data } = await api.get<unknown[]>(endpoints.notificaciones)
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((n) => {
+    const o = n as Record<string, unknown>
+    return {
+      id: String((o.id ?? o.uuid ?? Math.random()) as string | number),
+      kind: (o.kind ?? o.tipo ?? undefined) as NotificationItem['kind'],
+      text: String((o.text ?? o.mensaje ?? o.descripcion ?? 'Nueva notificación') as string),
+      date: (o.date ?? o.created_at ?? o.fecha ?? undefined) as string | undefined,
+      read: Boolean((o.read ?? o.visto ?? false) as boolean),
+      link: (o.link ?? o.url ?? undefined) as string | undefined,
+    }
+  })
 }

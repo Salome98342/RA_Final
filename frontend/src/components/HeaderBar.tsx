@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { useSession } from '@/state/SessionContext'
-import { getFullProfile } from '@/services/auth'  // <-- cambiar import
+import { getFullProfile } from '@/services/auth'
 import { useNavigate } from 'react-router-dom'
 import NotificationsBell from '@/components/NotificationsBell'
 
@@ -13,12 +13,11 @@ const HeaderBar: React.FC<Props> = ({ roleLabel }) => {
     if (!state.name) {
       getFullProfile()
         .then((p) => {
-          const u = (p as any).user ?? p
-          const last = u?.apellido ?? u?.apellidos ?? ''  // fix
-          const fullName = `${u?.nombre ?? ''} ${last}`.trim()
+          const last = p.apellido ?? ''
+          const fullName = `${p.nombre ?? ''} ${last}`.trim()
           setName(fullName)
-          setRole(u?.rol ?? '')
-          setCode(u?.code ?? u?.codigo ?? null)           // admite ambas llaves
+          setRole(p.rol ?? '')
+          setCode(p.code ?? null)
         })
         .catch(() => { /* ignore if not logged */ })
     }

@@ -24,7 +24,7 @@ const Profile: React.FC = () => {
     e.preventDefault()
     try {
       setSaving(true); setErr(null)
-      const patch: any = { correo: form.correo }
+      const patch: Partial<{ correo: string; telefono?: string; jornada?: string }> = { correo: form.correo ?? '' }
       if (p?.rol === 'docente') patch.telefono = form.telefono
       else patch.jornada = form.jornada
       const updated = await updateProfile(patch)

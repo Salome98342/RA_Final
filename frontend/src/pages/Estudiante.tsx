@@ -8,6 +8,7 @@ import Chart from 'chart.js/auto'
 import type { Course, RA, Activity } from '@/types'
 import { getCourses, getMyMatricula, getRAsByCourse, getActivitiesByRA, getIndicatorChart } from '@/services/api'
 import { getProfile } from '@/services/auth'
+import './Estudiante.css'
 
 const Estudiante: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([])
@@ -60,18 +61,18 @@ const Estudiante: React.FC = () => {
 
         for (const c of list) {
           let mid: string | null = null
-          try { mid = await getMyMatricula(c.id) } catch {}
+          try { mid = await getMyMatricula(c.id) } catch { /* ignore per-course matricula fetch */ }
           if (!mid) continue
 
           let ras: RA[] = []
-          try { ras = await getRAsByCourse(c.id) } catch {}
+          try { ras = await getRAsByCourse(c.id) } catch { /* ignore RA load error */ }
 
           let courseTotal = 0
           let courseWeight = 0
 
           for (const ra of ras) {
             let acts: Activity[] = []
-            try { acts = await getActivitiesByRA(ra.id, { matriculaId: mid }) } catch {}
+            try { acts = await getActivitiesByRA(ra.id, { matriculaId: mid }) } catch { /* ignore activities load */ }
 
             const graded = acts.filter(a => typeof a.nota === 'number' && a.porcentajeRA != null)
             const sumPct = graded.reduce((acc, a) => acc + Number(a.porcentajeRA || 0), 0)
@@ -167,7 +168,7 @@ const Estudiante: React.FC = () => {
     setSelectedActivity(act)
     if (!selected) return
     let studentId: string | null = null
-    try { const p = await getProfile(); studentId = p.id } catch {}
+  try { const p = await getProfile(); studentId = p.id } catch { /* ignore profile fetch */ }
     if (!studentId) return
     const data = await getIndicatorChart(selected.id, studentId)
     if (!chartRef.current) return
@@ -310,7 +311,7 @@ const Estudiante: React.FC = () => {
                   <button className={`btn ${actFilter==='vencidas'?'btn-danger':'btn-outline-danger'}`} onClick={()=>setActFilter('vencidas')}>Vencidas</button>
                 </div>
                 <span className="ms-auto ra-small">Ordenar por</span>
-                <select className="form-select" style={{maxWidth:200}} value={sortBy} onChange={e=>setSortBy(e.target.value as any)}>
+                <select className="form-select ra-select--maxwidth" title="Ordenar actividades" aria-label="Ordenar actividades" value={sortBy} onChange={e=>setSortBy(e.target.value as 'fecha'|'peso'|'nombre')}>
                   <option value="fecha">Fecha de cierre</option>
                   <option value="peso">Peso en RA</option>
                   <option value="nombre">Nombre</option>

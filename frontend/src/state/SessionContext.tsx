@@ -31,7 +31,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren> = ({ children })
   })
 
   useEffect(() => {
-    try { localStorage.setItem('session', JSON.stringify(state)) } catch {}
+    try { localStorage.setItem('session', JSON.stringify(state)) } catch { /* ignore */ }
   }, [state])
 
   const value = useMemo<Ctx>(() => ({
@@ -45,6 +45,7 @@ export const SessionProvider: React.FC<React.PropsWithChildren> = ({ children })
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useSession = () => {
   const ctx = useContext(SessionContext)
   if (!ctx) throw new Error('useSession must be used within SessionProvider')

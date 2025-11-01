@@ -52,7 +52,7 @@ const DocenteRAs: React.FC = () => {
   }
 
   return (
-    <div className="dashboard-body" style={{minHeight:'100%'}}>
+    <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente'); if (k==='recursos' && curso) navigate(`/docente/${curso}/recursos`) }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]} />
@@ -63,11 +63,20 @@ const DocenteRAs: React.FC = () => {
               Suma de RAs: <strong>{asigVal.ras.suma.toFixed(2)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${asigVal.ras.faltante.toFixed(2)}% para llegar a 100%.`}
             </div>
           )}
+          <div className="d-flex gap-2 mb-3">
+            <button className="btn btn-danger" onClick={()=> navigate(`/docente/${curso}/actividades/nueva`)}>
+              <i className="bi bi-plus-circle" /> Nueva actividad (curso)
+            </button>
+          </div>
           {asigVal && (
-            <div className="progress mb-3" aria-label="Progreso RAs a 100%">
-              <div className={`progress-bar ${asigVal.ras.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, asigVal.ras.suma))}%` }} aria-valuenow={asigVal.ras.suma} aria-valuemin={0} aria-valuemax={100}>
-                {asigVal.ras.suma.toFixed(0)}%
-              </div>
+            <div className="progress mb-3">
+              <progress
+                className="w-100"
+                value={Math.min(100, Math.max(0, asigVal.ras.suma))}
+                max={100}
+                aria-label="Progreso RAs a 100%"
+                title={`Progreso RAs: ${asigVal.ras.suma.toFixed(0)}%`}
+              />
             </div>
           )}
           {err && <div className="alert alert-danger">{err}</div>}
@@ -86,20 +95,28 @@ const DocenteRAs: React.FC = () => {
                     <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
                       Actividades: <strong>{raVal.actividades.suma.toFixed(2)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${raVal.actividades.faltante.toFixed(2)}%`}
                     </div>
-                    <div className="progress" aria-label="Progreso actividades a 100%">
-                      <div className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }} aria-valuenow={raVal.actividades.suma} aria-valuemin={0} aria-valuemax={100}>
-                        {raVal.actividades.suma.toFixed(0)}%
-                      </div>
+                    <div className="progress">
+                      <progress
+                        className="w-100"
+                        value={Math.min(100, Math.max(0, raVal.actividades.suma))}
+                        max={100}
+                        aria-label="Progreso actividades a 100%"
+                        title={`Progreso actividades: ${raVal.actividades.suma.toFixed(0)}%`}
+                      />
                     </div>
                   </div>
                   <div className="col-md-6">
                     <div className={`alert ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
                       Indicadores: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong>. {raVal.indicadores.ok ? '¡Listo!' : `Falta ${raVal.indicadores.faltante.toFixed(2)}%`}
                     </div>
-                    <div className="progress" aria-label="Progreso indicadores a 100%">
-                      <div className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }} aria-valuenow={raVal.indicadores.suma} aria-valuemin={0} aria-valuemax={100}>
-                        {raVal.indicadores.suma.toFixed(0)}%
-                      </div>
+                    <div className="progress">
+                      <progress
+                        className="w-100"
+                        value={Math.min(100, Math.max(0, raVal.indicadores.suma))}
+                        max={100}
+                        aria-label="Progreso indicadores a 100%"
+                        title={`Progreso indicadores: ${raVal.indicadores.suma.toFixed(0)}%`}
+                      />
                     </div>
                   </div>
                 </div>
@@ -146,7 +163,7 @@ const DocenteRAs: React.FC = () => {
               </div>
 
               <div className="mt-3 d-flex gap-2">
-                <button className="btn btn-danger" onClick={()=>navigate(`/docente/${curso}/ra/${selectedRA.id}/crear-actividad`)}><i className="bi bi-plus-circle" /> Crear actividad</button>
+                <button className="btn btn-danger" onClick={()=>navigate(`/docente/${curso}/actividades/nueva`)}><i className="bi bi-plus-circle" /> Nueva actividad (curso)</button>
                 <button className="btn btn-outline-danger" onClick={()=>navigate(`/docente/${curso}/ra/${selectedRA.id}/calificar`)}><i className="bi bi-check2-square" /> Calificar</button>
                 <button className="btn btn-outline-secondary" onClick={loadStudents}><i className="bi bi-people" /> Ver estudiantes</button>
               </div>
@@ -155,7 +172,13 @@ const DocenteRAs: React.FC = () => {
                 <div className="content-title">Estudiantes - {curso}</div>
                 <div className="d-flex gap-2 align-items-center mb-2">
                   <label className="ra-small">Periodo</label>
-                  <select className="form-select" style={{maxWidth:240}} value={periodoSel} onChange={e=>setPeriodoSel(e.target.value)}>
+                  <select
+                    className="form-select w-240px"
+                    aria-label="Filtrar por periodo"
+                    title="Filtrar por periodo"
+                    value={periodoSel}
+                    onChange={e=>setPeriodoSel(e.target.value)}
+                  >
                     <option value="">Todos</option>
                     {periodos.map(p => <option key={p.id} value={p.id}>{p.descripcion}</option>)}
                   </select>
