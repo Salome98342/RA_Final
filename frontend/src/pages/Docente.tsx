@@ -284,8 +284,7 @@ const Docente: React.FC = () => {
                             style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }}
                             aria-valuenow={Math.round(raVal.actividades.suma)} 
                             aria-valuemin={0} 
-                            aria-valuemax={100} 
-                            aria-label={`Actividades: ${raVal.actividades.suma.toFixed(0)}%`}
+                            aria-valuemax={100}
                           >
                             {raVal.actividades.suma.toFixed(0)}%
                           </div>
@@ -302,8 +301,7 @@ const Docente: React.FC = () => {
                             style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }}
                             aria-valuenow={Math.round(raVal.indicadores.suma)} 
                             aria-valuemin={0} 
-                            aria-valuemax={100} 
-                            aria-label={`Indicadores: ${raVal.indicadores.suma.toFixed(0)}%`}
+                            aria-valuemax={100}
                           >
                             {raVal.indicadores.suma.toFixed(0)}%
                           </div>
