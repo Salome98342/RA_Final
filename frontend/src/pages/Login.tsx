@@ -16,13 +16,14 @@ export default function Login() {
   const [toastKind, setToastKind] = useState<ToastKind>(undefined);
   const [toastVisible, setToastVisible] = useState(false);
   const ddRef = useRef<HTMLDivElement | null>(null);
+  const toastTimeout = useRef<number | null>(null);
   const navigate = useNavigate();
   const { setName, setRole, setCode } = useSession()
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (ddRef.current && !ddRef.current.contains(e.target as Node)) {
+      if (ddRef.current && !ddRef.current.contains(e.target as Node)) { 
         setLangOpen(false);
       }
     };
@@ -34,9 +35,9 @@ export default function Login() {
   const showToast = (msg: string, kind: ToastKind = undefined, ms = 2200) => {
     setToastMsg(msg);
     setToastKind(kind);
-    setToastVisible(true);
-    window.clearTimeout((showToast as any)._t);
-    (showToast as any)._t = window.setTimeout(() => setToastVisible(false), ms);
+    setToastVisible(true); 
+    if (toastTimeout.current) window.clearTimeout(toastTimeout.current);
+    toastTimeout.current = window.setTimeout(() => setToastVisible(false), ms);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,12 +48,15 @@ export default function Login() {
     }
     try {
   const profile = await login(usuario, password)
-      setName(profile.nombre)
-      setRole(profile.rol)
-  setCode(profile.code ?? usuario)
-      navigate(profile.rol === 'docente' ? '/docente' : '/estudiante')
-    } catch (err: any) {
-      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Credenciales inválidas'
+    setName(profile.nombre)
+    setRole(profile.rol)
+    setCode(profile.code ?? usuario)
+    navigate(profile.rol === 'docente' ? '/docente' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante'))
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object')
+        ? String((data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message ?? 'Credenciales inválidas')
+        : 'Credenciales inválidas'
       showToast(msg, 'error')
     }
   };
@@ -60,7 +64,7 @@ export default function Login() {
   // Recuperación de contraseña ahora navega a /recuperar
 
   return (
-    <div>
+    <div className="login-page">
     <header>
   {/* Imágenes en public/ -> usa rutas absolutas */}
   <img src="/LogoBlanco.png" alt="UniBlanco" />
@@ -71,21 +75,29 @@ export default function Login() {
         <section className="login-box">
           <img src="/UniLogo.jpg" alt="Logo Univalle" />
           <form id="loginForm" autoComplete="off" onSubmit={handleSubmit}>
+            <label htmlFor="usuario" className="visually-hidden">Código (docente/estudiante)</label>
             <input
               type="text"
               id="usuario"
               placeholder="Código (docente/estudiante)"
+              aria-label="Código (docente/estudiante)"
               required
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoFocus
             />
+            <label htmlFor="password" className="visually-hidden">Contraseña</label>
             <input
               type="password"
               id="password"
               placeholder="Contraseña"
+              aria-label="Contraseña"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { /* redundante pero explícito */ } }}
             />
             <button type="submit">Entrar</button>
             <button
@@ -110,19 +122,26 @@ export default function Login() {
               id="langDropdown"
               ref={ddRef}
               onClick={() => setLangOpen((v) => !v)}
-              role="button"
-              aria-expanded={langOpen}
+              role="combobox"
+              aria-haspopup="listbox"
+              aria-expanded={langOpen ? "true" : "false"}
+              aria-label="Idioma"
+              tabIndex={0}
+              aria-controls="langOptions"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLangOpen(v => !v) } if (e.key === 'Escape') setLangOpen(false) }}
             >
               <div className="dropdown-selected">{lang}</div>
               <ul
-                className="dropdown-list"
-                style={{ display: langOpen ? "block" : "none" }}
+                id="langOptions"
+                className={`dropdown-list ${langOpen ? '' : 'd-none'}`}
+                role="listbox"
+                aria-label="Opciones de idioma"
               >
-                <li onClick={() => setLang("Español - Internacional (es)")}>
+                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("Español - Internacional (es)"); setLangOpen(false) } }} onClick={() => { setLang("Español - Internacional (es)"); setLangOpen(false) }}>
                   Español - Internacional (es)
                 </li>
-                <li onClick={() => setLang("English (en)")}>English (en)</li>
-                <li onClick={() => setLang("Français (fr)")}>Français (fr)</li>
+                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("English (en)"); setLangOpen(false) } }} onClick={() => { setLang("English (en)"); setLangOpen(false) }}>English (en)</li>
+                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("Français (fr)"); setLangOpen(false) } }} onClick={() => { setLang("Français (fr)"); setLangOpen(false) }}>Français (fr)</li>
               </ul>
             </div>
             {/* Aviso de cookies */}

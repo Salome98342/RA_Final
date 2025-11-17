@@ -121,7 +121,6 @@ CREATE TABLE actividad (
   id_tipo_actividad   BIGINT NOT NULL REFERENCES tipo_actividad(id_tipo_actividad),
   nombre_actividad    VARCHAR(150) NOT NULL,
   descripcion         TEXT,
-  porcentaje_actividad NUMERIC(5,2) NOT NULL CHECK (porcentaje_actividad BETWEEN 0 AND 100),
   fecha_creacion      DATE NOT NULL,
   fecha_cierre        DATE,
   CONSTRAINT chk_act_fechas CHECK (fecha_cierre IS NULL OR fecha_cierre >= fecha_creacion)
@@ -161,6 +160,17 @@ CREATE TABLE notas_actividad (
   nota_ra_actividad  NUMERIC(5,2) CHECK (nota_ra_actividad BETWEEN 0 AND 5),
   retroalimentacion  TEXT,
   CONSTRAINT uq_notas_actividad UNIQUE (id_matricula, id_ra_actividad)
+);
+
+-- ========================================
+-- 14. Coordinador/Director
+-- ========================================
+CREATE TABLE coordinador (
+  id_coordinador       BIGSERIAL PRIMARY KEY,
+  nombre               VARCHAR(100) NOT NULL,
+  codigo_coordinador   VARCHAR(50)  NOT NULL UNIQUE,
+  contrasenia_coord    VARCHAR(255) NOT NULL,
+  correo               VARCHAR(255) NOT NULL UNIQUE
 );
 
 -- ========================================

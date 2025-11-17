@@ -1,34 +1,45 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
-import { createActivityForRA, getTiposActividad, getIndicatorsByRA, getRAValidation } from '@/services/api'
+import { createActivityForRA, createActivityMulti, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse } from '@/services/api'
 import Toast from '@/components/Toast'  // <- nuevo
 
 const DocenteCrearActividad: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId: string}>()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ nombre: '', tipo: '1', pctAct: '', pctRA: '', desc: '', cierre: '' })
+  const [form, setForm] = useState({ nombre: '', tipo: '1', pctRA: '', desc: '', cierre: '' })
   const [saving, setSaving] = useState(false)
   const [tipos, setTipos] = useState<{id:string; descripcion:string}[]>([])
   const [toast, setToast] = useState<{ text: string; type?: 'ok'|'error' } | null>(null)  // <- nuevo
   const [allIndicators, setAllIndicators] = useState<{ id: string; descripcion: string; porcentaje: number }[]>([])
   const [selIndicators, setSelIndicators] = useState<string[]>([])
   const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
+  // Multi-RA support
+  const [ras, setRas] = useState<{ id: string; titulo: string }[]>([])
+  const [selectedRAs, setSelectedRAs] = useState<string[]>([])
+  const [raPct, setRaPct] = useState<Record<string, string>>({})
+  const [raTotals, setRaTotals] = useState<Record<string, number>>({})
 
-  const pctActNum = Number(form.pctAct)
   const pctRANum = Number(form.pctRA)
   const sumaActActual = raVal?.actividades?.suma ?? null
   const nuevoTotalAct = sumaActActual != null && !Number.isNaN(pctRANum) ? Number(sumaActActual) + Number(pctRANum) : null
   const excedeAct = nuevoTotalAct != null ? nuevoTotalAct > 100 : false
-  const canSave = Boolean(
-    form.nombre.trim() &&
-    !Number.isNaN(pctActNum) && pctActNum > 0 && pctActNum <= 100 &&
-    !Number.isNaN(pctRANum) && pctRANum > 0 && pctRANum <= 100 &&
-    (nuevoTotalAct == null || nuevoTotalAct <= 100) &&
-    tipos.length > 0
-  )
+  // Reglas: fecha requerida, aporte > 0 para cada RA seleccionado, y al menos un indicador
+  const aporteFor = (rid: string | undefined) => Number(rid ? (raPct[rid] ?? form.pctRA) : form.pctRA)
+  const hasName = Boolean(form.nombre.trim())
+  const hasDate = Boolean(form.cierre && String(form.cierre).trim())
+  const hasIndicators = selIndicators.length > 0
+  const allAportesPositive = selectedRAs.length > 0 ? selectedRAs.every((rid) => {
+    const v = aporteFor(rid)
+    return Number.isFinite(v) && v > 0
+  }) : false
 
+  // Mantener una referencia al valor actual de pctRA para inicializaciones sin añadir a deps
+  const pctRARef = useRef(form.pctRA)
+  useEffect(() => { pctRARef.current = form.pctRA }, [form.pctRA])
+
+  // Cargar tipos e información dependiente del RA
   useEffect(() => {
     // Cargar tipos de actividad y fijar uno válido por defecto
     getTiposActividad()
@@ -47,30 +58,129 @@ const DocenteCrearActividad: React.FC = () => {
     }
   }, [raId])
 
+  // Cargar RAs del curso para permitir selección múltiple
+  useEffect(() => {
+    if (!curso) return
+    getRAsByCourse(curso)
+      .then((rows) => {
+        const mapped = rows.map(r => ({ id: String(r.id), titulo: r.titulo || `RA ${r.id}` }))
+        setRas(mapped)
+        // Inicializar selección con el RA actual o el primero
+        const initial = raId ? [String(raId)] : (mapped.length ? [mapped[0].id] : [])
+        setSelectedRAs(initial)
+        if (initial[0]) setRaPct((m) => ({ ...m, [initial[0]]: pctRARef.current }))
+      })
+      .catch(() => setRas([]))
+  }, [curso, raId])
+
+  // Cargar totales actuales de actividades por cada RA seleccionado
+  useEffect(() => {
+    const run = async () => {
+      const entries = await Promise.all(selectedRAs.map(async (rid) => {
+        try {
+          const v = await getRAValidation(rid)
+          return [rid, Number(v?.actividades?.suma ?? 0)] as const
+        } catch {
+          return [rid, 0] as const
+        }
+      }))
+      setRaTotals(Object.fromEntries(entries))
+    }
+    if (selectedRAs.length) run()
+  }, [selectedRAs])
+
+  const fmtPct = (n: number | undefined | null) => {
+    const v = typeof n === 'number' && isFinite(n) ? n : 0
+    const c = Math.max(0, Math.min(100, v))
+    return c.toFixed(2)
+  }
+
   const submit = async () => {
-    if (!raId || !canSave || saving) return
+    if (!raId || saving) return
+    // Validaciones hard antes de chequear acumulados
+  if (!hasName) { setToast({ text: 'Debes ingresar el nombre de la actividad.', type: 'error' }); return }
+  if (!hasDate) { setToast({ text: 'Debes definir la fecha límite de entrega.', type: 'error' }); return }
+  if (allIndicators.length === 0) { setToast({ text: 'Este RA no tiene indicadores definidos. No puedes crear la actividad sin indicadores.', type: 'error' }); return }
+  if (!hasIndicators) { setToast({ text: 'Debes seleccionar al menos un indicador del RA.', type: 'error' }); return }
+    if (!allAportesPositive) { setToast({ text: 'El aporte al RA (%) debe ser mayor que 0 para cada RA seleccionado.', type: 'error' }); return }
+    // Validación rápida de fecha: no permitir fecha de cierre en el pasado
+    const todayStr = new Date().toISOString().slice(0,10)
+    if (form.cierre < todayStr) {
+      setToast({ text: `La fecha límite no puede ser anterior a hoy (${todayStr}).`, type: 'error' })
+      return
+    }
+    // Pre-chequeo: cada RA seleccionado no debe EXCEDER 100% en el aporte total al RA (usa porcentaje_ra_actividad)
+    try {
+      const validations = await Promise.all(
+        selectedRAs.map(async (rid) => {
+          try {
+            const v = await getRAValidation(rid)
+            return { rid, suma: Number(v?.actividades?.suma ?? 0) }
+          } catch {
+            return { rid, suma: 0 }
+          }
+        })
+      )
+      const failing = validations.find((v) => {
+        const aporte = Number(raPct[v.rid] ?? form.pctRA)
+        return !Number.isNaN(aporte) && (v.suma + aporte) > 100 + 1e-6
+      })
+      if (failing) {
+        const aporte = Number(raPct[failing.rid] ?? form.pctRA) || 0
+        const nuevo = failing.suma + aporte
+        setToast({
+          text: `El RA ${failing.rid} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`,
+          type: 'error',
+        })
+        return
+      }
+    } catch {
+      // Si el pre-chequeo falla por red, continuamos y dejaremos que el backend valide
+    }
     setSaving(true)
     try {
-      await createActivityForRA(raId, {
-        nombre_actividad: form.nombre.trim(),
-        id_tipo_actividad: Number(form.tipo),
-        porcentaje_actividad: Number(form.pctAct),
-        porcentaje_ra_actividad: Number(form.pctRA),
-        descripcion: form.desc || undefined,
-        fecha_cierre: form.cierre || undefined,
-        indicadores: selIndicators.map(id => Number(id)),
-      })
-      setToast({ text: 'Actividad creada con éxito', type: 'ok' })
+      const others = selectedRAs.filter(id => id !== String(raId))
+      if (others.length === 0) {
+        // Flujo existente: solo un RA
+        await createActivityForRA(raId, {
+          nombre_actividad: form.nombre.trim(),
+          id_tipo_actividad: Number(form.tipo),
+          porcentaje_ra_actividad: Number(raPct[raId] ?? form.pctRA),
+          descripcion: form.desc || undefined,
+          fecha_cierre: form.cierre || undefined,
+          indicadores: selIndicators.map(id => Number(id)),
+        })
+      } else {
+        // Nuevo flujo: crear una sola actividad en múltiples RAs
+        const rasPayload = selectedRAs.map((rid) => ({
+          ra_id: Number(rid),
+          porcentaje_ra_actividad: Number(raPct[rid] ?? form.pctRA),
+          indicadores: rid === String(raId) ? selIndicators.map(Number) : [],
+        }))
+        await createActivityMulti({
+          nombre_actividad: form.nombre.trim(),
+          id_tipo_actividad: Number(form.tipo),
+          descripcion: form.desc || undefined,
+          fecha_cierre: form.cierre || undefined,
+          ras: rasPayload,
+        })
+      }
+      setToast({ text: 'Actividad creada (indicadores asignados)', type: 'ok' })
       setTimeout(() => navigate(`/docente/${curso}/ras`), 1200)
-    } catch (err: any) {
-      // Extraer mejor el mensaje de error
+    } catch (err: unknown) {
+      // Extraer mejor el mensaje de error de forma segura
       let msg: string = 'No se pudo crear la actividad'
-      const data = err?.response?.data
-      if (typeof data === 'string') msg = data
-      else if (data?.message) msg = String(data.message)
-      else if (data?.detail) msg = String(data.detail)
-      else if (data) msg = JSON.stringify(data)
-      else if (err?.message) msg = String(err.message)
+      const res = (err as { response?: { data?: unknown } })?.response?.data
+      if (typeof res === 'string') msg = res
+      else if (res && typeof res === 'object') {
+        const rec = res as Record<string, unknown>
+        if (typeof rec.message === 'string') msg = rec.message
+        else if (typeof rec.detail === 'string') msg = rec.detail
+        else msg = JSON.stringify(rec)
+      } else if (err && typeof err === 'object' && 'message' in (err as Record<string, unknown>)) {
+        const eMsg = (err as Record<string, unknown>).message
+        if (typeof eMsg === 'string') msg = eMsg
+      }
       setToast({ text: msg, type: 'error' })
     } finally {
       setSaving(false)
@@ -78,7 +188,7 @@ const DocenteCrearActividad: React.FC = () => {
   }
 
   return (
-    <div className="dashboard-body" style={{minHeight:'100%'}}>
+    <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente') }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
@@ -91,28 +201,36 @@ const DocenteCrearActividad: React.FC = () => {
                 <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
                   Actividades actuales: <strong>{raVal.actividades.suma.toFixed(2)}%</strong> · {raVal.actividades.ok ? '¡Listo 100%!' : `Faltan ${raVal.actividades.faltante.toFixed(2)}%`}
                 </div>
-                <div className="progress" aria-label="Progreso actividades a 100%">
-                  <div className={`progress-bar ${raVal.actividades.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.actividades.suma))}%` }} aria-valuenow={raVal.actividades.suma} aria-valuemin={0} aria-valuemax={100}>
-                    {raVal.actividades.suma.toFixed(0)}%
-                  </div>
-                </div>
+                {(() => {
+                  const suma = raVal.actividades.suma
+                  const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
+                  return (
+                    <progress
+                      className={`uv-progress ${variant}`}
+                      value={Math.min(100, Math.max(0, suma))}
+                      max={100}
+                      aria-label="Progreso actividades a 100%"
+                      title={`Progreso actividades: ${suma.toFixed(0)}%`}
+                    />
+                  )
+                })()}
                 {nuevoTotalAct != null && !Number.isNaN(nuevoTotalAct) && (
-                  <div className="progress mt-1" aria-label="Nuevo total con esta actividad">
-                    <div className={`progress-bar ${nuevoTotalAct>100?'bg-danger':(nuevoTotalAct===100?'bg-success':'bg-warning')}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, nuevoTotalAct))}%` }} aria-valuenow={nuevoTotalAct} aria-valuemin={0} aria-valuemax={100}>
-                      {nuevoTotalAct.toFixed(0)}%
-                    </div>
-                  </div>
+                  (() => {
+                    const variant = excedeAct ? 'prog-danger' : (Math.abs(nuevoTotalAct - 100) < 1e-9 ? 'prog-success' : 'prog-warning')
+                    return (
+                      <progress
+                        className={`uv-progress mt-1 ${variant}`}
+                        value={Math.min(100, Math.max(0, nuevoTotalAct))}
+                        max={100}
+                        aria-label="Nuevo total con esta actividad"
+                        title={`Nuevo total: ${nuevoTotalAct.toFixed(0)}%`}
+                      />
+                    )
+                  })()
                 )}
               </div>
               <div className="col-md-6">
-                <div className={`alert ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
-                  Indicadores actuales: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong> · {raVal.indicadores.ok ? '¡Listo 100%!' : `Faltan ${raVal.indicadores.faltante.toFixed(2)}%`}
-                </div>
-                <div className="progress" aria-label="Progreso indicadores a 100%">
-                  <div className={`progress-bar ${raVal.indicadores.ok ? 'bg-success' : 'bg-warning'}`} role="progressbar" style={{ width: `${Math.min(100, Math.max(0, raVal.indicadores.suma))}%` }} aria-valuenow={raVal.indicadores.suma} aria-valuemin={0} aria-valuemax={100}>
-                    {raVal.indicadores.suma.toFixed(0)}%
-                  </div>
-                </div>
+                {/* Bloque de indicadores eliminado: sin texto ni barras por requerimiento */}
               </div>
             </div>
           )}
@@ -132,24 +250,7 @@ const DocenteCrearActividad: React.FC = () => {
               <div id="nombreHelp" className="form-text">Cómo se mostrará la actividad en el curso.</div>
             </div>
 
-            <div className="col-md-3">
-              <label className="ra-small d-block mb-1" htmlFor="pctAct">Peso de la actividad (%)</label>
-              <input
-                id="pctAct"
-                className="form-control"
-                placeholder="Ej. 30"
-                type="number"
-                step="0.01"
-                min={0}
-                max={100}
-                value={form.pctAct}
-                onChange={e=>setForm(f=>({...f, pctAct:e.target.value}))}
-                required
-                title="Porcentaje interno de la actividad (0–100)"
-                aria-describedby="pctActHelp"
-              />
-              <div id="pctActHelp" className="form-text">Equivale al peso de la actividad en su propia rúbrica.</div>
-            </div>
+            {/* Campo 'Peso de la actividad (%)' eliminado */}
 
             <div className="col-md-3">
               <label className="ra-small d-block mb-1" htmlFor="pctRA">Aporte al RA (%)</label>
@@ -159,16 +260,15 @@ const DocenteCrearActividad: React.FC = () => {
                 placeholder="Ej. 40"
                 type="number"
                 step="0.01"
-                min={0}
+                min={0.01}
                 max={100}
                 value={form.pctRA}
                 onChange={e=>setForm(f=>({...f, pctRA:e.target.value}))}
-                required
-                title="Porcentaje que esta actividad aporta al resultado de aprendizaje (0–100)"
+                title="Porcentaje que esta actividad aporta al resultado de aprendizaje (0–100). Debe ser mayor que 0."
                 aria-describedby="pctRAHelp"
               />
               <div id="pctRAHelp" className="form-text">
-                Suma de actividades del RA debe ser 100%.
+                Obligatorio. Debe ser mayor que 0. La suma de actividades del RA no debe exceder 100%.
                 {raVal && (
                   <>
                     <br/>
@@ -178,13 +278,116 @@ const DocenteCrearActividad: React.FC = () => {
                       ) : (
                         <span>
                           Nuevo total con esta actividad: <strong>{nuevoTotalAct.toFixed(2)}%</strong>{' '}
-                          {nuevoTotalAct === 100 ? '· ¡Listo 100%!' : `· Faltaría ${(100 - nuevoTotalAct).toFixed(2)}%`}
+                          {Math.abs(nuevoTotalAct - 100) < 1e-9 ? '· ¡Listo 100%!' : `· Faltaría ${(100 - nuevoTotalAct).toFixed(2)}%`}
                         </span>
                       )
                     ) : null}
                   </>
                 )}
               </div>
+            </div>
+
+            {/* Selección de múltiples RAs del curso (opcional) */}
+            <div className="col-12">
+              <div className="fw-bold mb-2">Aplicar también a otros RAs del curso</div>
+              {ras.length <= 1 ? (
+                <div className="text-muted">No hay más RAs en este curso.</div>
+              ) : (
+                <div className="row g-2">
+                  {ras.map(r => (
+                    <div key={r.id} className="col-md-6 d-flex align-items-center gap-2">
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id={`ra-${r.id}`}
+                          checked={selectedRAs.includes(r.id)}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setSelectedRAs(curr => checked ? Array.from(new Set([...curr, r.id])) : curr.filter(x => x !== r.id))
+                            if (checked && !raPct[r.id]) setRaPct(m => ({ ...m, [r.id]: form.pctRA }))
+                          }}
+                        />
+                        <label className="form-check-label" htmlFor={`ra-${r.id}`}>{r.titulo}</label>
+                      </div>
+                      <input
+                        className="form-control form-control-sm w-110px"
+                        type="number"
+                        min={0.01}
+                        max={100}
+                        step="0.01"
+                        aria-label={`Aporte al ${r.titulo} (%)`}
+                        value={raPct[r.id] ?? ''}
+                        onChange={(e)=> setRaPct(m => ({ ...m, [r.id]: e.target.value }))}
+                        disabled={!selectedRAs.includes(r.id)}
+                        placeholder="% RA"
+                        title="Porcentaje que esta actividad aporta al RA"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="form-text">Selecciona otros RAs y define el porcentaje de aporte para cada uno.</div>
+              <div className="form-text text-warning">Regla: las actividades de cada RA no deben exceder 100% (se pueden ir sumando en varias actividades).</div>
+
+              {/* Vista previa de porcentajes por RA seleccionado */}
+              {selectedRAs.length > 0 && (
+                <div className="table-responsive mt-2">
+                  <table className="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>RA</th>
+                        <th className="w-220px">Total actual</th>
+                        <th className="w-160px">Aporte (%)</th>
+                        <th className="w-220px">Quedaría en</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRAs.map((rid) => {
+                        const ra = ras.find(x => x.id === rid)
+                        const suma = Number(raTotals[rid] ?? 0)
+                        const aporte = Number(raPct[rid] ?? form.pctRA) || 0
+                        const quedariaRaw = suma + (isNaN(aporte) ? 0 : aporte)
+                        const quedaria = Math.max(0, Math.min(100, quedariaRaw))
+                        const excede = quedaria > 100 + 1e-6
+                        return (
+                          <tr key={rid} className={excede ? 'table-danger' : ''}>
+                            <td>{ra?.titulo ?? `RA ${rid}`}</td>
+                            <td>
+                              <progress
+                                className="uv-progress"
+                                value={Math.min(100, Math.max(0, suma))}
+                                max={100}
+                                aria-label="Progreso actividades RA"
+                                title={`Progreso: ${fmtPct(suma)}%`}
+                              />
+                              <div className="ra-small text-muted text-end">{fmtPct(suma)}%</div>
+                            </td>
+                            <td>
+                              <div className="ra-small">{fmtPct(aporte)}%</div>
+                            </td>
+                            <td>
+                              {(() => {
+                                const variant = excede ? 'prog-danger' : (Math.abs(quedaria - 100) < 1e-9 ? 'prog-success' : 'prog-warning')
+                                return (
+                                  <progress
+                                    className={`uv-progress ${variant}`}
+                                    value={Math.min(100, Math.max(0, quedaria))}
+                                    max={100}
+                                    aria-label="Progreso actividades RA con nueva actividad"
+                                    title={`Quedaría en: ${fmtPct(quedaria)}%`}
+                                  />
+                                )
+                              })()}
+                              <div className="ra-small text-muted text-end">{fmtPct(quedaria)}%</div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="col-md-4">
@@ -214,6 +417,7 @@ const DocenteCrearActividad: React.FC = () => {
                 className="form-control"
                 type="date"
                 placeholder="AAAA-MM-DD"
+                min={new Date().toISOString().slice(0,10)}
                 value={form.cierre}
                 onChange={e=>setForm(f=>({...f, cierre:e.target.value}))}
                 title="Fecha a partir de la cual no se aceptan entregas"
@@ -239,9 +443,7 @@ const DocenteCrearActividad: React.FC = () => {
               {/* Checklist de indicadores de logro asociados al RA */}
               <div className="col-12">
                 <div className="fw-bold mb-2">Indicadores de logro vinculados</div>
-                {allIndicators.length === 0 ? (
-                  <div className="text-muted">Este RA no tiene indicadores definidos.</div>
-                ) : (
+                {allIndicators.length === 0 ? null : (
                   <div className="row">
                     {allIndicators.map((ind) => (
                       <div key={ind.id} className="col-md-6">
@@ -256,9 +458,9 @@ const DocenteCrearActividad: React.FC = () => {
                               setSelIndicators((curr) => checked ? [...curr, ind.id] : curr.filter((x) => x !== ind.id))
                             }}
                           />
-                          <label className="form-check-label" htmlFor={`ind-${ind.id}`}>
-                            {ind.descripcion} <span className="badge bg-secondary ms-1">{ind.porcentaje}%</span>
-                          </label>
+                            <label className="form-check-label" htmlFor={`ind-${ind.id}`}>
+                              {ind.descripcion}
+                            </label>
                         </div>
                       </div>
                     ))}
@@ -268,7 +470,9 @@ const DocenteCrearActividad: React.FC = () => {
               </div>
 
             <div className="col-12 d-flex gap-2">
-              <button className="btn btn-danger" disabled={!canSave || saving} onClick={submit}>{saving?'Guardando…':'Crear actividad'}</button>
+              <button className="btn btn-danger" disabled={saving} onClick={submit}>
+                {saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Crear actividad'}
+              </button>
               <button className="btn btn-outline-secondary" onClick={()=>navigate(-1)}>Cancelar</button>
             </div>
           </div>

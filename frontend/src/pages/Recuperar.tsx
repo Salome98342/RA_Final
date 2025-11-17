@@ -16,8 +16,12 @@ const Recuperar: React.FC = () => {
       setError(null)
       await requestPasswordReset(email)
       setSent(true)
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo enviar el enlace. Inténtalo de nuevo.')
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
+        ? String((data as Record<string, unknown>).message)
+        : 'No se pudo enviar el enlace. Inténtalo de nuevo.'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -34,10 +38,13 @@ const Recuperar: React.FC = () => {
           <h2 className="h5 mb-3">Recuperar contraseña</h2>
           {!sent ? (
             <form onSubmit={onSubmit} autoComplete="off">
+              <label htmlFor="rec-email" className="visually-hidden">Correo institucional</label>
               <input
+                id="rec-email"
                 className="form-control mb-2"
                 type="email"
                 placeholder="Correo institucional"
+                aria-label="Correo institucional"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

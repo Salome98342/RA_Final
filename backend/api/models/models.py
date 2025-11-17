@@ -40,6 +40,51 @@ class Docente(models.Model):
         return f"{self.nombre} {self.apellido}"
 
 
+class Coordinador(models.Model):
+    id_coordinador = models.BigAutoField(primary_key=True, db_column="id_coordinador")
+    nombre = models.CharField(max_length=100)
+    codigo_coordinador = models.CharField(max_length=50, unique=True)
+    contrasenia_coord = models.CharField(max_length=255)
+    correo = models.EmailField(max_length=255, unique=True)
+
+    class Meta:
+        db_table = "coordinador"
+
+    def __str__(self):
+        return self.nombre
+
+
+class ImportAudit(models.Model):
+    """
+    Registro de auditoría para importaciones realizadas por coordinadores.
+    Guarda métricas mínimas para trazabilidad sin exponer datos sensibles.
+    """
+    KIND_CHOICES = (
+        ("matriculados", "Matriculados"),
+        ("docentes", "Docentes"),
+        ("asignaturas_ras", "Asignaturas y RAs"),
+    )
+
+    id = models.BigAutoField(primary_key=True)
+    coordinador = models.ForeignKey(Coordinador, on_delete=models.SET_NULL, null=True, db_column="id_coordinador")
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    filename = models.CharField(max_length=255, blank=True, null=True)
+    created_count = models.IntegerField(default=0)
+    existing_count = models.IntegerField(default=0)
+    errors_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "import_audit"
+        indexes = [
+            models.Index(fields=["kind", "created_at"], name="idx_import_kind_created"),
+        ]
+
+    def __str__(self):
+        who = getattr(self.coordinador, "codigo_coordinador", None) or "?"
+        return f"{self.kind} by {who} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
 class Estudiante(models.Model):
     id_estudiante = models.BigAutoField(primary_key=True, db_column="id_estudiante")
     nombre = models.CharField(max_length=100)
@@ -155,17 +200,12 @@ class Actividad(models.Model):
     tipo_actividad = models.ForeignKey(TipoActividad, on_delete=models.RESTRICT, db_column="id_tipo_actividad")
     nombre_actividad = models.CharField(max_length=150)
     descripcion = models.TextField(blank=True, null=True)
-    porcentaje_actividad = models.DecimalField(max_digits=5, decimal_places=2)
     fecha_creacion = models.DateField()
     fecha_cierre = models.DateField(blank=True, null=True)
 
     class Meta:
         db_table = "actividad"
         constraints = [
-            models.CheckConstraint(
-                check=Q(porcentaje_actividad__gte=0) & Q(porcentaje_actividad__lte=100),
-                name="chk_act_pct",
-            ),
             models.CheckConstraint(
                 check=Q(fecha_cierre__isnull=True) | Q(fecha_cierre__gte=models.F("fecha_creacion")),
                 name="chk_act_fechas",
