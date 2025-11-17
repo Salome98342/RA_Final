@@ -10,7 +10,7 @@ const Sidebar: React.FC<Props> = ({ active, onClick, items }) => {
   const navigate = useNavigate()
   const { setName, setRole, setSelectedCurso, setCode } = useSession()
   const handleLogout = async () => {
-    try { await logout() } catch {}
+    try { await logout() } catch { /* ignore logout error */ }
   setName(null); setRole(null); setSelectedCurso(null); setCode(null)
     navigate('/login')
   }

@@ -5,9 +5,13 @@ from ..views.views import (
     login_view, me_view, logout_view, password_forgot_view, password_reset_view,
     TaskViewSet, TipoDocumentoViewSet, TipoActividadViewSet, ProgramaViewSet,
     DocenteViewSet, EstudianteViewSet, AsignaturaViewSet,
-    ra_indicadores_view, ra_actividades_view, notas_view,
-    course_student_indicators_view, profile_view,
+    ra_indicadores_view, ra_indicador_detail_view, ra_actividades_view, notas_view,
+    course_student_indicators_view, profile_view, password_change_view, profile_avatar_view,
     notifications_view, ra_validation_view, asignatura_validation_view,
+    actividades_multi_view, ra_actividad_detail_view, course_grade_view,
+    coordinador_asignaturas_view, coordinador_asignatura_estudiantes_view, coordinador_import_matriculados_view, coordinador_asignatura_ras_view,
+    coordinador_import_docentes_view, coordinador_import_asignaturas_ras_view,
+    coordinador_asignatura_avance_view,
 )
 
 router = DefaultRouter()
@@ -27,7 +31,10 @@ urlpatterns = [
     path("auth/password/forgot", password_forgot_view),
     path("auth/password/reset", password_reset_view),
     path("auth/profile", profile_view),  # GET, PUT/PATCH
-    path("ras/<int:ra_id>/indicadores/", ra_indicadores_view),
+    path("auth/password/change", password_change_view),
+    path("auth/profile/avatar", profile_avatar_view),
+    path("ras/<int:ra_id>/indicadores/", ra_indicadores_view, name="ra-indicadores"),
+    path("ras/<int:ra_id>/indicadores/<int:ind_id>/", ra_indicador_detail_view, name="ra-indicador-detalle"),
     path("ras/<int:ra_id>/actividades/", ra_actividades_view),  # GET, POST
     path("validacion/ra/<int:ra_id>", ra_validation_view),
     path("validacion/asignatura/<str:codigo_asignatura>", asignatura_validation_view),
@@ -37,4 +44,21 @@ urlpatterns = [
         course_student_indicators_view,
     ),
     path("notificaciones", notifications_view),
+    # Coordinador: listados administrativos
+    path("coordinador/asignaturas", coordinador_asignaturas_view),
+    path("coordinador/asignaturas/estudiantes", coordinador_asignatura_estudiantes_view),
+    path("coordinador/asignaturas/ras", coordinador_asignatura_ras_view),
+    path("coordinador/asignaturas/avance", coordinador_asignatura_avance_view),
+    path("coordinador/import/matriculados", coordinador_import_matriculados_view),
+    path("coordinador/import/docentes", coordinador_import_docentes_view),
+    path("coordinador/import/asignaturas-ras", coordinador_import_asignaturas_ras_view),
+    # Consolidado de calificaciones por asignatura y estudiante
+    path(
+        "asignaturas/<str:codigo_asignatura>/calificaciones/<int:id_estudiante>/",
+        course_grade_view,
+    ),
+    # Crear una actividad y asociarla a múltiples RAs en una sola operación
+    path("actividades/multi", actividades_multi_view),
+    # Actualizar/Eliminar una relación RA-Actividad (y actividad)
+    path("ras/<int:ra_id>/actividades/<int:rel_id>/", ra_actividad_detail_view),
 ]

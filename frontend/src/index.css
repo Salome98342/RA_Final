@@ -10,7 +10,5 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  /* no centrar ni forzar flex en todo el body */
 }
 
-/* No se sobreescriben estilos globales de <a> ni <button> */

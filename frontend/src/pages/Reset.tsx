@@ -23,8 +23,12 @@ const Reset: React.FC = () => {
       setDone(true)
       // Opcional: redirigir al login tras unos segundos
       window.setTimeout(() => navigate('/login'), 2500)
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'No se pudo restablecer la contraseña. Intenta de nuevo.')
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
+        ? String((data as Record<string, unknown>).message)
+        : 'No se pudo restablecer la contraseña. Intenta de nuevo.'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -41,18 +45,24 @@ const Reset: React.FC = () => {
           <h2 className="h5 mb-3">Restablecer contraseña</h2>
           {!done ? (
             <form onSubmit={onSubmit} autoComplete="off">
+              <label htmlFor="new-pass" className="visually-hidden">Nueva contraseña</label>
               <input
+                id="new-pass"
                 className="form-control mb-2"
                 type="password"
                 placeholder="Nueva contraseña"
+                aria-label="Nueva contraseña"
                 required
                 value={p1}
                 onChange={(e) => setP1(e.target.value)}
               />
+              <label htmlFor="confirm-pass" className="visually-hidden">Confirmar contraseña</label>
               <input
+                id="confirm-pass"
                 className="form-control mb-2"
                 type="password"
                 placeholder="Confirmar contraseña"
+                aria-label="Confirmar contraseña"
                 required
                 value={p2}
                 onChange={(e) => setP2(e.target.value)}

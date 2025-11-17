@@ -7,6 +7,8 @@ export const endpoints = {
     forgot: '/auth/password/forgot',
     reset: '/auth/password/reset',
     profile: '/auth/profile',
+    change: '/auth/password/change',
+    avatar: '/auth/profile/avatar',
   },
   catalogos: {
     tiposActividad: '/tipos-actividad/',
@@ -17,12 +19,19 @@ export const endpoints = {
     estudiantes: (id: string) => `/asignaturas/${id}/estudiantes/`,
     miMatricula: (id: string) => `/asignaturas/${id}/mi-matricula/`,
     indicadoresEstudiante: (codigo: string, estudianteId: string | number) => `/asignaturas/${codigo}/estudiante/${estudianteId}/indicadores`,
+    // Consolidado de calificaciones (summary) por asignatura y estudiante
+    calificaciones: (codigo: string, estudianteId: string | number) => `/asignaturas/${codigo}/calificaciones/${estudianteId}/`,
     periodos: (id: string) => `/asignaturas/${id}/periodos/`,
     recursos: (id: string) => `/asignaturas/${id}/recursos/`, // <- nuevo
   },
   ras: {
     indicadores: (id: string) => `/ras/${id}/indicadores/`,
     actividades: (id: string) => `/ras/${id}/actividades/`,
+    actividad: (raId: string, relId: string) => `/ras/${raId}/actividades/${relId}/`,
+    indicador: (raId: string, indId: string) => `/ras/${raId}/indicadores/${indId}/`,
+  },
+  actividades: {
+    multi: '/actividades/multi',
   },
   validacion: {
     ra: (id: string) => `/validacion/ra/${id}`,
@@ -30,11 +39,20 @@ export const endpoints = {
   },
   notas: '/notas',
   notificaciones: '/notificaciones',
+  coordinador: {
+    asignaturas: '/coordinador/asignaturas',
+    asignaturaEstudiantes: '/coordinador/asignaturas/estudiantes',
+    asignaturaRAs: '/coordinador/asignaturas/ras',
+    asignaturaAvance: '/coordinador/asignaturas/avance',
+    importMatriculados: '/coordinador/import/matriculados',
+    importDocentes: '/coordinador/import/docentes',
+    importAsignaturasRAs: '/coordinador/import/asignaturas-ras',
+  },
 }
 
 export type UserProfile = {
   id: string
   nombre: string
-  rol: 'docente' | 'estudiante'
+  rol: 'docente' | 'estudiante' | 'coordinador'
   code?: string
 }

@@ -1,44 +1,68 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { useSession } from '@/state/SessionContext'
-import { getFullProfile } from '@/services/auth'  // <-- cambiar import
 import { useNavigate } from 'react-router-dom'
-import NotificationsBell from '@/components/NotificationsBell'
+// (logout removido de la barra – se mantiene lógica mínima)
 
-type Props = { roleLabel: string }
-const HeaderBar: React.FC<Props> = ({ roleLabel }) => {
-  const { state, setName, setRole, setCode } = useSession()
+type Props = {
+  title?: string
+  subtitle?: string
+  avatarUrl?: string | null
+  // Backward-compat: allow older usages like <HeaderBar roleLabel="Docente" />
+  roleLabel?: string
+}
+
+// Barra superior visible para cualquier rol autenticado (docente / estudiante / coordinador).
+// Se oculta solo si no hay sesión (role === null)
+const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl, roleLabel }) => {
+  const { state } = useSession()
   const navigate = useNavigate()
-  useEffect(() => {
-    // If we don't have a name yet (direct navigation after a valid cookie), try to fetch it
-    if (!state.name) {
-      getFullProfile()
-        .then((p) => {
-          const u = (p as any).user ?? p
-          const last = u?.apellido ?? u?.apellidos ?? ''  // fix
-          const fullName = `${u?.nombre ?? ''} ${last}`.trim()
-          setName(fullName)
-          setRole(u?.rol ?? '')
-          setCode(u?.code ?? u?.codigo ?? null)           // admite ambas llaves
-        })
-        .catch(() => { /* ignore if not logged */ })
-    }
-  }, [state.name, setName, setRole, setCode])
-  const name = state.name ? state.name.replace(/\b\w/g, (c) => c.toUpperCase()) : `Nombre del ${roleLabel}`
+  const name = state.name ?? ''
+  const role = state.role
+  if (!role) return null
+
+  // Mostrar etiqueta de rol: si se pasó roleLabel (uso legacy) úsalo, si no el rol real.
+  const roleText = (roleLabel || role || 'usuario').toString().toUpperCase()
+
   return (
-    <header className="dash-header d-flex align-items-center justify-content-between px-3">
-      <div className="d-flex align-items-center gap-2">
-        <img className="brand-logo" src="/LogoBlanco.png" alt="Universidad del Valle" />
-        <span className="brand-title">RA Manager</span>
-      </div>
-      <div className="d-flex align-items-center gap-2">
-        <div className="text-end d-none d-sm-block small">
-          <div>{name}</div>
-          <div className="text-uppercase fw-semibold">{roleLabel}</div>
+    <header className="dash-header px-3" data-role={role}>
+      <div className="container-fluid d-flex align-items-center justify-content-between">
+        <div className="d-flex align-items-center">
+          <a
+            className="brand-icon"
+            aria-label="Inicio"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              // Navegación rápida según rol
+              if (role === 'coordinador') navigate('/coordinador')
+              else if (role === 'docente') navigate('/docente')
+              else if (role === 'estudiante') navigate('/estudiante')
+            }}
+          >
+            <i className="bi bi-grid-1x2" aria-hidden="true" />
+          </a>
+          <div className="brand-title">
+            {title}
+            {subtitle ? <span className="ms-2 fw-normal">· {subtitle}</span> : null}
+          </div>
         </div>
-        <NotificationsBell />
-        <button className="avatar" aria-label="Perfil" onClick={()=>navigate('/perfil')}>
-          <i className="bi bi-person" />
-        </button>
+
+        <div className="text-end d-flex align-items-center gap-2">
+          <div className="me-2 d-none d-sm-block" aria-label={`Usuario: ${name}`}> 
+            <div className="fw-semibold small text-uppercase">{roleText}</div>
+            <div className="fw-bold dash-username">{name}</div>
+          </div>
+          <div
+            className="avatar"
+            role="button"
+            tabIndex={0}
+            aria-label="Abrir perfil"
+            onClick={() => navigate('/perfil')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/perfil') } }}
+          >
+            {avatarUrl ? <img src={avatarUrl} alt="avatar" className="avatar-img" /> : <i className="bi bi-person" />}
+          </div>
+        </div>
       </div>
     </header>
   )

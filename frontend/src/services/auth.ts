@@ -7,9 +7,7 @@ export async function login(code: string, password: string): Promise<UserProfile
   const token: string | undefined = data?.token
   const user = data?.user || {}
   if (token) {
-    try { localStorage.setItem('auth_token', token) } catch {}
-    ;(api.defaults.headers as any).common = (api.defaults.headers as any).common || {}
-    ;(api.defaults.headers as any).common['Authorization'] = `Bearer ${token}`
+    try { localStorage.setItem('auth_token', token) } catch { /* ignore storage errors */ }
   }
   return {
     id: String(user.id ?? ''),
@@ -21,10 +19,7 @@ export async function login(code: string, password: string): Promise<UserProfile
 
 export async function logout() {
   try { await api.post(endpoints.auth.logout, {}) } finally {
-    try { localStorage.removeItem('auth_token') } catch {}
-    if ((api.defaults.headers as any).common) {
-      delete (api.defaults.headers as any).common['Authorization']
-    }
+    try { localStorage.removeItem('auth_token') } catch { /* ignore */ }
   }
 }
 
@@ -41,9 +36,14 @@ export async function getFullProfile(): Promise<ProfileDetails> {
   const u = data.user || {}
   const d = data.details || {}
   return {
-    id: u.id, rol: u.rol, nombre: u.nombre, apellido: u.apellido, code: u.code, correo: d.correo,
+    id: String(u.id), rol: u.rol, nombre: u.nombre, apellido: u.apellido, code: u.code, correo: d.correo,
     documento: d.documento, telefono: d.telefono ?? null, jornada: d.jornada ?? null,
     zona_horaria: d.zona_horaria, cursos: data.cursos || [], cursosPorPeriodo: data.cursos_por_periodo || [],
+    avatarUrl: d.avatar_url ?? null,
+    programas: d.programas ?? [],
+    totalCursos: d.total_cursos ?? null,
+    periodoActual: d.periodo_actual ?? null,
+    totalCursosPeriodoActual: d.total_cursos_periodo_actual ?? null,
   }
 }
 
@@ -52,8 +52,19 @@ export async function updateProfile(patch: Partial<{ correo: string; telefono?: 
   return getFullProfile()
 }
 
-export async function getProfile(): Promise<{ id: string; rol: 'docente' | 'estudiante'; nombre?: string; code?: string | null }> {
+export async function getProfile(): Promise<{ id: string; rol: 'docente' | 'estudiante' | 'coordinador'; nombre?: string; code?: string | null }> {
   const { data } = await api.get(endpoints.auth.me)
   const u = data?.user || {}
   return { id: String(u.id ?? ''), rol: u.rol, nombre: u.nombre, code: u.code ?? null }
+}
+
+export async function changePassword(current_password: string, new_password: string): Promise<void> {
+  await api.post(endpoints.auth.change, { current_password, new_password })
+}
+
+export async function uploadAvatar(file: File): Promise<string | null> {
+  const fd = new FormData()
+  fd.append('avatar', file)
+  const { data } = await api.post(endpoints.auth.avatar, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  return data?.url ?? null
 }

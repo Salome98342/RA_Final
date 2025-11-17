@@ -1,6 +1,6 @@
 :root {
   --uv-red: #C8102E;
-  --uv-red-d: #A50E25;
+  --uv-red-d: #C8102E;
   --uv-red-l: #e43a50;
   --uv-ink: #222;
   --uv-muted: #6b7280;
@@ -17,8 +17,58 @@ body {
   background: linear-gradient(to bottom, #dadada, #f3f3f3);
 }
 
-/* ========== LOGIN (se deja igual) ========== */
-header {
+/* Table column width helpers (avoid inline styles) */
+.table-col-40 { width: 40%; }
+.table-col-25 { width: 25%; }
+.table-col-20 { width: 20%; }
+.table-col-15 { width: 15%; }
+/* GradeSummary column helpers */
+.col-ra-desc { width: 40%; }
+.col-ra-peso { width: 10%; }
+.col-ra-strict { width: 15%; }
+.col-ra-prog { width: 15%; }
+.col-ra-cov { width: 10%; }
+
+/* Misc helpers */
+.w-110px { max-width: 110px; }
+.dropzone-drag { outline: 2px dashed #C8102E; outline-offset: 6px; }
+
+/* Materias (coordinador) */
+.materias-scroll { max-height: 65vh; overflow: auto; }
+.progress.progress-compact { height: 8px; }
+.w-60px { width: 60px; }
+.w-160px { width: 160px; }
+.w-220px { width: 220px; }
+.w-240px { max-width: 240px; }
+
+/* Cronograma (estudiante) */
+.sched-icon { width: 32px; height: 32px; background: var(--uv-red); border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Compact progress bar for course progress */
+.progress-compact { height: 10px; }
+/* Width utility classes (0-100 by 10s) to avoid inline styles */
+.w-pct-0 { width: 0%; }
+.w-pct-10 { width: 10%; }
+.w-pct-20 { width: 20%; }
+.w-pct-30 { width: 30%; }
+.w-pct-40 { width: 40%; }
+.w-pct-50 { width: 50%; }
+.w-pct-60 { width: 60%; }
+.w-pct-70 { width: 70%; }
+.w-pct-80 { width: 80%; }
+.w-pct-90 { width: 90%; }
+.w-pct-100 { width: 100%; }
+.sched-item { cursor: pointer; border-radius: 8px; transition: background-color .15s ease, box-shadow .18s ease, transform .14s ease; padding-right: 6px; }
+.sched-item:hover { background: #fffafc; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.06); }
+.sched-title { line-height: 1.2; }
+.sched-card { background: var(--uv-surface); border: 1px solid var(--uv-border); border-radius: 14px; box-shadow: var(--uv-card); }
+.sched-card .card-body { padding: 1rem 1.25rem; }
+.sched-card .text-muted { color: var(--uv-muted) !important; }
+.sched-card .border-bottom { border-color: var(--uv-border-2) !important; }
+.sched-date { color: #333; font-weight: 700; letter-spacing: .2px; }
+
+/* ========== LOGIN (scoped to login page only) ========== */
+.login-page header {
   background-color: #B5121B;
   color: white;
   display: flex;
@@ -41,12 +91,12 @@ header {
   0% { background-position: 100% 0; }
   100% { background-position: 0 0; }
 }
-header img { 
+.login-page header img { 
   height: 50px; 
   margin-right: 10px; 
   border-radius: 3px;  
 }
-header h1 { 
+.login-page header h1 { 
   font-size: 23px; 
   margin: 0; 
   font-weight: bold; 
@@ -90,6 +140,8 @@ header h1 {
 .cookies { cursor: pointer; }
 
 /* ===== Dashboard (Docente/Estudiante/Perfil) ===== */
+/* Utilidad: scroll vertical limitado para paneles */
+.ra-scroll-260{ max-height:260px; overflow:auto; }
 .dashboard-body {
   background: radial-gradient(1200px 600px at 10% 10%, #ffffff, #f6f6f8 40%, #ededf1 70%) fixed;
   background-size: cover;
@@ -140,6 +192,9 @@ header h1 {
 .dash-header .text-end { line-height: 1.1; }
 .dash-header .text-end .small { color: #ffe5ea; opacity: .95; letter-spacing: .4px; }
 
+/* Username truncation in header */
+.dash-username { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .avatar {
   width: 42px; height: 42px; margin-left: 6px;
   border-radius: 50%;
@@ -148,8 +203,16 @@ header h1 {
   display: grid; place-items: center; font-size: 22px;
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
   transition: transform .15s ease, box-shadow .2s ease;
+  cursor: pointer;
 }
 .avatar:hover { transform: translateY(-1px) scale(1.02); box-shadow: 0 10px 22px rgba(0,0,0,.28); }
+.dash-header .btn-outline-light { border-color: rgba(255,255,255,.55); color: #fff; }
+.dash-header .btn-outline-light:hover { background: rgba(255,255,255,.22); border-color: #fff; }
+/* Avatar image (in header button) */
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+/* Avatar preview (in Profile page) */
+.avatar-preview { width: 64px; height: 64px; border-radius: 50%; overflow: hidden; }
+.avatar-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Layout */
 .dash-wrapper { display: grid; grid-template-columns: 84px 1fr; min-height: calc(100vh - 60px); }
@@ -160,8 +223,8 @@ header h1 {
   border-right: 1px solid rgba(0,0,0,0.08);
   padding: 18px 10px;
   display: flex; flex-direction: column; gap: 12px; align-items: center;
-  backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
 }
 .side-btn {
   width: 48px; height: 48px; border-radius: 16px; border: 1px solid var(--uv-border);
@@ -216,6 +279,21 @@ header h1 {
 }
 .ra-card .ra-card-body { padding: 12px 14px; color: #333; font-weight: 600; }
 .ra-card .ra-small { font-size: 12px; color: var(--uv-muted); font-weight: normal; }
+
+/* RA hover card (Materias coordinador) */
+.ra-hover-card {
+  transition: all .2s ease;
+  border: 1px solid var(--uv-border-2) !important;
+}
+.ra-hover-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.08) !important;
+  border-color: rgba(200,16,46,.15) !important;
+}
+.ra-hover-card.border-primary {
+  border-color: rgba(200,16,46,.5) !important;
+  box-shadow: 0 4px 12px rgba(200,16,46,.15) !important;
+}
 
 /* Listas (estudiantes, actividades, tareas) */
 .ra-list-group .list-group-item {
@@ -337,6 +415,58 @@ header h1 {
   /* padding: 4px; */
   border: 1px solid rgba(255,255,255,.25);
 }
+
+
+
+
+
+/* --- Pretty progress bars (native <progress>) --- */
+/* Base look */
+progress,
+.uv-progress {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  border: none;
+  border-radius: 999px;
+  background-color: #f1f2f6;
+  overflow: hidden;
+}
+
+/* WebKit */
+progress::-webkit-progress-bar,
+.uv-progress::-webkit-progress-bar {
+  background-color: #f1f2f6;
+  border-radius: 999px;
+}
+progress::-webkit-progress-value,
+.uv-progress::-webkit-progress-value {
+  background-color: var(--uv-red, #dc3545); /* fallback to Bootstrap danger if brand color not set */
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+
+/* Firefox */
+progress::-moz-progress-bar,
+.uv-progress::-moz-progress-bar {
+  background-color: var(--uv-red, #dc3545);
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+
+/* Color variants */
+.prog-success::-webkit-progress-value { background-color: #198754; }
+.prog-success::-moz-progress-bar { background-color: #198754; }
+
+.prog-warning::-webkit-progress-value { background-color: #ffc107; }
+.prog-warning::-moz-progress-bar { background-color: #ffc107; }
+
+.prog-danger::-webkit-progress-value { background-color: #dc3545; }
+.prog-danger::-moz-progress-bar { background-color: #dc3545; }
+
+/* Optional subtle border for contrast on light backgrounds */
+.uv-progress { box-shadow: inset 0 0 0 1px rgba(0,0,0,.05); }
 
 
 

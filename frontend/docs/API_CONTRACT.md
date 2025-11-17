@@ -55,20 +55,82 @@ Completa este documento (o comparte tu OpenAPI/Swagger/Postman) para integrar el
 - GET /api/ras/{id}/indicadores/
 
 6) Actividades por RA
-- GET /api/ras/{id}/actividades/
-- POST /api/auth/login
-- Body: { "username": string, "password": string }
-- Respuesta (JWT ejemplo): { "access": string, "refresh": string }
+GET /api/ras/{id}/actividades/
+Respuesta: lista de actividades ya asociadas al RA, cada una con su porcentaje de aporte al RA (porcentaje_ra_actividad) y posibles indicadores:
+```json
+[
+  {
+    "id_actividad": 12,
+    "id_ra_actividad": 34,
+    "nombre_actividad": "Proyecto Final",
+    "descripcion": "Backend + Frontend",
+    "porcentaje_ra_actividad": 40.0,
+    "fecha_cierre": "2025-06-15",
+    "indicadores": [ { "id_ind": 7, "descripcion": "Funciones y modularización", "porcentaje_ind": 50.0 } ]
+  }
+]
+```
 
-5) Recuperar contraseña
-- POST /api/auth/password/forgot
-- Body: { "email": string }
-- Respuesta: { "ok": true }
+Crear actividad para un RA específico (porcentaje opcional):
+POST /api/ras/{id}/actividades/
+Body mínimo (sin porcentaje_actividad y sin porcentaje_ra_actividad obligatorio):
+```json
+{
+  "nombre_actividad": "Quiz SQL",
+  "id_tipo_actividad": 2
+}
+```
+Respuesta:
+```json
+{
+  "id_actividad": 55,
+  "id_ra_actividad": 102,
+  "nombre_actividad": "Quiz SQL",
+  "porcentaje_ra_actividad": 0.0
+}
+```
 
-6) Restablecer contraseña
-- POST /api/auth/password/reset
-- Body: { "token": string, "password": string }
-- Respuesta: { "ok": true }
+Crear una actividad asociada a múltiples RAs del mismo curso (porcentaje opcional):
+POST /api/actividades/multi
+```json
+{
+  "nombre_actividad": "Proyecto Integrador",
+  "id_tipo_actividad": 4,
+  "descripcion": "App full-stack",
+  "fecha_cierre": "2025-06-30",
+  "ras": [
+    { "ra_id": 10, "indicadores": [19] },
+    { "ra_id": 11, "porcentaje_ra_actividad": 20.0 }
+  ]
+}
+```
+Respuesta:
+```json
+{
+  "id_actividad": 99,
+  "nombre_actividad": "Proyecto Integrador",
+  "fecha_cierre": "2025-06-30",
+  "relaciones": [
+    { "id_ra": 10, "id_ra_actividad": 200, "porcentaje_ra_actividad": 30.0 },
+    { "id_ra": 11, "id_ra_actividad": 201, "porcentaje_ra_actividad": 20.0 }
+  ]
+}
+```
+
+Notas:
+- El peso interno de la actividad (porcentaje_actividad) fue eliminado del modelo. Sólo se distribuye el aporte de cada actividad dentro de cada RA mediante `porcentaje_ra_actividad`.
+- `porcentaje_ra_actividad` es opcional en creación; si se omite, se registra como 0 y se puede ajustar luego con PATCH.
+- Las sumas por RA no deben exceder 100%; el backend rechaza excedentes (>100%).
+
+7) Recuperar contraseña
+POST /api/auth/password/forgot
+Body: { "email": string }
+Respuesta: { "ok": true }
+
+8) Restablecer contraseña
+POST /api/auth/password/reset
+Body: { "token": string, "password": string }
+Respuesta: { "ok": true }
 
 ## Errores
 - Formato sugerido:
@@ -85,25 +147,44 @@ Completa este documento (o comparte tu OpenAPI/Swagger/Postman) para integrar el
 ```
 
 ## Mapeo con el frontend
-- src/services/api.ts
-  - getCourses -> GET /api/courses
-  - getRAsByCourse(courseId) -> GET /api/courses/{courseId}/ras
-  - getStudentsByCourse(courseId) -> GET /api/courses/{courseId}/students
-- src/services/auth.ts
-  - requestPasswordReset(email) -> POST /api/auth/password/forgot
-  - resetPassword(token, password) -> POST /api/auth/password/reset
-- Base URL se toma de VITE_API_URL (ver .env.development)
+- `getCourses()` -> GET /api/asignaturas/
+- `getRAsByCourse(courseId)` -> GET /api/asignaturas/{codigo}/ras/
+- `getActivitiesByRA(raId)` -> GET /api/ras/{id}/actividades/
+- `createActivityForRA(raId)` -> POST /api/ras/{id}/actividades/ (usa porcentaje_ra_actividad)
+- `createActivityMulti()` -> POST /api/actividades/multi (usa ras[].porcentaje_ra_actividad)
+- `getStudentsByCourse(courseId)` -> GET /api/asignaturas/{codigo}/estudiantes/
+- `gradeActivity()` -> POST/PUT /api/notas/ (envía nota, retroalimentacion, id_ind)
+- Base URL se toma de VITE_API_URL (ver .env.*)
 
 ## Ejemplos curl
 ```bash
+```bash
 # Cursos
-curl http://127.0.0.1:8000/api/courses
+curl http://127.0.0.1:8000/api/asignaturas/
 
 # RAs por curso
-curl http://127.0.0.1:8000/api/courses/MAT101/ras
+curl http://127.0.0.1:8000/api/asignaturas/MAT101/ras/
 
 # Estudiantes por curso
-curl http://127.0.0.1:8000/api/courses/MAT101/students
+curl http://127.0.0.1:8000/api/asignaturas/MAT101/estudiantes/
+
+# Actividades de un RA
+# Actividades de un RA
+curl http://127.0.0.1:8000/api/ras/10/actividades/
+
+# Crear actividad para RA
+curl -X POST http://127.0.0.1:8000/api/ras/10/actividades/ \
+  -H "Content-Type: application/json" \
+  -d '{"nombre_actividad":"Quiz SQL","id_tipo_actividad":2,"porcentaje_ra_actividad":15.0}'
+
+# Crear actividad multi-RA
+curl -X POST http://127.0.0.1:8000/api/actividades/multi \
+  -H "Content-Type: application/json" \
+  -d '{"nombre_actividad":"Proyecto Integrador","id_tipo_actividad":4,"ras":[{"ra_id":10,"porcentaje_ra_actividad":30.0},{"ra_id":11,"porcentaje_ra_actividad":20.0}]}'
+
+# Consolidado de calificaciones de un estudiante en una asignatura
+curl http://127.0.0.1:8000/api/asignaturas/CS101/calificaciones/123/
+```
 
 # Recuperar contraseña
 curl -X POST http://127.0.0.1:8000/api/auth/password/forgot \
@@ -125,4 +206,4 @@ urlpatterns = [
 - views.py: usar ViewSets o APIView que entreguen JSON con los esquemas arriba.
 - serializers.py: ajustar campos a Course/RA/Student.
 
-Completa este archivo con los endpoints/formatos reales o comparte tu OpenAPI/Swagger para que lo alinee en el frontend.
+Actualizado eliminando `porcentaje_actividad`. Completa este archivo con detalles adicionales (auth final, paginación real, filtros) o comparte OpenAPI para sincronizar automáticamente.

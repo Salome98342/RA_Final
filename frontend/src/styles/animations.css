@@ -110,5 +110,44 @@
   color: white;
 }
 
+/* Animación de fade in genérica */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Clases para efectos visuales en Materias */
+.ra-detail-panel {
+  animation: fadeIn 0.3s ease-in;
+}
+
+.ra-detail-icon-lg {
+  font-size: 1.2rem;
+}
+
+.ra-detail-empty-icon {
+  font-size: 2rem;
+  opacity: 0.3;
+}
+
+.ra-detail-tag-text {
+  font-size: 0.75rem;
+}
+
+.ra-empty-state-icon {
+  font-size: 3rem;
+  opacity: 0.2;
+}
+
+.ra-icon-lg {
+  font-size: 1.25rem;
+}
+
 /* ====== FIN ANIMACIONES Y TRANSICIONES ====== */
 /* ====== ESTILOS BASE ====== */

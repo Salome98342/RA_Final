@@ -5,7 +5,14 @@ const SearchPill: React.FC<Props> = ({ icon, placeholder, value, onChange, label
   <div className="search-pill mb-3">
     <i className={`bi ${icon}`} />
     {label ? <div className="pill-label">{label}</div> : (
-      <input value={value} onChange={(e) => onChange?.(e.target.value)} type="text" placeholder={placeholder} />
+      <input
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        type="text"
+        placeholder={placeholder}
+        aria-label={label ?? placeholder ?? 'Buscar'}
+        role="searchbox"
+      />
     )}
   </div>
 )

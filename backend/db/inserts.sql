@@ -15,6 +15,7 @@ TRUNCATE notas_actividad
   , estudiante
   , docente
   , tipo_documento
+  , coordinador
 RESTART IDENTITY CASCADE;
 
 BEGIN;
@@ -219,58 +220,58 @@ ON CONFLICT (id_ind) DO NOTHING;
 -- Actividades (40)
 INSERT INTO actividad (
   id_actividad, id_tipo_actividad, nombre_actividad, descripcion,
-  porcentaje_actividad, fecha_creacion, fecha_cierre
+  fecha_creacion, fecha_cierre
 ) VALUES
   -- BD101
-  (1, 1, 'Examen Final BD',       'Examen final de Bases de Datos', 20.00, DATE '2025-05-30', DATE '2025-06-01'),
-  (2, 4, 'Proyecto BD',           'Proyecto de modelado y SQL',     30.00, DATE '2025-03-01', DATE '2025-06-10'),
-  (3, 2, 'Quiz SQL',              'Quiz de consultas SQL',          10.00, DATE '2025-04-15', DATE '2025-04-20'),
-  (4, 3, 'Taller Modelo',         'Entidades y relaciones',         15.00, DATE '2025-03-10', DATE '2025-03-20'),
+  (1, 1, 'Examen Final BD',       'Examen final de Bases de Datos', DATE '2025-05-30', DATE '2025-06-01'),
+  (2, 4, 'Proyecto BD',           'Proyecto de modelado y SQL',     DATE '2025-03-01', DATE '2025-06-10'),
+  (3, 2, 'Quiz SQL',              'Quiz de consultas SQL',          DATE '2025-04-15', DATE '2025-04-20'),
+  (4, 3, 'Taller Modelo',         'Entidades y relaciones',         DATE '2025-03-10', DATE '2025-03-20'),
   -- PR101
-  (5, 1, 'Examen Parcial PR1',    'Parcial del curso',              25.00, DATE '2025-04-20', DATE '2025-04-25'),
-  (6, 2, 'Quiz Algoritmos',       'Quiz de algoritmos',             15.00, DATE '2025-03-10', DATE '2025-03-12'),
-  (7, 3, 'Taller Algoritmos',     'Ejercicios prácticos',           20.00, DATE '2025-03-20', DATE '2025-03-30'),
-  (8, 4, 'Proyecto Final PR1',    'Proyecto final del curso',       40.00, DATE '2025-05-01', DATE '2025-06-15'),
+  (5, 1, 'Examen Parcial PR1',    'Parcial del curso',              DATE '2025-04-20', DATE '2025-04-25'),
+  (6, 2, 'Quiz Algoritmos',       'Quiz de algoritmos',             DATE '2025-03-10', DATE '2025-03-12'),
+  (7, 3, 'Taller Algoritmos',     'Ejercicios prácticos',           DATE '2025-03-20', DATE '2025-03-30'),
+  (8, 4, 'Proyecto Final PR1',    'Proyecto final del curso',       DATE '2025-05-01', DATE '2025-06-15'),
   -- PR201
-  (9,  5, 'Lab Estructuras',      'Laboratorio con TDA',            20.00, DATE '2025-09-05', DATE '2025-09-10'),
-  (10, 6, 'Práctica OOP',         'Práctica de POO',                20.00, DATE '2025-09-15', DATE '2025-09-20'),
-  (11, 1, 'Examen PR2',           'Examen teórico',                 30.00, DATE '2025-10-10', DATE '2025-10-12'),
-  (12, 4, 'Proyecto PR2',         'Proyecto estructuras/OOP',       30.00, DATE '2025-10-20', DATE '2025-12-01'),
+  (9,  5, 'Lab Estructuras',      'Laboratorio con TDA',            DATE '2025-09-05', DATE '2025-09-10'),
+  (10, 6, 'Práctica OOP',         'Práctica de POO',                DATE '2025-09-15', DATE '2025-09-20'),
+  (11, 1, 'Examen PR2',           'Examen teórico',                 DATE '2025-10-10', DATE '2025-10-12'),
+  (12, 4, 'Proyecto PR2',         'Proyecto estructuras/OOP',       DATE '2025-10-20', DATE '2025-12-01'),
   -- MAT101
-  (13, 2, 'Quiz Límites',         'Quiz de límites',                10.00, DATE '2025-02-20', DATE '2025-02-22'),
-  (14, 1, 'Examen Derivadas',     'Examen de derivadas',            30.00, DATE '2025-03-25', DATE '2025-03-28'),
-  (15, 3, 'Taller Integrales',    'Taller aplicado',                20.00, DATE '2025-04-05', DATE '2025-04-10'),
-  (16, 4, 'Proyecto Cálculo',     'Proyecto de aplicación',         40.00, DATE '2025-05-05', DATE '2025-06-05'),
+  (13, 2, 'Quiz Límites',         'Quiz de límites',                DATE '2025-02-20', DATE '2025-02-22'),
+  (14, 1, 'Examen Derivadas',     'Examen de derivadas',            DATE '2025-03-25', DATE '2025-03-28'),
+  (15, 3, 'Taller Integrales',    'Taller aplicado',                DATE '2025-04-05', DATE '2025-04-10'),
+  (16, 4, 'Proyecto Cálculo',     'Proyecto de aplicación',         DATE '2025-05-05', DATE '2025-06-05'),
   -- FIS101
-  (17, 5, 'Lab Cinemática',       'Pista de movimiento',            25.00, DATE '2025-08-20', DATE '2025-08-25'),
-  (18, 2, 'Quiz Dinámica',        'Leyes de Newton',                15.00, DATE '2025-09-05', DATE '2025-09-07'),
-  (19, 1, 'Examen Física I',      'Examen global',                  30.00, DATE '2025-11-20', DATE '2025-11-22'),
-  (20, 4, 'Proyecto Física',      'Conservación de energía',        30.00, DATE '2025-10-01', DATE '2025-12-01'),
+  (17, 5, 'Lab Cinemática',       'Pista de movimiento',            DATE '2025-08-20', DATE '2025-08-25'),
+  (18, 2, 'Quiz Dinámica',        'Leyes de Newton',                DATE '2025-09-05', DATE '2025-09-07'),
+  (19, 1, 'Examen Física I',      'Examen global',                  DATE '2025-11-20', DATE '2025-11-22'),
+  (20, 4, 'Proyecto Física',      'Conservación de energía',        DATE '2025-10-01', DATE '2025-12-01'),
   -- ADM101
-  (21, 7, 'Foro Teorías',         'Discusión de escuelas',          10.00, DATE '2025-02-10', DATE '2025-02-15'),
-  (22, 8, 'Tarea Casos',          'Estudio de casos',               20.00, DATE '2025-03-01', DATE '2025-03-10'),
-  (23, 1, 'Examen Adm',           'Examen de medio curso',          30.00, DATE '2025-04-05', DATE '2025-04-07'),
-  (24, 4, 'Proyecto Plan',        'Plan estratégico',               40.00, DATE '2025-05-01', DATE '2025-06-10'),
+  (21, 7, 'Foro Teorías',         'Discusión de escuelas',          DATE '2025-02-10', DATE '2025-02-15'),
+  (22, 8, 'Tarea Casos',          'Estudio de casos',               DATE '2025-03-01', DATE '2025-03-10'),
+  (23, 1, 'Examen Adm',           'Examen de medio curso',          DATE '2025-04-05', DATE '2025-04-07'),
+  (24, 4, 'Proyecto Plan',        'Plan estratégico',               DATE '2025-05-01', DATE '2025-06-10'),
   -- WEB301
-  (25, 3, 'Taller UI',            'Layouts y componentes',          20.00, DATE '2025-08-10', DATE '2025-08-20'),
-  (26, 5, 'Lab Accesibilidad',    'Buenas prácticas',               20.00, DATE '2025-09-01', DATE '2025-09-05'),
-  (27, 8, 'Tarea API',            'CRUD REST',                      20.00, DATE '2025-10-01', DATE '2025-10-05'),
-  (28, 4, 'Proyecto Web',         'Full-stack app',                 40.00, DATE '2025-10-10', DATE '2025-12-10'),
+  (25, 3, 'Taller UI',            'Layouts y componentes',          DATE '2025-08-10', DATE '2025-08-20'),
+  (26, 5, 'Lab Accesibilidad',    'Buenas prácticas',               DATE '2025-09-01', DATE '2025-09-05'),
+  (27, 8, 'Tarea API',            'CRUD REST',                      DATE '2025-10-01', DATE '2025-10-05'),
+  (28, 4, 'Proyecto Web',         'Full-stack app',                 DATE '2025-10-10', DATE '2025-12-10'),
   -- AI201
-  (29, 8, 'Tarea Preproceso',     'Limpieza de datos',              15.00, DATE '2025-08-15', DATE '2025-08-20'),
-  (30, 5, 'Lab Modelos',          'Modelos clásicos',               25.00, DATE '2025-09-10', DATE '2025-09-15'),
-  (31, 1, 'Examen AI',            'Examen de teoría',               30.00, DATE '2025-11-05', DATE '2025-11-07'),
-  (32, 4, 'Proyecto AI',          'Pipeline ML',                    30.00, DATE '2025-10-05', DATE '2025-12-05'),
+  (29, 8, 'Tarea Preproceso',     'Limpieza de datos',              DATE '2025-08-15', DATE '2025-08-20'),
+  (30, 5, 'Lab Modelos',          'Modelos clásicos',               DATE '2025-09-10', DATE '2025-09-15'),
+  (31, 1, 'Examen AI',            'Examen de teoría',               DATE '2025-11-05', DATE '2025-11-07'),
+  (32, 4, 'Proyecto AI',          'Pipeline ML',                    DATE '2025-10-05', DATE '2025-12-05'),
   -- DIS101
-  (33, 3, 'Taller Composición',   'Reglas básicas',                 20.00, DATE '2025-02-05', DATE '2025-02-10'),
-  (34, 8, 'Tarea Tipografía',     'Familias y jerarquías',          20.00, DATE '2025-03-01', DATE '2025-03-05'),
-  (35, 2, 'Quiz Color',           'Paletas y contraste',            20.00, DATE '2025-04-01', DATE '2025-04-03'),
-  (36, 4, 'Proyecto Afiche',      'Diseño integral',                40.00, DATE '2025-05-01', DATE '2025-06-01'),
+  (33, 3, 'Taller Composición',   'Reglas básicas',                 DATE '2025-02-05', DATE '2025-02-10'),
+  (34, 8, 'Tarea Tipografía',     'Familias y jerarquías',          DATE '2025-03-01', DATE '2025-03-05'),
+  (35, 2, 'Quiz Color',           'Paletas y contraste',            DATE '2025-04-01', DATE '2025-04-03'),
+  (36, 4, 'Proyecto Afiche',      'Diseño integral',                DATE '2025-05-01', DATE '2025-06-01'),
   -- EST101
-  (37, 2, 'Quiz Descriptiva',     'Medidas descriptivas',           20.00, DATE '2025-02-20', DATE '2025-02-22'),
-  (38, 8, 'Tarea Probabilidad',   'Problemas clásicos',             20.00, DATE '2025-03-10', DATE '2025-03-15'),
-  (39, 1, 'Examen Inferencia',    'Pruebas e intervalos',           30.00, DATE '2025-04-25', DATE '2025-04-27'),
-  (40, 4, 'Proyecto Datos',       'Análisis de dataset',            30.00, DATE '2025-05-10', DATE '2025-06-05')
+  (37, 2, 'Quiz Descriptiva',     'Medidas descriptivas',           DATE '2025-02-20', DATE '2025-02-22'),
+  (38, 8, 'Tarea Probabilidad',   'Problemas clásicos',             DATE '2025-03-10', DATE '2025-03-15'),
+  (39, 1, 'Examen Inferencia',    'Pruebas e intervalos',           DATE '2025-04-25', DATE '2025-04-27'),
+  (40, 4, 'Proyecto Datos',       'Análisis de dataset',            DATE '2025-05-10', DATE '2025-06-05')
 ON CONFLICT (id_actividad) DO NOTHING;
 
 -- Relación RA - Actividad (2 por RA, suman 100%)

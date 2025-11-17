@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { AxiosRequestHeaders } from 'axios'
 
 // Centralized Axios client for all API calls
 export const api = axios.create({
@@ -6,20 +7,20 @@ export const api = axios.create({
   withCredentials: true,
 })
 
-// Attach bearer token if saved
-const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
-if (token) {
-  (api.defaults.headers as any).common = (api.defaults.headers as any).common || {}
-  ;(api.defaults.headers as any).common['Authorization'] = `Bearer ${token}`
-}
-
 // Attach CSRF token for Django session auth if available
 api.interceptors.request.use((config) => {
+  // Attach Bearer token from localStorage on every request
+  const t = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
+  if (t) {
+    if (!config.headers) config.headers = {} as AxiosRequestHeaders
+    ;(config.headers as Record<string, string>)['Authorization'] = `Bearer ${t}`
+  }
+
   if (typeof document !== 'undefined') {
     const m = document.cookie.match(/csrftoken=([^;]+)/)
     if (m) {
-      config.headers = config.headers || {}
-      ;(config.headers as any)['X-CSRFToken'] = m[1]
+      if (!config.headers) config.headers = {} as AxiosRequestHeaders
+      ;(config.headers as Record<string, string>)['X-CSRFToken'] = m[1]
     }
   }
   return config
@@ -30,12 +31,11 @@ let redirecting = false
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    const status = error?.response?.status
+    const status: number | undefined = error?.response?.status
     if (status === 401 && !redirecting) {
       redirecting = true
-      try { localStorage.removeItem('auth_token') } catch {}
-      if ((api.defaults.headers as any).common) {
-        delete (api.defaults.headers as any).common['Authorization']
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('auth_token')
       }
       // small delay to allow any UI cleanup
       setTimeout(() => { window.location.href = '/login' }, 50)
