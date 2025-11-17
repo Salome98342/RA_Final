@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import Toast from '@/components/Toast'
+import { useSession } from '@/state/SessionContext'
 import type { Student, Activity, RA } from '@/types'
 import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade, getIndicatorChart } from '@/services/api'
 import Chart from 'chart.js/auto'
@@ -10,6 +11,7 @@ import Chart from 'chart.js/auto'
 const DocenteCalificar: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId?: string}>()
   const navigate = useNavigate()
+  const { state } = useSession()
   const [students, setStudents] = useState<Student[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [ras, setRAs] = useState<RA[]>([])
@@ -386,7 +388,19 @@ const DocenteCalificar: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar active={activeKey} onClick={onSidebarClick} items={sidebarItems} />
         <main className="dash-content">
-          <div className="content-title">Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}</div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="content-title">Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}</div>
+            {state.role === 'coordinador' && (
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => navigate('/coordinador/materias')}
+                title="Volver a la vista del coordinador"
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Regresar a Coordinador
+              </button>
+            )}
+          </div>
           {!!toast && (
             <div className="mb-2" role="status" aria-live="polite">
               <Toast text={toast.text} type={toast.type} />

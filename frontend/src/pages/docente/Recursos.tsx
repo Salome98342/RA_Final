@@ -3,11 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import { getRecursosByCourse, uploadRecurso } from '@/services/api'
+import { useSession } from '@/state/SessionContext'
 import Toast from '@/components/Toast'
 
 const DocenteRecursos: React.FC = () => {
   const { curso } = useParams<{curso: string}>()
   const navigate = useNavigate()
+  const { state } = useSession()
   const [items, setItems] = useState<{ id: string; titulo: string; url: string; fecha: string }[]>([])
   const [file, setFile] = useState<File | null>(null)
   const [titulo, setTitulo] = useState('')
@@ -87,7 +89,19 @@ const DocenteRecursos: React.FC = () => {
         />
         <main className="dash-content" onDragOver={(e)=>{ e.preventDefault(); setDrag(true) }} onDragLeave={()=>setDrag(false)} onDrop={onDrop}>
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
-          <div className="content-title">Recursos · {curso}</div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="content-title">Recursos · {curso}</div>
+            {state.role === 'coordinador' && (
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => navigate('/coordinador/materias')}
+                title="Volver a la vista del coordinador"
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Regresar a Coordinador
+              </button>
+            )}
+          </div>
 
           <div ref={dropRef} className={`ra-card mb-3 ${drag ? 'dropzone-drag' : ''}`}><div className="ra-card-body">
             <div className="fw-bold mb-2">Subir microcurrículo</div>

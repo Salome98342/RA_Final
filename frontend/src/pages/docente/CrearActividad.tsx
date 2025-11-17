@@ -3,11 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import { createActivityForRA, createActivityMulti, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse } from '@/services/api'
+import { useSession } from '@/state/SessionContext'
 import Toast from '@/components/Toast'  // <- nuevo
 
 const DocenteCrearActividad: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId: string}>()
   const navigate = useNavigate()
+  const { state } = useSession()
   const [form, setForm] = useState({ nombre: '', tipo: '1', pctRA: '', desc: '', cierre: '' })
   const [saving, setSaving] = useState(false)
   const [tipos, setTipos] = useState<{id:string; descripcion:string}[]>([])
@@ -194,7 +196,19 @@ const DocenteCrearActividad: React.FC = () => {
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente') }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
         <main className="dash-content">
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
-          <div className="content-title">Crear actividad · Curso {curso} · RA {raId}</div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="content-title">Crear actividad · Curso {curso} · RA {raId}</div>
+            {state.role === 'coordinador' && (
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => navigate('/coordinador/materias')}
+                title="Volver a la vista del coordinador"
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Regresar a Coordinador
+              </button>
+            )}
+          </div>
           {raVal && (
             <div className="row g-2 mb-2">
               <div className="col-md-6">

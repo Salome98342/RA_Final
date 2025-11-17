@@ -8,6 +8,7 @@ import { SkeletonCard } from '@/components/Skeleton'
 import { useNavigate } from 'react-router-dom'
 import { getCourses } from '@/services/api'
 import { getFullProfile } from '@/services/auth'
+import { useSession } from '@/state/SessionContext'
 import type { Course, ProfilePeriodo, ProfileDetails } from '@/types'
 
 const DocenteCursos: React.FC = () => {
@@ -18,6 +19,7 @@ const DocenteCursos: React.FC = () => {
   const [groups, setGroups] = useState<ProfilePeriodo[] | null>(null)
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null)
   const navigate = useNavigate()
+  const { state } = useSession()
 
   useEffect(() => {
     // Cargar cursos y perfil (para agrupar por periodo) en paralelo
@@ -87,9 +89,21 @@ const DocenteCursos: React.FC = () => {
           items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
         />
         <main className="dash-content">
-          <div className="content-title">
-            <i className="bi bi-mortarboard text-primary me-2"></i>
-            Cursos - Filtrar por código de carrera
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="content-title">
+              <i className="bi bi-mortarboard text-primary me-2"></i>
+              Cursos - Filtrar por código de carrera
+            </div>
+            {state.role === 'coordinador' && (
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => navigate('/coordinador/materias')}
+                title="Volver a la vista del coordinador"
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Regresar a Coordinador
+              </button>
+            )}
           </div>
           <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
           {err && <div className="alert alert-danger">{err}</div>}

@@ -3,12 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import Toast from '@/components/Toast'
+import { useSession } from '@/state/SessionContext'
 import { createActivityMulti, getRAsByCourse, getRAValidation, getTiposActividad, getIndicatorsByRA } from '@/services/api'
 import type { Indicator } from '@/types'
 
 const NuevaActividadCurso: React.FC = () => {
   const { curso } = useParams<{ curso: string }>()
   const navigate = useNavigate()
+  const { state } = useSession()
 
   const [form, setForm] = useState({ nombre: '', tipo: '', desc: '', cierre: '' })
   const [tipos, setTipos] = useState<{ id: string; descripcion: string }[]>([])
@@ -158,7 +160,19 @@ const NuevaActividadCurso: React.FC = () => {
         />
         <main className="dash-content">
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
-          <div className="content-title">Nueva actividad · Curso {curso}</div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="content-title">Nueva actividad · Curso {curso}</div>
+            {state.role === 'coordinador' && (
+              <button 
+                className="btn btn-outline-primary"
+                onClick={() => navigate('/coordinador/materias')}
+                title="Volver a la vista del coordinador"
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Regresar a Coordinador
+              </button>
+            )}
+          </div>
 
           <div className="row g-3">
             <div className="col-md-6">
