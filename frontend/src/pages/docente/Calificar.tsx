@@ -276,7 +276,7 @@ const DocenteCalificar: React.FC = () => {
       })
       if (import.meta.env.DEV) {
         // Log de ayuda en desarrollo
-        console.debug('upsertGrade OK', resp)
+        if (import.meta.env.DEV) console.debug('upsertGrade OK', resp)
       }
       setEdits(prev => ({
         ...prev,

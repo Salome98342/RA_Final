@@ -4,6 +4,8 @@
 
 Este proyecto usa variables de entorno para mantener la seguridad de credenciales y configuraciones sensibles.
 
+> 💡 **Para guías de desarrollo completas**, ver [DEVELOPMENT.md](./DEVELOPMENT.md)
+
 ## 📋 Configuración Inicial
 
 ### 1. Backend (Django)
