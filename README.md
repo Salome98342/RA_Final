@@ -1247,12 +1247,6 @@ Para problemas más específicos, consultar:
 
 ---
 
-## 📄 Licencia
-
-[Especificar licencia si aplica]
-
----
-
 ## 🎯 Próximos Pasos Recomendados
 
 ### Para Nuevos Desarrolladores
@@ -1310,7 +1304,7 @@ Por favor, incluir en el issue:
 - Marcar como "enhancement" en labels
 
 ### 📧 Contacto
-- **Proyecto mantenido por**: Equipo RA-Manager
+- **Proyecto mantenido por**: JimmySoft
 - **Última actualización**: Noviembre 17, 2024
 - **Versión**: 1.0.0
 
@@ -1337,20 +1331,12 @@ Ver la lista completa de [contribuidores en GitHub](https://github.com/Salome983
 
 ---
 
-## 📄 Licencia
-
-[Especificar licencia si aplica - MIT, GPL, Apache 2.0, etc.]
-
----
-
-<div align="center">
-
 **⭐ Si este proyecto te fue útil, considera darle una estrella en GitHub ⭐**
 
 [![GitHub stars](https://img.shields.io/github/stars/Salome98342/RA_Final?style=social)](https://github.com/Salome98342/RA_Final)
 [![GitHub forks](https://img.shields.io/github/forks/Salome98342/RA_Final?style=social)](https://github.com/Salome98342/RA_Final/fork)
 
-**Hecho con ❤️ por el equipo RA-Manager**
+**Hecho con ❤️ por el equipo JimmySoft**
 
 *Sistema de gestión de Resultados de Aprendizaje para la educación del futuro*
 
