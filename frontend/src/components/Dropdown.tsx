@@ -12,7 +12,7 @@ const Dropdown: React.FC<Props> = ({ options, value, onChange }) => {
       onBlur={() => setOpen(false)}
       role="combobox"
       aria-haspopup="listbox"
-      aria-expanded={open}
+      aria-expanded={open ? "true" : "false"}
       aria-controls={listId}
       aria-label="Selector"
     >
@@ -32,7 +32,7 @@ const Dropdown: React.FC<Props> = ({ options, value, onChange }) => {
             <li
               key={o.value}
               role="option"
-              aria-selected={(o.value === value) ? 'true' : 'false'}
+              aria-selected={o.value === value ? "true" : "false"}
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(o.value); setOpen(false) } }}
               onMouseDown={() => { onChange(o.value); setOpen(false) }}

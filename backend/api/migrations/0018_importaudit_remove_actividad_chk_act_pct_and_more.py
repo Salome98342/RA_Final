@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0017_remove_actividad_chk_act_pct'),
+        ('api', '0016_remove_actividad_chk_act_pct'),
     ]
 
     operations = [
