@@ -31,8 +31,7 @@ const Materias: React.FC = () => {
   const navigate = useNavigate()
   const active = 'materias'
   const items = [
-    { key: 'asignaturas', icon: 'bi-grid-3x3-gap', title: 'Asignaturas' },
-    { key: 'materias', icon: 'bi-layout-sidebar', title: 'Materias' },
+    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
@@ -137,8 +136,7 @@ const Materias: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'asignaturas') navigate('/coordinador')
-            else if (key === 'imports') navigate('/coordinador/imports')
+            if (key === 'imports') navigate('/coordinador/imports')
             else if (key === 'materias') navigate('/coordinador/materias')
           }}
         />

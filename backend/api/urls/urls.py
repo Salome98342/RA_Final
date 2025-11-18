@@ -11,7 +11,7 @@ from ..views.views import (
     actividades_multi_view, ra_actividad_detail_view, course_grade_view,
     coordinador_asignaturas_view, coordinador_asignatura_estudiantes_view, coordinador_import_matriculados_view, coordinador_asignatura_ras_view,
     coordinador_import_docentes_view, coordinador_import_asignaturas_ras_view,
-    coordinador_asignatura_avance_view,
+    coordinador_asignatura_avance_view, current_period_view, course_activities_grouped_view,
 )
 
 router = DefaultRouter()
@@ -61,4 +61,8 @@ urlpatterns = [
     path("actividades/multi", actividades_multi_view),
     # Actualizar/Eliminar una relación RA-Actividad (y actividad)
     path("ras/<int:ra_id>/actividades/<int:rel_id>/", ra_actividad_detail_view),
+    # Obtener periodo académico actual
+    path("periodos/actual", current_period_view),
+    # Obtener actividades agrupadas por asignatura (sin duplicación por RA)
+    path("asignaturas/<str:codigo_asignatura>/actividades-agrupadas/", course_activities_grouped_view),
 ]

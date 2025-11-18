@@ -1,4 +1,4 @@
-import type { Course, RA, Indicator, Activity, Student, Periodo, GradeSummaryResponse } from '@/types'
+import type { Course, RA, Indicator, Activity, Student, Periodo, GradeSummaryResponse, GroupedActivity } from '@/types'
 // grade
 import { endpoints } from '@/connections/endpoints'
 import { api } from '@/connections/http'
@@ -302,6 +302,52 @@ export async function getNotifications(): Promise<NotificationItem[]> {
       date: (o.date ?? o.created_at ?? o.fecha ?? undefined) as string | undefined,
       read: Boolean((o.read ?? o.visto ?? false) as boolean),
       link: (o.link ?? o.url ?? undefined) as string | undefined,
+    }
+  })
+}
+
+// Actividades agrupadas por curso (sin duplicación cuando una actividad pertenece a múltiples RAs)
+export async function getCourseActivitiesGrouped(
+  courseCode: string,
+  opts?: { matriculaId?: string }
+): Promise<GroupedActivity[]> {
+  const url = `/asignaturas/${courseCode}/actividades-agrupadas/`
+  const { data } = await api.get<unknown[]>(url, {
+    params: opts?.matriculaId ? { id_matricula: opts.matriculaId } : undefined,
+  })
+  const rows = Array.isArray(data) ? data : []
+  return rows.map((it) => {
+    const o = it as Record<string, unknown>
+    const rasArray = Array.isArray(o.ras_asociados) ? o.ras_asociados : []
+    return {
+      id_actividad: o.id_actividad as number | string,
+      nombre_actividad: String(o.nombre_actividad ?? ''),
+      descripcion: (o.descripcion ?? null) as string | null,
+      fecha_creacion: String(o.fecha_creacion ?? ''),
+      fecha_cierre: (o.fecha_cierre ?? null) as string | null,
+      tipo_actividad: String(o.tipo_actividad ?? ''),
+      porcentaje_total: Number(o.porcentaje_total ?? 0),
+      nota: o.nota != null ? Number(o.nota) : null,
+      retroalimentacion: (o.retroalimentacion ?? null) as string | null,
+      ras_asociados: rasArray.map((r: unknown) => {
+        const ra = r as Record<string, unknown>
+        const indsArray = Array.isArray(ra.indicadores) ? ra.indicadores : []
+        return {
+          id_ra: ra.id_ra as number | string,
+          id_ra_actividad: ra.id_ra_actividad as number | string,
+          titulo_ra: String(ra.titulo_ra ?? ''),
+          porcentaje_ra: Number(ra.porcentaje_ra ?? 0),
+          porcentaje_actividad: Number(ra.porcentaje_actividad ?? 0),
+          indicadores: indsArray.map((ind: unknown) => {
+            const i = ind as Record<string, unknown>
+            return {
+              id_ind: i.id_ind as number | string,
+              descripcion: String(i.descripcion ?? ''),
+              porcentaje_ind: Number(i.porcentaje_ind ?? 0),
+            }
+          }),
+        }
+      }),
     }
   })
 }

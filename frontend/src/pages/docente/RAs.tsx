@@ -194,9 +194,6 @@ const DocenteRAs: React.FC = () => {
     }
   }
 
-  // Detectar si viene del coordinador
-  const returnTo = location.state?.returnTo as string | undefined
-
   return (
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
@@ -220,10 +217,10 @@ const DocenteRAs: React.FC = () => {
         <main className="dash-content">
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div className="content-title">RA - {curso}</div>
-            {returnTo && (
+            {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary"
-                onClick={() => navigate(returnTo)}
+                onClick={() => navigate('/coordinador/materias')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>

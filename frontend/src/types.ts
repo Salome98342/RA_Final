@@ -45,6 +45,28 @@ export type GradeSummaryResponse = {
 export type Student = { id: string; name: string; matriculaId: string }
 export type Periodo = { id: string; descripcion: string }
 
+// Actividad agrupada (sin duplicación por RA)
+export type GroupedActivityRA = {
+  id_ra: number | string
+  id_ra_actividad: number | string
+  titulo_ra: string
+  porcentaje_ra: number
+  porcentaje_actividad: number
+  indicadores: Array<{ id_ind: number | string; descripcion: string; porcentaje_ind: number }>
+}
+export type GroupedActivity = {
+  id_actividad: number | string
+  nombre_actividad: string
+  descripcion: string | null
+  fecha_creacion: string
+  fecha_cierre: string | null
+  tipo_actividad: string
+  porcentaje_total: number
+  nota: number | null
+  retroalimentacion: string | null
+  ras_asociados: GroupedActivityRA[]
+}
+
 export type ProfileCourse = { codigo: string; nombre: string; grupo?: string | null; programa?: string | null }
 export type ProfilePeriodo = { periodo: { id: number; descripcion: string }; cursos: ProfileCourse[] }
 export type ProfileDetails = {

@@ -1,0 +1,41 @@
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Django
+*.log
+db.sqlite3
+media/avatars/
+media/recursos/
+
+# Environment files
+.env
+.env.local
+*.env
+!.env.example
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Node modules (frontend)
+node_modules/
+
+# Build outputs
+dist/
+build/

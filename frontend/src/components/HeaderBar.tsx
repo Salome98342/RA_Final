@@ -52,16 +52,19 @@ const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl,
             <div className="fw-semibold small text-uppercase">{roleText}</div>
             <div className="fw-bold dash-username">{name}</div>
           </div>
-          <div
-            className="avatar"
-            role="button"
-            tabIndex={0}
-            aria-label="Abrir perfil"
-            onClick={() => navigate('/perfil')}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/perfil') } }}
-          >
-            {avatarUrl ? <img src={avatarUrl} alt="avatar" className="avatar-img" /> : <i className="bi bi-person" />}
-          </div>
+          {/* Solo mostrar avatar clickeable para docente y estudiante */}
+          {role !== 'coordinador' && (
+            <div
+              className="avatar"
+              role="button"
+              tabIndex={0}
+              aria-label="Abrir perfil"
+              onClick={() => navigate('/perfil')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/perfil') } }}
+            >
+              {avatarUrl ? <img src={avatarUrl} alt="avatar" className="avatar-img" /> : <i className="bi bi-person" />}
+            </div>
+          )}
         </div>
       </div>
     </header>

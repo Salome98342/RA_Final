@@ -76,10 +76,9 @@ const AsignaturaDetalle: React.FC = () => {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const active = location.pathname.includes('/imports') ? 'imports' : (location.pathname.includes('/materias') ? 'materias' : 'asignaturas')
+  const active = location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
-    { key: 'asignaturas', icon: 'bi-grid-3x3-gap', title: 'Asignaturas' },
-    { key: 'materias', icon: 'bi-layout-sidebar', title: 'Materias' },
+    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
@@ -91,8 +90,7 @@ const AsignaturaDetalle: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'asignaturas') navigate('/coordinador')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'imports') navigate('/coordinador/imports')
           }}
         />
@@ -207,9 +205,9 @@ const AsignaturaDetalle: React.FC = () => {
               <div className="col-md-4">
                 <button
                   className="btn btn-outline-danger btn-sm w-100"
-                  onClick={()=>navigate('/coordinador')}
+                  onClick={()=>navigate('/coordinador/materias')}
                 >
-                  <i className="bi bi-arrow-left" /> Volver
+                  <i className="bi bi-arrow-left" /> Volver a Materias
                 </button>
               </div>
             </div>

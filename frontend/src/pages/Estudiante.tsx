@@ -1,40 +1,36 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
-import Chart from 'chart.js/auto'
-import type { Course, RA, Activity } from '@/types'
-import { getCourses, getMyMatricula, getRAsByCourse, getActivitiesByRA, getIndicatorChart, getCourseGradeSummary } from '@/services/api'
+import type { Course, GroupedActivity, ProfilePeriodo, ProfileDetails } from '@/types'
+import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeSummary } from '@/services/api'
 import GradeSummary from '@/components/GradeSummary'
-import { getProfile } from '@/services/auth'
+import { getProfile, getFullProfile } from '@/services/auth'
 import { SkeletonCard } from '@/components/Skeleton'
 
 const Estudiante: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([])
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Course | null>(null)
-  const [ras, setRas] = useState<RA[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [selectedRA, setSelectedRA] = useState<RA | null>(null)
+  const [groups, setGroups] = useState<ProfilePeriodo[] | null>(null)
+  const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null)
   const [matriculaId, setMatriculaId] = useState<string | null>(null)
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [groupedActivities, setGroupedActivities] = useState<GroupedActivity[]>([])
+  const [selectedGroupedActivity, setSelectedGroupedActivity] = useState<GroupedActivity | null>(null)
   const [notifications, setNotifications] = useState<{ id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[]>([])
   const [view, setView] = useState<'notifs'|'cursos'|'tareas'|'recursos'>('cursos')
   type TaskItem = { id: string; courseId: string; courseName: string; raId: string; actId: string; nombre: string; fechaCierre?: string | null; tipo?: string }
   const [tasks, setTasks] = useState<TaskItem[]>([])
-  const [loadingActs, setLoadingActs] = useState(false)
   // Nota ponderada por curso (0-5) y porcentaje (0-100)
   const [courseStats, setCourseStats] = useState<Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }>>({})
   const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, import('@/types').GradeSummaryResponse>>({})
   // Cronograma (notificaciones abajo)
   const [schedQuery, setSchedQuery] = useState('')
   const [schedOrder, setSchedOrder] = useState<'fecha'|'curso'|'nombre'>('fecha')
-  const chartRef = useRef<HTMLCanvasElement | null>(null)
-  const chartInstance = useRef<Chart | null>(null)
 
   // UI filtros/orden para actividades
   const [actFilter, setActFilter] = useState<'todas'|'pendientes'|'calificadas'|'vencidas'>('todas')
@@ -45,21 +41,41 @@ const Estudiante: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (selectedActivity) setSelectedActivity(null)
-      else if (selectedRA) setSelectedRA(null)
+      if (selectedGroupedActivity) setSelectedGroupedActivity(null)
       else { setSelected(null); setView('cursos') }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedActivity, selectedRA])
+  }, [selectedGroupedActivity])
 
   useEffect(() => {
     let mounted = true
     setLoading(true); setErr(null)
-    getCourses()
-      .then(async (list) => {
+    Promise.allSettled([getCourses(), getFullProfile()])
+      .then(async (results) => {
+        const coursesRes = results[0]
+        const profileRes = results[1]
+        
+        if (coursesRes.status !== 'fulfilled') {
+          if (mounted) setErr('No se pudieron cargar tus cursos')
+          return
+        }
+        
+        const list = coursesRes.value
         if (!mounted) return
         setCourses(list)
+
+        // Procesar datos de perfil para separar por periodos
+        if (profileRes.status === 'fulfilled') {
+          const p: ProfileDetails = profileRes.value
+          const gps = Array.isArray(p.cursosPorPeriodo) ? p.cursosPorPeriodo : []
+          setGroups(gps)
+          const pid = p.periodoActual?.id ?? (gps.length > 0 ? Math.max(...gps.map(g => Number(g.periodo.id))) : null)
+          setCurrentPeriodId(typeof pid === 'number' && !Number.isNaN(pid) ? pid : null)
+        } else {
+          setGroups(null)
+          setCurrentPeriodId(null)
+        }
 
   const notes: { id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[] = []
   const stats: Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }> = {}
@@ -78,59 +94,44 @@ const Estudiante: React.FC = () => {
           try { mid = await getMyMatricula(c.id) } catch (e) { if (import.meta.env.DEV) console.debug('matricula load failed', e) }
           if (!mid) continue
 
-          let ras: RA[] = []
-          try { ras = await getRAsByCourse(c.id) } catch (e) { if (import.meta.env.DEV) console.debug('RA load failed', e) }
+          // Cargar actividades agrupadas para obtener estadísticas y tareas
+          let grouped: GroupedActivity[] = []
+          try { grouped = await getCourseActivitiesGrouped(c.id, { matriculaId: mid }) } catch (e) { if (import.meta.env.DEV) console.debug('Grouped acts load failed', e) }
 
-          let courseTotal = 0
-          let courseWeight = 0
-          let courseTotalActs = 0
-          let courseGradedActs = 0
+          const courseTotalActs = grouped.length
+          const courseGradedActs = grouped.filter(a => a.nota != null).length
 
-          for (const ra of ras) {
-            let acts: Activity[] = []
-            try { acts = await getActivitiesByRA(ra.id, { matriculaId: mid }) } catch (e) { if (import.meta.env.DEV) console.debug('Acts load failed', e) }
-
-            const graded = acts.filter(a => typeof a.nota === 'number' && a.porcentajeRA != null)
-            const sumPct = graded.reduce((acc, a) => acc + Number(a.porcentajeRA || 0), 0)
-            const total = graded.reduce((acc, a) => acc + (Number(a.nota || 0) * Number(a.porcentajeRA || 0)), 0)
-            const raNota = sumPct > 0 ? (total / sumPct) : null
-
-            if (raNota != null && ra.porcentajeRA != null) {
-              courseTotal += raNota * Number(ra.porcentajeRA)
-              courseWeight += Number(ra.porcentajeRA)
-            }
-
-            // Contadores por curso
-            courseTotalActs += acts.length
-            courseGradedActs += acts.filter(a => a.nota != null).length
-
-            for (const act of acts) {
-              if (act.nota == null) {
+          // Generar tareas pendientes y notificaciones de vencimiento
+          for (const act of grouped) {
+            if (act.nota == null) {
+              // Para las tareas, usamos el primer RA asociado para compatibilidad con openTaskDetail
+              const firstRa = act.ras_asociados[0]
+              if (firstRa) {
                 todos.push({
-                  id: `task-${c.id}-${ra.id}-${act.id}`,
+                  id: `task-${c.id}-${firstRa.id_ra}-${act.id_actividad}`,
                   courseId: c.id,
                   courseName: c.nombre,
-                  raId: ra.id,
-                  actId: act.raActividadId || act.id,
-                  nombre: act.nombre,
-                  fechaCierre: act.fechaCierre ?? null,
-                  tipo: act.tipoActividad,
+                  raId: String(firstRa.id_ra),
+                  actId: String(firstRa.id_ra_actividad),
+                  nombre: act.nombre_actividad,
+                  fechaCierre: act.fecha_cierre ?? null,
+                  tipo: act.tipo_actividad,
                 })
               }
-              if (!act.fechaCierre || (act.nota != null)) continue
-              const due = new Date(act.fechaCierre)
-              if (due >= monday && due <= sunday) {
-                notes.push({
-                  id: `due-${c.id}-${ra.id}-${act.id}`,
-                  kind: 'warning',
-                  text: `Actividad "${act.nombre}" de ${c.nombre} vence ${due.toLocaleDateString()}.`,
-                  courseId: c.id,
-                })
-              }
+            }
+            if (!act.fecha_cierre || (act.nota != null)) continue
+            const due = new Date(act.fecha_cierre)
+            if (due >= monday && due <= sunday) {
+              notes.push({
+                id: `due-${c.id}-${act.id_actividad}`,
+                kind: 'warning',
+                text: `Actividad "${act.nombre_actividad}" de ${c.nombre} vence ${due.toLocaleDateString()}.`,
+                courseId: c.id,
+              })
             }
           }
 
-          let courseNote = courseWeight > 0 ? (courseTotal / courseWeight) : null
+          let courseNote: number | null = null
           // Intentar obtener summary del backend para valores estrictos/progresivos reales
           if (studentId) {
             const summary = await getCourseGradeSummary(c.id, studentId)
@@ -175,64 +176,34 @@ const Estudiante: React.FC = () => {
 
         if (mounted) { setNotifications(notes); setTasks(todos); setCourseStats(stats); setGradeSummaryByCourse({...gradeSummaryByCourse}) }
       })
-  .catch(() => setErr('No se pudieron cargar tus cursos'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }
   }, [])
 
   const openCourse = async (c: Course) => {
     setSelected(c)
-    setSelectedRA(null)
-    setSelectedActivity(null)
-    setActivities([])
+    setSelectedGroupedActivity(null)
+    setGroupedActivities([])
     try {
-      const data = await getRAsByCourse(c.id)
-      setRas(data)
       const mid = await getMyMatricula(c.id)
       setMatriculaId(mid)
+      
+      // Cargar actividades agrupadas directamente a nivel de curso
+      if (mid) {
+        try {
+          const grouped = await getCourseActivitiesGrouped(c.id, { matriculaId: mid })
+          setGroupedActivities(grouped)
+        } catch (e) {
+          if (import.meta.env.DEV) console.debug('Failed to load grouped activities', e)
+          setGroupedActivities([])
+        }
+      }
+      
       setView('cursos')
     } catch (e) {
   if (import.meta.env.DEV) console.debug('openCourse failed', e)
-      setRas([])
       setMatriculaId(null)
     }
-  }
-
-  const openRA = async (ra: RA) => {
-    setSelectedRA(ra)
-    setSelectedActivity(null)
-    try {
-      setLoadingActs(true)
-      let mid = matriculaId
-      if (!mid && selected) {
-        try { mid = await getMyMatricula(selected.id) } catch (e) { if (import.meta.env.DEV) console.debug('matricula reload failed', e) }
-        if (mid) setMatriculaId(mid)
-      }
-      if (!mid) { setActivities([]); return }
-      const acts = await getActivitiesByRA(ra.id, { matriculaId: mid })
-      setActivities(acts)
-    } catch (e) {
-      if (import.meta.env.DEV) console.debug('openRA failed', e)
-      setActivities([])
-    } finally { setLoadingActs(false) }
-  }
-
-  const openActivity = async (act: Activity) => {
-    setSelectedActivity(act)
-    if (!selected) return
-    let studentId: string | null = null
-  try { const p = await getProfile(); studentId = p.id } catch (e) { if (import.meta.env.DEV) console.debug('getProfile failed', e) }
-    if (!studentId) return
-    const data = await getIndicatorChart(selected.id, studentId)
-    if (!chartRef.current) return
-    if (chartInstance.current) chartInstance.current.destroy()
-    const labels = data.map(d => d.descripcion)
-    const values = data.map(d => d.avg_pct ?? 0)
-    chartInstance.current = new Chart(chartRef.current, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Avance indicador (%)', data: values, backgroundColor: '#dc3545' }] },
-      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
-    })
   }
 
   // Abrir directamente el detalle de una tarea del cronograma
@@ -240,38 +211,25 @@ const Estudiante: React.FC = () => {
     try {
       const c = courses.find(x => x.id === t.courseId)
       if (!c) return
-      // Seleccionar curso y preparar estado
-      setSelected(c)
-      setSelectedRA(null)
-      setSelectedActivity(null)
-      // Cargar RAs y matrícula
-      const rasList = await getRAsByCourse(c.id)
-      setRas(rasList)
+      // Abrir curso y cargar actividades agrupadas
+      await openCourse(c)
+      // Buscar actividad agrupada
       const mid = await getMyMatricula(c.id)
-      setMatriculaId(mid)
-      // Buscar RA
-      const ra = rasList.find(r => r.id === t.raId)
-      if (!ra || !mid) return
-      setSelectedRA(ra)
-      // Cargar actividades de ese RA
-      const acts = await getActivitiesByRA(ra.id, { matriculaId: mid })
-      setActivities(acts)
-      // Encontrar actividad por surrogate o id
-      const act = acts.find(a => (a.raActividadId ?? a.id) === t.actId)
+      if (!mid) return
+      const grouped = await getCourseActivitiesGrouped(c.id, { matriculaId: mid })
+      const act = grouped.find(a => a.ras_asociados.some(ra => String(ra.id_ra_actividad) === t.actId))
       if (act) {
-        await openActivity(act)
+        setSelectedGroupedActivity(act)
       }
     } catch (e) {
       if (import.meta.env.DEV) console.debug('openTaskDetail failed', e)
     }
   }
 
-  const title = selectedActivity
-    ? `Actividad - ${selectedActivity.nombre}`
-    : selectedRA
-    ? `Actividades de ${selectedRA.titulo}`
+  const title = selectedGroupedActivity
+    ? `Actividad - ${selectedGroupedActivity.nombre_actividad}`
     : selected
-    ? `RAs · ${selected.codigo ?? selected.id} - ${selected.nombre}`
+    ? `${selected.codigo ?? selected.id} - ${selected.nombre}`
     : view === 'tareas'
     ? 'Tareas'
     : 'Mis cursos'
@@ -280,10 +238,28 @@ const Estudiante: React.FC = () => {
     (c) => !filter || c.id.toUpperCase().includes(filter.toUpperCase()) || c.carrera.toUpperCase().includes(filter.toUpperCase())
   )
 
+  // Construir conjuntos de códigos por periodo (si hay datos de perfil)
+  const currentCodes = new Set<string>()
+  const previousCodes = new Set<string>()
+  if (groups && groups.length > 0) {
+    groups.forEach(g => {
+      const codes = g.cursos.map(c => c.codigo)
+      if (currentPeriodId != null && Number(g.periodo.id) === Number(currentPeriodId)) {
+        codes.forEach(c => currentCodes.add(c))
+      } else {
+        codes.forEach(c => previousCodes.add(c))
+      }
+    })
+  }
+
+  const filteredCurrent = groups ? filteredCourses.filter(c => currentCodes.has(c.id)) : filteredCourses
+  const filteredMap = new Map(filteredCourses.map(c => [c.id, c]))
+  const previousGroups = groups ? groups.filter(g => currentPeriodId == null || Number(g.periodo.id) !== Number(currentPeriodId)) : []
+
   // Filtros y orden para actividades
   const now = new Date()
-  const actsFiltered = activities.filter(a => {
-    const due = a.fechaCierre ? new Date(a.fechaCierre) : null
+  const groupedActsFiltered = groupedActivities.filter(a => {
+    const due = a.fecha_cierre ? new Date(a.fecha_cierre) : null
     const vencida = !a.nota && due && due.getTime() < now.getTime()
     if (actFilter === 'pendientes') return a.nota == null
     if (actFilter === 'calificadas') return a.nota != null
@@ -291,12 +267,11 @@ const Estudiante: React.FC = () => {
     return true
   }).sort((a, b) => {
     if (sortBy === 'fecha') {
-      const da = a.fechaCierre ? new Date(a.fechaCierre).getTime() : Number.MAX_SAFE_INTEGER
-      const db = b.fechaCierre ? new Date(b.fechaCierre).getTime() : Number.MAX_SAFE_INTEGER
-      return da - db || a.nombre.localeCompare(b.nombre)
+      const da = a.fecha_cierre ? new Date(a.fecha_cierre).getTime() : Number.MAX_SAFE_INTEGER
+      const db = b.fecha_cierre ? new Date(b.fecha_cierre).getTime() : Number.MAX_SAFE_INTEGER
+      return da - db || a.nombre_actividad.localeCompare(b.nombre_actividad)
     }
-  // 'peso' sort removed
-  return a.nombre.localeCompare(b.nombre)
+    return a.nombre_actividad.localeCompare(b.nombre_actividad)
   })
 
   return (
@@ -306,7 +281,7 @@ const Estudiante: React.FC = () => {
         <Sidebar
           active={view}
           onClick={(key) => {
-            setSelected(null); setSelectedRA(null); setSelectedActivity(null)
+            setSelected(null); setSelectedGroupedActivity(null)
             if (key === 'cursos') { setView('cursos'); return }
             if (key === 'tareas') { setView('tareas'); return }
             if (key === 'recursos') { setView('recursos'); return }
@@ -317,14 +292,13 @@ const Estudiante: React.FC = () => {
           <div className="content-title">
             {view === 'cursos' && !selected && <i className="bi bi-book text-primary me-2"></i>}
             {view === 'tareas' && <i className="bi bi-list-check text-warning me-2"></i>}
-            {selected && !selectedRA && <i className="bi bi-bar-chart-line text-success me-2"></i>}
-            {selectedRA && !selectedActivity && <i className="bi bi-clipboard-check text-info me-2"></i>}
-            {selectedActivity && <i className="bi bi-file-earmark-text text-danger me-2"></i>}
+            {selected && !selectedGroupedActivity && <i className="bi bi-clipboard-check text-info me-2"></i>}
+            {selectedGroupedActivity && <i className="bi bi-file-earmark-text text-danger me-2"></i>}
             {title}
           </div>
 
-          {/* Notificaciones rápidas (se mantenien discretas) */}
-          {!selected && !selectedRA && !selectedActivity && view === 'cursos' && notifications.length > 0 && (
+          {/* Notificaciones rápidas (se mantienen discretas) */}
+          {!selected && !selectedGroupedActivity && view === 'cursos' && notifications.length > 0 && (
             <div className="d-none">
               {notifications.map(n => (
                 <div key={n.id} className={`alert ${n.kind === 'danger' ? 'alert-danger' : 'alert-warning'}`}>{n.text}</div>
@@ -333,7 +307,7 @@ const Estudiante: React.FC = () => {
           )}
 
           {/* Cursos */}
-          {!selected && !selectedRA && !selectedActivity && view === 'cursos' && (
+          {!selected && !selectedGroupedActivity && view === 'cursos' && (
             <section className="panel shown">
               <SearchPill icon="bi-search" placeholder="Filtrar por código de carrera" value={filter} onChange={setFilter} />
               {err && (
@@ -346,17 +320,86 @@ const Estudiante: React.FC = () => {
                 <CardGrid>
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </CardGrid>
-              ) : filteredCourses.length === 0 ? (
-                <div className="alert alert-info d-flex align-items-center">
-                  <i className="bi bi-info-circle me-2"></i>
-                  No se encontraron cursos{filter ? ' con ese filtro' : ''}.
-                </div>
               ) : (
-                <CardGrid>
-                  {filteredCourses.map((c, idx) => (
-                    <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
-                  ))}
-                </CardGrid>
+                <>
+                  {groups && groups.length > 0 ? (
+                    <>
+                      <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del periodo actual">
+                        <i className="bi bi-calendar-check text-success"></i>
+                        <span className="fw-bold">Periodo actual</span>
+                        {filteredCurrent.length > 0 && (
+                          <span className="badge bg-success rounded-pill">{filteredCurrent.length}</span>
+                        )}
+                      </div>
+                      <CardGrid>
+                        {filteredCurrent.length === 0 ? (
+                          <div className="alert alert-info d-flex align-items-center">
+                            <i className="bi bi-info-circle me-2"></i>
+                            Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
+                          </div>
+                        ) : (
+                          filteredCurrent.map((c, idx) => (
+                            <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
+                          ))
+                        )}
+                      </CardGrid>
+                      <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
+                        <i className="bi bi-clock-history text-muted"></i>
+                        <span className="fw-bold">Periodos anteriores</span>
+                      </div>
+                      {previousGroups.length === 0 ? (
+                        <div className="alert alert-secondary d-flex align-items-center">
+                          <i className="bi bi-inbox me-2"></i>
+                          Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.
+                        </div>
+                      ) : (
+                        previousGroups.map(pg => {
+                          const periodCourses = pg.cursos
+                            .map(c => filteredMap.get(c.codigo))
+                            .filter((x): x is Course => Boolean(x))
+                          return (
+                            <section key={pg.periodo.id} className="mb-3" aria-label={`Periodo ${pg.periodo.descripcion}`}>
+                              <div className="d-flex align-items-center gap-2 mb-2">
+                                <i className="bi bi-calendar2 text-muted ra-small"></i>
+                                <span className="ra-small text-muted fw-semibold">{pg.periodo.descripcion}</span>
+                                {periodCourses.length > 0 && (
+                                  <span className="badge bg-secondary rounded-pill ra-small">{periodCourses.length}</span>
+                                )}
+                              </div>
+                              <CardGrid>
+                                {periodCourses.length === 0 ? (
+                                  <div className="alert alert-secondary d-flex align-items-center">
+                                    <i className="bi bi-inbox me-2"></i>
+                                    Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.
+                                  </div>
+                                ) : (
+                                  periodCourses.map(c => (
+                                    <RaCard key={c.id} headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
+                                  ))
+                                )}
+                              </CardGrid>
+                            </section>
+                          )
+                        })
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {filteredCourses.length === 0 ? (
+                        <div className="alert alert-info d-flex align-items-center">
+                          <i className="bi bi-info-circle me-2"></i>
+                          No se encontraron cursos{filter ? ' con ese filtro' : ''}.
+                        </div>
+                      ) : (
+                        <CardGrid>
+                          {filteredCourses.map((c, idx) => (
+                            <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
+                          ))}
+                        </CardGrid>
+                      )}
+                    </>
+                  )}
+                </>
               )}
 
               {/* Cronograma (abajo) - siempre visible */}
@@ -472,7 +515,7 @@ const Estudiante: React.FC = () => {
           )}
 
           {/* Tareas pendientes (todas las materias) con formato Cronograma */}
-          {!selected && !selectedRA && !selectedActivity && view === 'tareas' && (
+          {!selected && !selectedGroupedActivity && view === 'tareas' && (
             <section className="panel shown">
               <div className="card sched-card shadow-sm">
                 <div className="card-body">
@@ -597,8 +640,8 @@ const Estudiante: React.FC = () => {
             </section>
           )}
 
-          {/* RAs del curso seleccionado */}
-          {selected && !selectedRA && (
+          {/* Actividades del curso seleccionado (vista agrupada sin duplicación) */}
+          {selected && !selectedGroupedActivity && (
             <section className="panel shown">
               {/* Nota ponderada del curso */}
               {(() => {
@@ -636,33 +679,8 @@ const Estudiante: React.FC = () => {
                   </div>
                 )
               })()}
-              {ras.length === 0 ? (
-                <div className="alert alert-info d-flex align-items-center">
-                  <i className="bi bi-info-circle me-2"></i>
-                  No hay resultados de aprendizaje disponibles para este curso.
-                </div>
-              ) : (
-                <CardGrid>
-                  {ras.map((ra, idx) => (
-                    <RaCard
-                      key={ra.id}
-                      headTone={idx===0?'dark':'light'}
-                      title={ra.titulo}
-                      subtitle={ra.info}
-                      onClick={() => openRA(ra)}
-                    />
-                  ))}
-                </CardGrid>
-              )}
-              <button className="btn btn-outline-danger mt-3" onClick={()=>{ setSelected(null); setView('cursos') }}>
-                <i className="bi bi-arrow-left" /> Volver a cursos
-              </button>
-            </section>
-          )}
 
-          {/* Actividades del RA */}
-          {selected && selectedRA && !selectedActivity && (
-            <section className="panel shown">
+              {/* Filtros y ordenamiento */}
               <div className="d-flex gap-2 align-items-center mb-2">
                 <div className="btn-group" role="group" aria-label="Filtro actividades">
                   <button className={`btn ${actFilter==='todas'?'btn-danger':'btn-outline-danger'}`} onClick={()=>setActFilter('todas')}>Todas</button>
@@ -677,43 +695,48 @@ const Estudiante: React.FC = () => {
                 </select>
               </div>
 
-              {loadingActs ? (
-                <div className="text-center text-muted py-4">
-                  <div className="spinner-border text-primary mb-2" role="status">
-                    <span className="visually-hidden">Cargando...</span>
-                  </div>
-                  <p>Cargando actividades…</p>
-                </div>
-              ) : actsFiltered.length === 0 ? (
+              {/* Lista de actividades agrupadas */}
+              {groupedActsFiltered.length === 0 ? (
                 <div className="alert alert-info d-flex align-items-center">
                   <i className="bi bi-info-circle me-2"></i>
                   Sin actividades{actFilter !== 'todas' ? ` (filtro: ${actFilter})` : ''}.
                 </div>
               ) : (
                 <ul className="list-group ra-list-group">
-                  {actsFiltered.map(act => {
-                    const due = act.fechaCierre ? new Date(act.fechaCierre) : null
+                  {groupedActsFiltered.map(act => {
+                    const due = act.fecha_cierre ? new Date(act.fecha_cierre) : null
                     const vencida = !act.nota && due && due.getTime() < now.getTime()
                     const estado = act.nota != null ? 'Calificada' : (vencida ? 'Vencida' : 'Pendiente')
                     const badgeClass = act.nota != null ? 'bg-secondary' : (vencida ? 'bg-danger' : 'bg-warning')
                     return (
                       <li
-                        key={act.id}
-                        className="list-group-item d-flex justify-content-between align-items-center"
-                        onClick={() => openActivity(act)}
+                        key={act.id_actividad}
+                        className="list-group-item ra-clickable"
+                        onClick={() => setSelectedGroupedActivity(act)}
                         title="Ver detalle e indicadores"
                       >
-                        <div>
-                          <div>{act.nombre}</div>
-                          <div className="ra-small">
-                            {(act.tipoActividad || (act.tipoActividadId ? `Tipo ${act.tipoActividadId}` : ''))}
-                            {act.fechaCierre ? ` · Cierra: ${new Date(act.fechaCierre).toLocaleDateString()}` : ''}
-                            {act.nota != null ? ` · Nota: ${Number(act.nota).toFixed(1)}` : ''}
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="flex-grow-1">
+                            <div className="fw-semibold">{act.nombre_actividad}</div>
+                            <div className="ra-small text-muted">
+                              {act.tipo_actividad}
+                              {act.fecha_cierre ? ` · Cierra: ${new Date(act.fecha_cierre).toLocaleDateString()}` : ''}
+                              {act.nota != null ? ` · Nota: ${Number(act.nota).toFixed(1)}` : ''}
+                              {` · Peso total: ${act.porcentaje_total.toFixed(1)}%`}
+                            </div>
+                            {/* Mostrar RAs asociados */}
+                            <div className="mt-2">
+                              <div className="ra-small text-muted fw-semibold mb-1">Asociado a {act.ras_asociados.length} RA{act.ras_asociados.length !== 1 ? 's' : ''}:</div>
+                              <div className="d-flex flex-wrap gap-1">
+                                {act.ras_asociados.map(ra => (
+                                  <span key={ra.id_ra_actividad} className="badge bg-light text-dark border">
+                                    {ra.titulo_ra} ({ra.porcentaje_actividad}% del RA)
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="d-flex align-items-center gap-2">
-                          <span className={`badge ${badgeClass}`}>{estado}</span>
-                          {/* sin porcentaje */}
+                          <span className={`badge ${badgeClass} ms-2`}>{estado}</span>
                         </div>
                       </li>
                     )
@@ -721,55 +744,107 @@ const Estudiante: React.FC = () => {
                 </ul>
               )}
 
-              <button className="btn btn-outline-danger mt-3" onClick={()=>setSelectedRA(null)}>
-                <i className="bi bi-arrow-left" /> Volver a RAs
+              <button className="btn btn-outline-danger mt-3" onClick={()=>{ setSelected(null); setView('cursos') }}>
+                <i className="bi bi-arrow-left" /> Volver a cursos
               </button>
             </section>
           )}
 
-          {/* Detalle de actividad con gráfico */}
-          {selected && selectedRA && selectedActivity && (
+          {/* Detalle de actividad agrupada */}
+          {selected && selectedGroupedActivity && (
             <section className="panel shown ra-detail-panel">
               <div className="row g-3">
-                <div className="col-md-6">
-                  <div className="ra-card shadow-sm"><div className="ra-card-body">
-                    <div className="d-flex align-items-center gap-2 mb-3">
-                      <i className="bi bi-file-earmark-text text-primary"></i>
-                      <span className="fw-bold">Detalle de actividad</span>
-                    </div>
-                    <div className="d-flex flex-column gap-2">
-                      <div className="border-bottom pb-2">
-                        <span className="ra-small text-muted d-block mb-1">Actividad</span>
-                        <span className="fw-semibold">{selectedActivity.nombre}</span>
+                <div className="col-12">
+                  <div className="ra-card shadow-sm">
+                    <div className="ra-card-body">
+                      <div className="d-flex align-items-center gap-2 mb-3">
+                        <i className="bi bi-file-earmark-text text-primary"></i>
+                        <span className="fw-bold">Detalle de actividad</span>
                       </div>
-                      {selectedActivity.fechaCierre && (
+                      <div className="d-flex flex-column gap-3">
                         <div className="border-bottom pb-2">
-                          <span className="ra-small text-muted d-block mb-1">Fecha de cierre</span>
-                          <span>{new Date(selectedActivity.fechaCierre).toLocaleDateString()}</span>
+                          <span className="ra-small text-muted d-block mb-1">Actividad</span>
+                          <span className="fw-semibold">{selectedGroupedActivity.nombre_actividad}</span>
                         </div>
-                      )}
-                      <div className="border-bottom pb-2">
-                        <span className="ra-small text-muted d-block mb-1">Estado</span>
-                        {selectedActivity.nota != null ? (
-                          <span className="badge bg-success">Calificada: {Number(selectedActivity.nota).toFixed(1)}</span>
-                        ) : (
-                          <span className="badge bg-warning text-dark">Pendiente</span>
+                        {selectedGroupedActivity.descripcion && (
+                          <div className="border-bottom pb-2">
+                            <span className="ra-small text-muted d-block mb-1">Descripción</span>
+                            <span>{selectedGroupedActivity.descripcion}</span>
+                          </div>
                         )}
+                        <div className="border-bottom pb-2">
+                          <span className="ra-small text-muted d-block mb-1">Tipo</span>
+                          <span>{selectedGroupedActivity.tipo_actividad}</span>
+                        </div>
+                        {selectedGroupedActivity.fecha_cierre && (
+                          <div className="border-bottom pb-2">
+                            <span className="ra-small text-muted d-block mb-1">Fecha de cierre</span>
+                            <span>{new Date(selectedGroupedActivity.fecha_cierre).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        <div className="border-bottom pb-2">
+                          <span className="ra-small text-muted d-block mb-1">Peso total en la asignatura</span>
+                          <span className="fw-semibold">{selectedGroupedActivity.porcentaje_total.toFixed(1)}%</span>
+                        </div>
+                        <div className="border-bottom pb-2">
+                          <span className="ra-small text-muted d-block mb-1">Estado</span>
+                          {selectedGroupedActivity.nota != null ? (
+                            <span className="badge bg-success">Calificada: {Number(selectedGroupedActivity.nota).toFixed(1)}</span>
+                          ) : (
+                            <span className="badge bg-warning text-dark">Pendiente</span>
+                          )}
+                        </div>
+                        {selectedGroupedActivity.retroalimentacion && (
+                          <div className="border-bottom pb-2">
+                            <span className="ra-small text-muted d-block mb-1">Retroalimentación</span>
+                            <span>{selectedGroupedActivity.retroalimentacion}</span>
+                          </div>
+                        )}
+
+                        {/* Sección de RAs asociados */}
+                        <div>
+                          <div className="d-flex align-items-center gap-2 mb-2">
+                            <i className="bi bi-diagram-3 text-info"></i>
+                            <span className="fw-bold">Resultados de aprendizaje asociados</span>
+                          </div>
+                          <div className="alert alert-info mb-2">
+                            <i className="bi bi-info-circle me-2"></i>
+                            Esta actividad contribuye a {selectedGroupedActivity.ras_asociados.length} resultado{selectedGroupedActivity.ras_asociados.length !== 1 ? 's' : ''} de aprendizaje
+                          </div>
+                          <ul className="list-group">
+                            {selectedGroupedActivity.ras_asociados.map(ra => (
+                              <li key={ra.id_ra_actividad} className="list-group-item">
+                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                  <div className="flex-grow-1">
+                                    <div className="fw-semibold">{ra.titulo_ra}</div>
+                                    <div className="ra-small text-muted">
+                                      Peso en el RA: {ra.porcentaje_actividad}% · Peso del RA en la asignatura: {ra.porcentaje_ra}%
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Indicadores de este RA */}
+                                {ra.indicadores.length > 0 && (
+                                  <div className="mt-2">
+                                    <div className="ra-small text-muted fw-semibold mb-1">Indicadores evaluados:</div>
+                                    <div className="d-flex flex-wrap gap-1">
+                                      {ra.indicadores.map(ind => (
+                                        <span key={ind.id_ind} className="badge bg-light text-dark border" title={ind.descripcion}>
+                                          {ind.descripcion} ({ind.porcentaje_ind}%)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     </div>
-                  </div></div>
-                </div>
-                <div className="col-md-6">
-                  <div className="ra-card shadow-sm"><div className="ra-card-body">
-                    <div className="d-flex align-items-center gap-2 mb-3">
-                      <i className="bi bi-bar-chart-fill text-success"></i>
-                      <span className="fw-bold">Indicadores de desempeño</span>
-                    </div>
-                    <canvas ref={chartRef} height={220} />
-                  </div></div>
+                  </div>
                 </div>
               </div>
-              <button className="btn btn-outline-danger mt-3" onClick={()=>setSelectedActivity(null)}>
+              <button className="btn btn-outline-danger mt-3" onClick={()=>setSelectedGroupedActivity(null)}>
                 <i className="bi bi-arrow-left" /> Volver a actividades
               </button>
             </section>

@@ -1877,3 +1877,173 @@ def actividades_multi_view(request):
             } for r in relaciones
         ]
     }, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def current_period_view(request):
+    """
+    Devuelve el periodo académico actual basado en la fecha actual del sistema.
+    El periodo actual es el que está activo según su fecha de inicio/fin.
+    
+    Respuesta:
+    {
+      "id_periodo": int,
+      "descripcion": str,
+      "fecha_inicio": "AAAA-MM-DD",
+      "fecha_fin": "AAAA-MM-DD" | null,
+      "is_current": true
+    }
+    """
+    hoy = datetime.date.today()
+    
+    # Buscar periodo que esté activo (fecha_inicio <= hoy <= fecha_fin o sin fecha_fin definida)
+    periodo = (PeriodoAcademico.objects
+               .filter(fecha_inicio__lte=hoy)
+               .order_by('-fecha_inicio')
+               .first())
+    
+    if not periodo:
+        # Si no hay periodo que haya comenzado, devolver el próximo
+        periodo = PeriodoAcademico.objects.order_by('fecha_inicio').first()
+    
+    if not periodo:
+        return Response({"detail": "No hay periodos académicos configurados"}, status=status.HTTP_404_NOT_FOUND)
+    
+    return Response({
+        "id_periodo": periodo.id_periodo,
+        "descripcion": periodo.descripcion,
+        "fecha_inicio": periodo.fecha_inicio,
+        "fecha_fin": getattr(periodo, 'fecha_fin', None),
+        "is_current": True
+    })
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def course_activities_grouped_view(request, codigo_asignatura: str):
+    """
+    Devuelve todas las actividades de una asignatura AGRUPADAS por ID de actividad.
+    Cada actividad muestra todos los RAs a los que está asociada con sus porcentajes.
+    
+    Soluciona el problema de duplicación cuando una actividad pertenece a múltiples RAs.
+    
+    Query params:
+      - id_matricula (opcional): Si se provee, incluye la nota del estudiante
+    
+    Respuesta:
+    [
+      {
+        "id_actividad": int,
+        "nombre_actividad": str,
+        "descripcion": str | null,
+        "fecha_creacion": "AAAA-MM-DD",
+        "fecha_cierre": "AAAA-MM-DD" | null,
+        "id_tipo_actividad": int,
+        "tipo_actividad": str,
+        "porcentaje_total": float,  // Suma de todos los porcentajes en todos los RAs
+        "nota": float | null,  // Nota del estudiante (única para toda la actividad)
+        "retroalimentacion": str | null,
+        "ras_asociados": [
+          {
+            "id_ra": int,
+            "id_ra_actividad": int,  // ID de la relación
+            "titulo_ra": str,
+            "porcentaje_ra": float,  // Porcentaje del RA en la asignatura
+            "porcentaje_actividad": float,  // Porcentaje de esta actividad en este RA
+            "indicadores": [
+              {
+                "id_ind": int,
+                "descripcion": str,
+                "porcentaje_ind": float
+              }
+            ]
+          }
+        ]
+      }
+    ]
+    """
+    asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
+    if not asig:
+        return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+    
+    id_matricula = request.query_params.get("id_matricula")
+    
+    # Obtener todas las relaciones RA-Actividad de esta asignatura
+    rels = (RaActividad.objects
+            .filter(ra__asignatura=asig)
+            .select_related("actividad__tipo_actividad", "ra")
+            .prefetch_related("indicadores_rel__indicador")
+            .order_by("actividad__fecha_cierre", "actividad__nombre_actividad"))
+    
+    # Agrupar por ID de actividad
+    activities_dict = {}
+    for rel in rels:
+        act = rel.actividad
+        act_id = act.id_actividad
+        
+        # Si es la primera vez que vemos esta actividad, inicializar
+        if act_id not in activities_dict:
+            activities_dict[act_id] = {
+                "id_actividad": act_id,
+                "nombre_actividad": act.nombre_actividad,
+                "descripcion": act.descripcion,
+                "fecha_creacion": act.fecha_creacion,
+                "fecha_cierre": act.fecha_cierre,
+                "id_tipo_actividad": act.tipo_actividad_id,
+                "tipo_actividad": getattr(act.tipo_actividad, "descripcion", None),
+                "porcentaje_total": 0.0,
+                "nota": None,
+                "retroalimentacion": None,
+                "ras_asociados": []
+            }
+        
+        # Agregar este RA a la lista de RAs asociados
+        indicadores = [
+            {
+                "id_ind": rir.indicador_id,
+                "descripcion": rir.indicador.descripcion,
+                "porcentaje_ind": float(rir.indicador.porcentaje_ind),
+            }
+            for rir in rel.indicadores_rel.all()
+        ]
+        
+        activities_dict[act_id]["ras_asociados"].append({
+            "id_ra": rel.ra_id,
+            "id_ra_actividad": rel.id_ra_actividad,
+            "titulo_ra": rel.ra.descripcion,
+            "porcentaje_ra": float(rel.ra.porcentaje_ra),
+            "porcentaje_actividad": float(rel.porcentaje_ra_actividad),
+            "indicadores": indicadores
+        })
+        
+        # Sumar al porcentaje total
+        activities_dict[act_id]["porcentaje_total"] += float(rel.porcentaje_ra_actividad)
+    
+    # Si se proporcionó id_matricula, agregar notas
+    if id_matricula:
+        # Obtener todas las notas del estudiante para esta asignatura
+        notas = list(NotasActividad.objects.filter(
+            matricula_id=id_matricula,
+            ra_actividad__ra__asignatura=asig
+        ).select_related("ra_actividad"))
+        
+        # Mapear notas por ID de actividad (todas las relaciones de una actividad comparten la misma nota)
+        notas_por_actividad = {}
+        for nota in notas:
+            act_id = nota.ra_actividad.actividad_id
+            if act_id not in notas_por_actividad:
+                notas_por_actividad[act_id] = nota
+        
+        # Agregar notas a las actividades
+        for act_id, nota_obj in notas_por_actividad.items():
+            if act_id in activities_dict:
+                activities_dict[act_id]["nota"] = float(nota_obj.nota_ra_actividad) if nota_obj.nota_ra_actividad is not None else None
+                activities_dict[act_id]["retroalimentacion"] = nota_obj.retroalimentacion
+    
+    # Convertir a lista y retornar
+    result = list(activities_dict.values())
+    
+    return Response(result, status=status.HTTP_200_OK)
