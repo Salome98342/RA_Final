@@ -106,7 +106,7 @@ const DocenteCursos: React.FC = () => {
             )}
           </div>
           <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
-          {err && <div className="alert alert-danger">{err}</div>}
+          {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
           {loading ? (
             <CardGrid>
               {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -115,8 +115,8 @@ const DocenteCursos: React.FC = () => {
             <>
               {groups && groups.length > 0 ? (
                 <>
-                  <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del periodo actual">
-                    <i className="bi bi-calendar-check text-success"></i>
+                  <div className="d-flex align-items-center gap-2 mb-3 mt-3" aria-label="Cursos del periodo actual">
+                    <i className="bi bi-calendar-check-fill text-success fs-5"></i>
                     <span className="fw-bold">Periodo actual</span>
                     {filteredCurrent.length > 0 && (
                       <span className="badge bg-success rounded-pill">{filteredCurrent.length}</span>
@@ -124,24 +124,24 @@ const DocenteCursos: React.FC = () => {
                   </div>
                   <CardGrid>
                     {filteredCurrent.length === 0 ? (
-                      <div className="alert alert-info d-flex align-items-center">
-                        <i className="bi bi-info-circle me-2"></i>
-                        Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
+                      <div className="alert alert-info shadow-sm d-flex align-items-center">
+                        <i className="bi bi-info-circle-fill me-2 fs-5"></i>
+                        <span>Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.</span>
                       </div>
                     ) : (
                       filteredCurrent.map((c, idx) => (
-                        <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                        <RaCard key={c.id} headTone={idx % 2 === 0 ? 'dark' : 'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                       ))
                     )}
                   </CardGrid>
-                  <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
-                    <i className="bi bi-clock-history text-muted"></i>
-                    <span className="fw-bold">Periodos anteriores</span>
+                  <div className="d-flex align-items-center gap-2 mb-3 mt-5" aria-label="Cursos de periodos anteriores">
+                    <i className="bi bi-clock-history fs-5 text-muted"></i>
+                    <span className="fw-bold text-muted">Periodos anteriores</span>
                   </div>
                   {previousGroups.length === 0 ? (
-                    <div className="alert alert-secondary d-flex align-items-center">
-                      <i className="bi bi-inbox me-2"></i>
-                      Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.
+                    <div className="alert alert-secondary shadow-sm d-flex align-items-center">
+                      <i className="bi bi-inbox-fill me-2 fs-5"></i>
+                      <span>Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.</span>
                     </div>
                   ) : (
                     previousGroups.map(pg => {
@@ -149,23 +149,23 @@ const DocenteCursos: React.FC = () => {
                         .map(c => filteredMap.get(c.codigo))
                         .filter((x): x is Course => Boolean(x))
                       return (
-                        <section key={pg.periodo.id} className="mb-3" aria-label={`Periodo ${pg.periodo.descripcion}`}>
+                        <section key={pg.periodo.id} className="mb-4" aria-label={`Periodo ${pg.periodo.descripcion}`}>
                           <div className="d-flex align-items-center gap-2 mb-2">
-                            <i className="bi bi-calendar2 text-muted ra-small"></i>
-                            <span className="ra-small text-muted fw-semibold">{pg.periodo.descripcion}</span>
+                            <i className="bi bi-calendar2-event text-muted"></i>
+                            <span className="text-muted fw-semibold">{pg.periodo.descripcion}</span>
                             {periodCourses.length > 0 && (
                               <span className="badge bg-secondary rounded-pill ra-small">{periodCourses.length}</span>
                             )}
                           </div>
                           <CardGrid>
                             {periodCourses.length === 0 ? (
-                              <div className="alert alert-secondary d-flex align-items-center">
-                                <i className="bi bi-inbox me-2"></i>
-                                Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.
+                              <div className="alert alert-secondary shadow-sm d-flex align-items-center">
+                                <i className="bi bi-inbox-fill me-2 fs-5"></i>
+                                <span>Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.</span>
                               </div>
                             ) : (
-                              periodCourses.map(c => (
-                                <RaCard key={c.id} headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                              periodCourses.map((c, idx) => (
+                                <RaCard key={c.id} headTone={idx % 2 === 0 ? 'dark' : 'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                               ))
                             )}
                           </CardGrid>

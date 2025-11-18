@@ -389,7 +389,10 @@ const DocenteCalificar: React.FC = () => {
         <Sidebar active={activeKey} onClick={onSidebarClick} items={sidebarItems} />
         <main className="dash-content">
           <div className="d-flex align-items-center justify-content-between mb-3">
-            <div className="content-title">Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}</div>
+            <div className="content-title">
+              <i className="bi bi-check2-square text-success me-2"></i>
+              Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}
+            </div>
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary"
@@ -408,8 +411,11 @@ const DocenteCalificar: React.FC = () => {
           )}
           <div className="row g-3">
             <div id="student-list-panel" className="col-md-3" tabIndex={-1}>
-              <div className="ra-card"><div className="ra-card-body">
-                <div className="fw-bold mb-2">Estudiantes</div>
+              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                <div className="fw-bold mb-3 d-flex align-items-center">
+                  <i className="bi bi-people-fill text-primary me-2 fs-5"></i>
+                  Estudiantes
+                </div>
                 {students.length === 0 ? <div className="text-muted ra-small">Sin estudiantes.</div> : (
                   <ul className="list-group ra-list-group" aria-label="Lista de estudiantes">
                     {students.map(s => (
@@ -429,24 +435,29 @@ const DocenteCalificar: React.FC = () => {
               </div></div>
             </div>
             <div className={showChart ? 'col-md-5' : 'col-md-9'}>
-              <div className="ra-card"><div className="ra-card-body">
-                <div className="d-flex align-items-center justify-content-between mb-2">
-                  <div className="fw-bold">Actividades {selectedStudent ? `— ${selectedStudent.name}` : '(selecciona un estudiante)'} {loadingActs && <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>}</div>
+              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="fw-bold d-flex align-items-center">
+                    <i className="bi bi-clipboard-check-fill text-success me-2 fs-5"></i>
+                    Actividades {selectedStudent ? `— ${selectedStudent.name}` : '(selecciona un estudiante)'} 
+                    {loadingActs && <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>}
+                  </div>
                   <div className="d-flex gap-2">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={exportCsvCurso} disabled={students.length===0 || activities.length===0 || exportingCourseCsv} title="Exportar CSV del curso">
-                      {exportingCourseCsv ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download" aria-hidden /> Exportar CSV (curso)</>)}
+                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsvCurso} disabled={students.length===0 || activities.length===0 || exportingCourseCsv} title="Exportar CSV del curso">
+                      {exportingCourseCsv ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download me-1" aria-hidden /> CSV (curso)</>)}
                     </button>
-                    <button className="btn btn-sm btn-outline-secondary" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
-                      <i className="bi bi-download" aria-hidden /> Exportar CSV (estudiante)
+                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
+                      <i className="bi bi-download me-1" aria-hidden /> CSV (est.)
                     </button>
-                    <button className="btn btn-sm btn-outline-secondary" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
-                      {showChart ? 'Ocultar progreso' : 'Ver progreso'}
+                    <button className="btn btn-sm btn-outline-info shadow-sm" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
+                      <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
+                      {showChart ? 'Ocultar' : 'Progreso'}
                     </button>
-                    <button className="btn btn-sm btn-outline-danger" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAll}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar todo'}
+                    <button className="btn btn-sm btn-outline-danger shadow-sm" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAll}>
+                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-save me-1"></i>Guardar todo</>)}
                     </button>
-                    <button className="btn btn-sm btn-danger" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAllAndNext}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar y siguiente'}
+                    <button className="btn btn-sm btn-danger shadow" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAllAndNext}>
+                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-arrow-right-circle me-1"></i>Guardar y siguiente</>)}
                     </button>
                   </div>
                 </div>
@@ -583,18 +594,29 @@ const DocenteCalificar: React.FC = () => {
             </div>
             {showChart && (
               <div className="col-md-4">
-                <div className="ra-card"><div className="ra-card-body">
-                  <div className="fw-bold mb-2">Indicadores (gráfico)</div>
+                <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                  <div className="fw-bold mb-3 d-flex align-items-center">
+                    <i className="bi bi-bar-chart-fill text-info me-2 fs-5"></i>
+                    Indicadores (gráfico)
+                  </div>
                   {chartEmpty ? (
-                    <div className="text-muted ra-small">Sin datos para graficar.</div>
+                    <div className="text-center py-4">
+                      <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
+                      <small className="text-muted">Sin datos para graficar</small>
+                    </div>
                   ) : (
-                    <canvas ref={chartRef} height={220} />
+                    <div className="border rounded p-3 bg-white shadow-sm">
+                      <canvas ref={chartRef} height={220} />
+                    </div>
                   )}
                 </div></div>
               </div>
             )}
           </div>
-          <button className="btn btn-outline-danger mt-3" onClick={()=>navigate(`/docente/${curso}/ras`)}><i className="bi bi-arrow-left" /> Volver a RA</button>
+          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={()=>navigate(`/docente/${curso}/ras`)}>
+            <i className="bi bi-arrow-left me-2"></i>
+            Volver a RAs
+          </button>
         </main>
       </div>
     </div>
