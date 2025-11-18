@@ -313,4 +313,5 @@ python manage.py migrate --fake-initial
 
 **Última actualización**: Noviembre 2025  
 **Versión**: 1.0.0  
-**Mantenido por**: Equipo RA-Manager
+**Mantenido por**: JimmySoft
+
