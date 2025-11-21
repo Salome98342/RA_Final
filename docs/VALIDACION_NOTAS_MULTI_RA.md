@@ -177,13 +177,25 @@ if id_matricula:
             notas_por_actividad[act_id] = nota  # ← Toma la PRIMERA nota encontrada
 ```
 
-### ⚠️ Comportamiento Observado
+### ✅ Comportamiento Implementado (20/11/2025)
 
-Para una actividad multi-RA, **todas las relaciones tienen la misma nota**, por lo que tomar la primera es correcto **SI** el docente calificó consistentemente.
+Para una actividad multi-RA, **todas las relaciones tienen la misma nota**.
 
-**Caso Edge**: Si por algún bug el docente pudiera poner notas diferentes en cada RA para la misma actividad, este código tomaría solo una. 
+**Implementación en Frontend** (`frontend/src/pages/docente/Calificar.tsx`):
 
-**Solución**: El frontend debe asegurar que al calificar una actividad multi-RA, se actualicen **todas** las relaciones `ra_actividad` con la misma nota.
+```typescript
+// Al guardar una nota, detecta todas las actividades con el mismo id_actividad
+const relatedActivities = activities.filter(act => act.id === a.id && act.raActividadId)
+const keysToUpdate = relatedActivities.map(act => act.raActividadId!)
+
+// Guarda la nota en TODAS las relaciones ra_actividad
+const savePromises = keysToUpdate.map(raActId =>
+  upsertGrade({ matriculaId, raActividadId: raActId, nota, ... })
+)
+await Promise.all(savePromises)
+```
+
+**✅ Solución implementada**: El frontend detecta automáticamente cuando una actividad está en múltiples RAs y replica la nota en **todas** las relaciones `ra_actividad` correspondientes.
 
 ## ✅ Validación Final
 
@@ -265,12 +277,15 @@ El cálculo de notas en actividades multi-RA **NO presenta duplicación**. El di
 3. Los promedios de RA se ponderan por el peso del RA en el curso
 4. La matemática es consistente y no duplica contribuciones
 
-### 🎯 Recomendaciones
+### 🎯 Estado de Implementación
 
-1. **✅ Implementado**: Vista de actividades agrupadas para el estudiante
-2. **✅ Implementado**: Endpoint que agrupa actividades multi-RA
-3. **⚠️ Pendiente**: Tests unitarios automáticos para validar los cálculos
-4. **⚠️ Pendiente**: Asegurar que el frontend actualice TODAS las relaciones al calificar
+1. **✅ IMPLEMENTADO (20/11/2025)**: Vista de actividades agrupadas para el estudiante
+2. **✅ IMPLEMENTADO (20/11/2025)**: Endpoint que agrupa actividades multi-RA
+3. **✅ IMPLEMENTADO (20/11/2025)**: Frontend actualiza TODAS las relaciones al calificar
+   - **Archivo**: `frontend/src/pages/docente/Calificar.tsx` (función `saveRow`)
+   - **Comportamiento**: Detecta automáticamente actividades con mismo `id_actividad` y replica la nota en todas las relaciones `ra_actividad`
+   - **Feedback visual**: Muestra "Guardado correctamente (replicada en N RAs)" cuando aplica
+4. **⚠️ RECOMENDADO**: Tests unitarios automáticos para validar los cálculos
 
 ### 📚 Referencias
 
@@ -278,10 +293,13 @@ El cálculo de notas en actividades multi-RA **NO presenta duplicación**. El di
 - **Vista de calificación**: `backend/api/views/views.py` línea 1304
 - **Cálculo de promedio**: `backend/api/views/views.py` línea 1352
 - **Vista agrupada**: `backend/api/views/views.py` línea 1926
+- **Replicación frontend**: `frontend/src/pages/docente/Calificar.tsx` línea 247 (función `saveRow`)
 - **Documentación**: `docs/ACTIVIDADES_AGRUPADAS.md`
 
 ---
 
-**Estado**: ✅ **VALIDADO - Sin duplicación de notas**  
+**Estado**: ✅ **VALIDADO Y COMPLETAMENTE IMPLEMENTADO**  
+**Validación**: 20/11/2025 | **Implementación**: 20/11/2025  
+**Sistema**: Sin duplicación matemática + Replicación automática en actividades multi-RA  
 **Fecha**: Noviembre 18, 2025  
 **Autor**: Equipo RA-Manager

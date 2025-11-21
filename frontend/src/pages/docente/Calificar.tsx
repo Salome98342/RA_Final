@@ -265,39 +265,86 @@ const DocenteCalificar: React.FC = () => {
       setToast({ text: 'Selecciona un indicador para esta actividad.', type: 'error' })
       return
     }
-    setEdits(prev => ({ ...prev, [key]: { ...(prev[key] || {}), saving: true } }))
-    try {
-      const resp = await upsertGrade({
-        matriculaId: selectedStudent.matriculaId,
-        raActividadId: key,
-        nota: notaNum,
-        retroalimentacion: eff.retro || undefined,
-        indicadorId: eff.indicadorId || undefined,
+
+    // 🔴 MULTI-RA: Detectar si esta actividad está en múltiples RAs
+    // Buscar todas las actividades con el mismo id_actividad (diferentes ra_actividad_id)
+    const relatedActivities = activities.filter(act => act.id === a.id && act.raActividadId)
+    const keysToUpdate = relatedActivities.map(act => act.raActividadId!)
+    
+    // Marcar todas como "guardando"
+    setEdits(prev => {
+      const updated = { ...prev }
+      keysToUpdate.forEach(k => {
+        updated[k] = { ...(prev[k] || {}), saving: true }
       })
+      return updated
+    })
+
+    try {
+      // Guardar la nota en TODAS las relaciones ra_actividad de esta actividad
+      const savePromises = keysToUpdate.map(raActId =>
+        upsertGrade({
+          matriculaId: selectedStudent.matriculaId,
+          raActividadId: raActId,
+          nota: notaNum,
+          retroalimentacion: eff.retro || undefined,
+          indicadorId: eff.indicadorId || undefined,
+        })
+      )
+      
+      await Promise.all(savePromises)
+      
       if (import.meta.env.DEV) {
-        // Log de ayuda en desarrollo
-        if (import.meta.env.DEV) console.debug('upsertGrade OK', resp)
+        console.debug(`✅ Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
       }
-      setEdits(prev => ({
-        ...prev,
-        [key]: { ...(prev[key] || {}), saving: false, dirty: false, savedAt: Date.now() },
-      }))
-      setActivities(prev => prev.map(x => x.raActividadId === key ? { ...x, nota: notaNum, retroalimentacion: eff.retro || null, indicadorId: eff.indicadorId || null } : x))
-      setToast({ text: 'Guardado correctamente.' })
-    // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
-    const raForAct = (a as unknown as { _raId?: string })._raId
+      
+      // Marcar todas como guardadas
+      setEdits(prev => {
+        const updated = { ...prev }
+        keysToUpdate.forEach(k => {
+          updated[k] = { ...(prev[k] || {}), saving: false, dirty: false, savedAt: Date.now() }
+        })
+        return updated
+      })
+      
+      // Actualizar TODAS las actividades relacionadas con la nueva nota
+      setActivities(prev => prev.map(x => 
+        keysToUpdate.includes(x.raActividadId || '') 
+          ? { ...x, nota: notaNum, retroalimentacion: eff.retro || null, indicadorId: eff.indicadorId || null } 
+          : x
+      ))
+      
+      const multiMsg = keysToUpdate.length > 1 ? ` (replicada en ${keysToUpdate.length} RAs)` : ''
+      setToast({ text: `Guardado correctamente${multiMsg}.` })
+      
+      // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
+      const raForAct = (a as unknown as { _raId?: string })._raId
       if (selectedStudent && raForAct) {
         try {
           const freshActs = await getActivitiesByRA(raForAct, { matriculaId: selectedStudent.matriculaId })
-          const updated = freshActs.find(f => String(f.raActividadId) === String(key))
-          if (updated) {
-            setActivities(prev => prev.map(x => x.raActividadId === key ? { ...x, nota: updated.nota ?? notaNum, retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), indicadorId: updated.indicadorId ?? (eff.indicadorId || null) } : x))
-          }
+          // Actualizar todas las relaciones con datos frescos del backend
+          keysToUpdate.forEach(k => {
+            const updated = freshActs.find(f => String(f.raActividadId) === String(k))
+            if (updated) {
+              setActivities(prev => prev.map(x => 
+                x.raActividadId === k 
+                  ? { ...x, nota: updated.nota ?? notaNum, retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), indicadorId: updated.indicadorId ?? (eff.indicadorId || null) } 
+                  : x
+              ))
+            }
+          })
         } catch {/* ignore */}
       }
       if (showChart && selectedStudent) await renderChart(selectedStudent)
     } catch (err: unknown) {
-      setEdits(prev => ({ ...prev, [key]: { ...(prev[key] || {}), saving: false } }))
+      // Marcar todas como error
+      setEdits(prev => {
+        const updated = { ...prev }
+        keysToUpdate.forEach(k => {
+          updated[k] = { ...(prev[k] || {}), saving: false }
+        })
+        return updated
+      })
       // Extraer mensaje de error de manera segura
       const resData = (err as { response?: { data?: unknown } })?.response?.data
       let msg = 'No se pudo guardar. Inténtalo de nuevo.'

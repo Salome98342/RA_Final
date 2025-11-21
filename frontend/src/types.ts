@@ -2,10 +2,10 @@ export type Course = { id: string; nombre: string; carrera: string; codigo?: str
 export type RA = { id: string; titulo: string; info?: string; porcentajeRA?: number }
 export type Indicator = { id: string; descripcion: string; porcentaje: number }
 export type Activity = {
-  id: string
+  id: string  // id_actividad (mismo para todas las relaciones multi-RA)
   nombre: string
   porcentajeRA?: number
-  raActividadId?: string
+  raActividadId?: string  // id único de la relación RA-Actividad
   descripcion?: string | null
   nota?: number | null
   retroalimentacion?: string | null
