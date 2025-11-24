@@ -6,6 +6,8 @@ from django.core import signing
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
 from django.conf import settings
+import uuid
+from datetime import datetime as dt_module
 import os
 import io
 import csv
@@ -32,6 +34,26 @@ from ..serializers.serializers import (
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
 RESET_TOKEN_MAX_AGE = 60 * 60  # 1 hora
 logger = logging.getLogger("ra_manager.coordinador")
+
+# Sistema de notificaciones en memoria (cache simple por estudiante)
+_NOTIFICATIONS_CACHE = {}  # {id_estudiante: [notificaciones...]}
+
+def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
+    """Agregar notificación para un estudiante"""
+    if id_estudiante not in _NOTIFICATIONS_CACHE:
+        _NOTIFICATIONS_CACHE[id_estudiante] = []
+    notif = {
+        "id": str(uuid.uuid4()),
+        "kind": kind,
+        "text": text,
+        "date": dt_module.now().isoformat(),
+        "read": False,
+        "link": link
+    }
+    _NOTIFICATIONS_CACHE[id_estudiante].append(notif)
+    # Mantener solo últimas 50 notificaciones por estudiante
+    if len(_NOTIFICATIONS_CACHE[id_estudiante]) > 50:
+        _NOTIFICATIONS_CACHE[id_estudiante] = _NOTIFICATIONS_CACHE[id_estudiante][-50:]
 
 def _normalize_login_payload(data: dict):
     email = data.get("email") or data.get("correo")
@@ -510,6 +532,134 @@ def coordinador_import_matriculados_view(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
+def docente_import_estudiantes_view(request, codigo_asignatura: str):
+    """Importa estudiantes matriculados desde CSV del SIRA. Solo docente puede importar para su curso.
+    CSV esperado (cabeceras mínimas): codigo_estudiante, (periodo opcional - se usa periodo actual si no se especifica)
+    Campos aceptados:
+      - codigo_estudiante | estudiante | code | matricula
+      - periodo | periodo_academico (opcional)
+    """
+    token = _bearer_token(request)
+    if not token:
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        return Response({"detail": "Solo docentes pueden importar estudiantes"}, status=status.HTTP_403_FORBIDDEN)
+    
+    docente_id = tok.get("id")
+    # Verificar que el docente dicta el curso
+    asignatura = Asignatura.objects.filter(
+        codigo_asignatura=codigo_asignatura,
+        docente_id=docente_id
+    ).first()
+    
+    if not asignatura:
+        return Response({"detail": "No tienes permisos para importar estudiantes en este curso"}, status=status.HTTP_403_FORBIDDEN)
+    
+    f = request.FILES.get("file") or request.FILES.get("csv")
+    if not f:
+        return Response({"detail": "Archivo CSV requerido como 'file'"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Validar archivo
+    fname = getattr(f, 'name', '')
+    ctype = (getattr(f, 'content_type', '') or '').lower()
+    if not fname.lower().endswith('.csv') and 'csv' not in ctype:
+        return Response({"detail": "Se requiere archivo .csv"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    size = int(getattr(f, "size", 0) or 0)
+    if size > 5 * 1024 * 1024:
+        return Response({"detail": "El archivo supera 5MB"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Obtener periodo actual o más reciente
+    periodo_actual = PeriodoAcademico.objects.filter(
+        fecha_inicio__lte=datetime.date.today(),
+        fecha_fin__gte=datetime.date.today()
+    ).first()
+    
+    if not periodo_actual:
+        periodo_actual = PeriodoAcademico.objects.order_by('-fecha_inicio').first()
+    
+    if not periodo_actual:
+        return Response({"detail": "No hay periodo académico configurado"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Lectura CSV
+    try:
+        text_stream = io.TextIOWrapper(f.file, encoding="utf-8-sig")
+    except Exception:
+        content = f.read()
+        text_stream = io.StringIO(content.decode("utf-8", errors="ignore"))
+    
+    reader = csv.DictReader(text_stream)
+    created = 0
+    existing = 0
+    errors = []
+    rownum = 1
+    max_rows = 1000
+    
+    for raw in reader:
+        if rownum > max_rows:
+            errors.append({"row": rownum, "error": f"Se excede límite de {max_rows} filas"})
+            break
+        rownum += 1
+        
+        d = {(k or "").strip().lower(): ((v.strip() if isinstance(v, str) else v)) for k, v in (raw or {}).items()}
+        
+        # Sanitizar
+        for k in list(d.keys()):
+            v = d[k]
+            if isinstance(v, str):
+                d[k] = v.replace('\x00', '').strip()[:255]
+        
+        cod_est = d.get("codigo_estudiante") or d.get("estudiante") or d.get("code") or d.get("matricula")
+        periodo_desc = d.get("periodo") or d.get("periodo_academico")
+        
+        if not cod_est:
+            errors.append({"row": rownum, "error": "Falta codigo_estudiante"})
+            continue
+        
+        est = Estudiante.objects.filter(codigo_estudiante=cod_est).first()
+        if not est:
+            errors.append({"row": rownum, "error": f"Estudiante no encontrado: {cod_est}"})
+            continue
+        
+        # Usar periodo especificado o periodo actual
+        periodo_usar = periodo_actual
+        if periodo_desc:
+            per = PeriodoAcademico.objects.filter(descripcion=periodo_desc).first()
+            if per:
+                periodo_usar = per
+            else:
+                errors.append({"row": rownum, "error": f"Periodo no encontrado: {periodo_desc}, usando periodo actual"})
+        
+        obj, was_created = Matricula.objects.get_or_create(
+            estudiante=est,
+            periodo=periodo_usar,
+            asignatura=asignatura,
+            defaults={"nota_final": None}
+        )
+        
+        if was_created:
+            created += 1
+        else:
+            existing += 1
+    
+    if len(errors) > 100:
+        errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
+    
+    return Response({
+        "created": created,
+        "existing": existing,
+        "errors": errors,
+        "summary": f"Se matricularon {created} nuevos estudiantes. {existing} ya estaban matriculados."
+    }, status=status.HTTP_200_OK)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
 def coordinador_import_docentes_view(request):
     """Importa docentes desde CSV. Solo coordinador.
     CSV columnas mínimas requeridas: codigo_docente, nombre, apellido, correo, tipo_documento, num_documento
@@ -758,6 +908,11 @@ def logout_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_forgot_view(request):
+    import random
+    from django.utils import timezone
+    from datetime import timedelta
+    from ..models.models import PasswordResetOTP
+
     email = (request.data or {}).get("email")
     if not email:
         return Response({"message": "Email requerido"}, status=status.HTTP_400_BAD_REQUEST)
@@ -771,16 +926,29 @@ def password_forgot_view(request):
 
     # Siempre responder 200 para evitar enumeración de usuarios
     if u and rol:
-        payload = {"kind": "pwdreset", "rol": rol, "id": u.pk, "ts": datetime.datetime.utcnow().timestamp()}
-        token = signing.dumps(payload)
-        front = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
-        reset_url = f"{front}/reset?token={token}"
-        subject = "Recuperación de contraseña"
+        # Invalidar OTPs anteriores no usados del mismo email
+        PasswordResetOTP.objects.filter(email=email, is_used=False).update(is_used=True)
+
+        # Generar código OTP de 6 dígitos
+        otp_code = str(random.randint(100000, 999999))
+        
+        # Crear registro OTP con expiración de 10 minutos
+        expires_at = timezone.now() + timedelta(minutes=10)
+        PasswordResetOTP.objects.create(
+            email=email,
+            otp_code=otp_code,
+            expires_at=expires_at,
+            rol=rol
+        )
+
+        # Enviar correo con el código OTP
+        subject = "Código de recuperación de contraseña"
         message = (
             "Hola,\n\n"
             "Recibimos una solicitud para restablecer tu contraseña.\n"
-            f"Usa el siguiente enlace (válido por 1 hora):\n{reset_url}\n\n"
-            "Si no fuiste tú, puedes ignorar este mensaje.\n"
+            f"Tu código de verificación es: {otp_code}\n\n"
+            "Este código es válido por 10 minutos.\n"
+            "Si no fuiste tú, puedes ignorar este mensaje.\n\n"
             "— Universidad del Valle"
         )
         try:
@@ -794,39 +962,81 @@ def password_forgot_view(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
+def verify_otp_view(request):
+    """Verifica el código OTP ingresado por el usuario"""
+    from django.utils import timezone
+    from ..models.models import PasswordResetOTP
+
+    email = (request.data or {}).get("email")
+    otp_code = (request.data or {}).get("otp_code")
+
+    if not email or not otp_code:
+        return Response({"message": "Email y código OTP requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Buscar OTP válido (no usado y no expirado)
+    otp = PasswordResetOTP.objects.filter(
+        email=email,
+        otp_code=otp_code,
+        is_used=False,
+        expires_at__gt=timezone.now()
+    ).first()
+
+    if not otp:
+        return Response({"message": "Código OTP inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # No marcar como usado todavía, se marcará cuando se cambie la contraseña
+    return Response({"ok": True, "message": "Código verificado correctamente"})
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
 def password_reset_view(request):
-    token = (request.data or {}).get("token")
+    """Cambia la contraseña usando el código OTP verificado"""
+    from django.utils import timezone
+    from ..models.models import PasswordResetOTP
+
+    email = (request.data or {}).get("email")
+    otp_code = (request.data or {}).get("otp_code")
     new_pass = (request.data or {}).get("password")
-    if not token or not new_pass:
-        return Response({"message": "Token y password requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not email or not otp_code or not new_pass:
+        return Response({"message": "Email, código OTP y contraseña requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+    
     if len(str(new_pass)) < 6:
         return Response({"message": "La nueva contraseña debe tener al menos 6 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        data = signing.loads(token, max_age=RESET_TOKEN_MAX_AGE)
-    except Exception:
-        return Response({"message": "Token inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
+    # Buscar OTP válido (no usado y no expirado)
+    otp = PasswordResetOTP.objects.filter(
+        email=email,
+        otp_code=otp_code,
+        is_used=False,
+        expires_at__gt=timezone.now()
+    ).first()
 
-    if data.get("kind") != "pwdreset":
-        return Response({"message": "Token inválido"}, status=status.HTTP_400_BAD_REQUEST)
+    if not otp:
+        return Response({"message": "Código OTP inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
 
-    rol = data.get("rol")
-    uid = data.get("id")
+    rol = otp.rol
 
+    # Buscar usuario y cambiar contraseña
     if rol == "docente":
-        u = Docente.objects.filter(pk=uid).first()
+        u = Docente.objects.filter(correo=email).first()
         if not u:
             return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         u.contrasenia_docente = make_password(new_pass)
         u.save(update_fields=["contrasenia_docente"])
     else:
-        u = Estudiante.objects.filter(pk=uid).first()
+        u = Estudiante.objects.filter(correo=email).first()
         if not u:
             return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         u.contrasena_estudiante = make_password(new_pass)
         u.save(update_fields=["contrasena_estudiante"])
 
-    return Response({"ok": True})
+    # Marcar OTP como usado
+    otp.is_used = True
+    otp.save(update_fields=["is_used"])
+
+    return Response({"ok": True, "message": "Contraseña actualizada correctamente"})
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -894,8 +1104,11 @@ class AsignaturaViewSet(viewsets.ModelViewSet):
             if p: qs = qs.filter(periodo=p)
         rows = [{
             "id_estudiante": m.estudiante_id,
+            "codigo_estudiante": m.estudiante.codigo_estudiante,
             "nombre": m.estudiante.nombre,
             "apellido": m.estudiante.apellido,
+            "primer_nombre": m.estudiante.nombre,  # Compatibilidad
+            "primer_apellido": m.estudiante.apellido,  # Compatibilidad
             "id_matricula": m.id_matricula,
             "periodo": m.periodo.descripcion,
         } for m in qs.order_by("estudiante__nombre", "estudiante__apellido")]
@@ -942,7 +1155,7 @@ class AsignaturaViewSet(viewsets.ModelViewSet):
             "descripcion": r.descripcion,
         } for r in qs])
 
-    @action(detail=True, methods=["get", "post"], url_path="recursos")
+    @action(detail=True, methods=["get", "post"], url_path="recursos", permission_classes=[AllowAny], authentication_classes=[])
     def recursos(self, request, codigo_asignatura=None):
         # Buscar asignatura por código
         asign = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
@@ -1145,6 +1358,25 @@ def ra_actividades_view(request, ra_id: int):
     # Asignar indicadores (obligatorios ya validados)
     bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
     RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
+    
+    # 🔔 Crear notificación personalizada para cada estudiante del curso
+    try:
+        ra_obj = ResultadoDeAprendizaje.objects.filter(pk=ra_id).select_related('asignatura').first()
+        if ra_obj:
+            asignatura = ra_obj.asignatura
+            # Obtener todos los estudiantes matriculados en la asignatura
+            matriculas = Matricula.objects.filter(asignatura=asignatura).select_related('estudiante')
+            
+            fecha_str = fecha_cierre_dt.strftime("%d/%m/%Y")
+            notif_link = f"/estudiante?curso={asignatura.codigo_asignatura}"
+            
+            # Crear notificación personalizada para cada estudiante
+            for mat in matriculas:
+                notif_text = f"🎯 {mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
+    except Exception:
+        pass  # No fallar si hay error en notificación
+    
     return Response({
         "id_actividad": act.id_actividad,
         "id_ra_actividad": rel.id_ra_actividad,
@@ -1311,6 +1543,23 @@ def notas_view(request):
         obj.retroalimentacion = retro
         obj.indicador_id = id_ind
         obj.save(update_fields=["nota_ra_actividad", "retroalimentacion", "indicador_id"])
+    
+    # 🔔 Crear notificación personalizada para el estudiante
+    try:
+        matricula = obj.matricula
+        ra_act = obj.ra_actividad
+        actividad = ra_act.actividad
+        asignatura = ra_act.ra.asignatura
+        estudiante = matricula.estudiante
+        
+        # Mensaje personalizado con el nombre del estudiante
+        notif_text = f"📝 {estudiante.primer_nombre}, tu calificación en {asignatura.nombre}: {actividad.nombre_actividad} es {nota}/5"
+        notif_link = f"/estudiante?curso={asignatura.codigo_asignatura}"
+        
+        _add_notification(estudiante.id_estudiante, "grade", notif_text, notif_link)
+    except Exception:
+        pass  # No fallar si hay error en notificación
+    
     return Response({
         "id": obj.id,
         "id_matricula": obj.matricula_id,
@@ -1715,12 +1964,17 @@ def notifications_view(request):
     rol, uid = tok.get("rol"), tok.get("id")
     if rol != "estudiante":
         return Response([], status=status.HTTP_200_OK)
+    
+    # 🔔 Obtener notificaciones del cache
+    cached_notifications = _NOTIFICATIONS_CACHE.get(uid, [])
 
     mats = Matricula.objects.filter(estudiante_id=uid).select_related("asignatura")
     hoy = datetime.date.today()
     limite = hoy + datetime.timedelta(days=7)
-    proximas, bajas = [], []
+    hace_7_dias = hoy - datetime.timedelta(days=7)
+    proximas, bajas, nuevas_notas, nuevas_actividades = [], [], [], []
 
+    # 1. Actividades próximas a vencer (sin calificar)
     for m in mats:
         rels = RaActividad.objects.filter(ra__asignatura=m.asignatura).select_related("actividad", "ra")
         notas = {n.ra_actividad_id: n for n in NotasActividad.objects.filter(matricula=m)}
@@ -1728,15 +1982,62 @@ def notifications_view(request):
             act = rel.actividad
             n = notas.get(rel.id_ra_actividad)
             if act.fecha_cierre and (hoy <= act.fecha_cierre <= limite) and (not n or n.nota_ra_actividad is None):
-                proximas.append({"kind": "warning", "text": f'Actividad "{act.nombre_actividad}" de {m.asignatura.nombre} vence {act.fecha_cierre.isoformat()}'})
+                proximas.append({"kind": "deadline", "text": f'Actividad "{act.nombre_actividad}" de {m.asignatura.nombre} vence {act.fecha_cierre.isoformat()}', "date": act.fecha_cierre.isoformat(), "id": f"deadline-{rel.id_ra_actividad}"})
 
+    # 2. Notas recién calificadas (últimos 7 días) - NUEVO
+    from django.db.models import Max
+    for m in mats:
+        # Buscar notas que fueron actualizadas recientemente
+        # Nota: Necesitaríamos un campo `fecha_calificacion` en NotasActividad para ser preciso
+        # Por ahora, mostramos notas que existen (asumiendo que son recientes si no se habían visto)
+        notas_recientes = NotasActividad.objects.filter(
+            matricula=m,
+            nota_ra_actividad__isnull=False
+        ).select_related('ra_actividad__actividad').order_by('-id')[:5]  # Últimas 5 notas
+        
+        for nota in notas_recientes:
+            act_nombre = nota.ra_actividad.actividad.nombre_actividad
+            nota_val = float(nota.nota_ra_actividad)
+            nuevas_notas.append({
+                "kind": "grade",
+                "text": f'Nueva calificación en "{act_nombre}" de {m.asignatura.nombre}: {nota_val:.1f}/5',
+                "id": f"grade-{nota.id}",
+                "link": f"/estudiante?curso={m.asignatura.codigo_asignatura}"
+            })
+
+    # 3. Nuevas actividades creadas (últimos 7 días) - NUEVO
+    for m in mats:
+        acts_nuevas = Actividad.objects.filter(
+            id_actividad__in=RaActividad.objects.filter(
+                ra__asignatura=m.asignatura
+            ).values_list('actividad_id', flat=True),
+            fecha_creacion__gte=hace_7_dias
+        ).order_by('-fecha_creacion')[:5]
+        
+        for act in acts_nuevas:
+            nuevas_actividades.append({
+                "kind": "resource",
+                "text": f'Nueva actividad "{act.nombre_actividad}" en {m.asignatura.nombre}',
+                "date": act.fecha_creacion.isoformat(),
+                "id": f"activity-{act.id_actividad}",
+                "link": f"/estudiante?curso={m.asignatura.codigo_asignatura}"
+            })
+
+    # 4. Promedios bajos
     for m in mats:
         qs = NotasActividad.objects.filter(matricula=m).exclude(nota_ra_actividad__isnull=True)
         avg = qs.aggregate(v=Avg("nota_ra_actividad"))["v"]
         if avg is not None and avg < 3.0:
-            bajas.append({"kind": "danger", "text": f'Vas bajo en {m.asignatura.nombre}: promedio {avg:.2f}/5'})
+            bajas.append({"kind": "danger", "text": f'Vas bajo en {m.asignatura.nombre}: promedio {avg:.2f}/5', "id": f"low-{m.id_matricula}"})
 
-    return Response((proximas[:10] + bajas[:10])[:20])
+    # Combinar notificaciones del cache con las automáticas del sistema
+    all_notifications = (
+        cached_notifications +  # 🔔 Notificaciones en tiempo real (calificaciones, nuevas actividades)
+        proximas[:10] +  # Actividades por vencer
+        bajas[:5]  # Promedios bajos
+    )
+    # Retornar últimas 30 notificaciones
+    return Response(all_notifications[-30:])
 
 
 @api_view(["POST"])
@@ -1857,6 +2158,21 @@ def actividades_multi_view(request):
                 valid_inds = set(IndicadoresDeLogro.objects.filter(ra_id=rid, id_ind__in=inds).values_list("id_ind", flat=True))
                 bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
                 RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
+            
+            # 🔔 Crear notificación personalizada para cada estudiante del curso
+            try:
+                asignatura = ra_objs[0].asignatura if ra_objs else None
+                if asignatura:
+                    matriculas = Matricula.objects.filter(asignatura=asignatura).select_related('estudiante')
+                    fecha_str = fecha_cierre_dt.strftime("%d/%m/%Y")
+                    notif_link = f"/estudiante?curso={asignatura.codigo_asignatura}"
+                    
+                    # Crear notificación personalizada para cada estudiante
+                    for mat in matriculas:
+                        notif_text = f"🎯 {mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                        _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
+            except Exception:
+                pass  # No fallar si hay error en notificación
     except (IntegrityError, DatabaseError) as e:
         # Capturar mensajes del trigger para devolver 400 legible
         msg = str(e)

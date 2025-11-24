@@ -271,6 +271,18 @@ const DocenteCalificar: React.FC = () => {
     const relatedActivities = activities.filter(act => act.id === a.id && act.raActividadId)
     const keysToUpdate = relatedActivities.map(act => act.raActividadId!)
     
+    // Validación adicional: verificar que hay relaciones válidas
+    if (keysToUpdate.length === 0) {
+      setToast({ text: 'Error: No se encontraron relaciones RA-Actividad válidas.', type: 'error' })
+      return
+    }
+    
+    // Validación: verificar que la matrícula existe
+    if (!selectedStudent.matriculaId) {
+      setToast({ text: 'Error: Estudiante sin matrícula válida.', type: 'error' })
+      return
+    }
+    
     // Marcar todas como "guardando"
     setEdits(prev => {
       const updated = { ...prev }
@@ -282,17 +294,48 @@ const DocenteCalificar: React.FC = () => {
 
     try {
       // Guardar la nota en TODAS las relaciones ra_actividad de esta actividad
-      const savePromises = keysToUpdate.map(raActId =>
-        upsertGrade({
-          matriculaId: selectedStudent.matriculaId,
-          raActividadId: raActId,
-          nota: notaNum,
-          retroalimentacion: eff.retro || undefined,
-          indicadorId: eff.indicadorId || undefined,
-        })
-      )
+      const savePromises = keysToUpdate.map(async (raActId) => {
+        try {
+          return await upsertGrade({
+            matriculaId: selectedStudent.matriculaId,
+            raActividadId: raActId,
+            nota: notaNum,
+            retroalimentacion: eff.retro || undefined,
+            indicadorId: eff.indicadorId || undefined,
+          })
+        } catch (error) {
+          // Capturar error específico de esta relación
+          throw { raActId, error }
+        }
+      })
       
-      await Promise.all(savePromises)
+      const results = await Promise.allSettled(savePromises)
+      
+      // Verificar si alguna falló
+      const failed = results.filter(r => r.status === 'rejected')
+      
+      if (failed.length > 0) {
+        // Al menos una operación falló
+        const firstError = (failed[0] as PromiseRejectedResult).reason
+        const errorMsg = firstError?.error?.response?.data?.detail 
+          || firstError?.error?.response?.data?.message
+          || firstError?.error?.message
+          || 'Error desconocido'
+        
+        setEdits(prev => {
+          const updated = { ...prev }
+          keysToUpdate.forEach(k => {
+            updated[k] = { ...(prev[k] || {}), saving: false }
+          })
+          return updated
+        })
+        
+        setToast({ 
+          text: `Error al guardar: ${errorMsg}. ${failed.length > 1 ? `Fallaron ${failed.length} de ${keysToUpdate.length} operaciones.` : ''}`, 
+          type: 'error' 
+        })
+        return
+      }
       
       if (import.meta.env.DEV) {
         console.debug(`✅ Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
@@ -347,17 +390,32 @@ const DocenteCalificar: React.FC = () => {
       })
       // Extraer mensaje de error de manera segura
       const resData = (err as { response?: { data?: unknown } })?.response?.data
-      let msg = 'No se pudo guardar. Inténtalo de nuevo.'
-      if (typeof resData === 'string') msg = resData
-      else if (resData && typeof resData === 'object') {
+      let msg = 'No se pudo guardar la nota.'
+      let reason = ''
+      
+      if (typeof resData === 'string') {
+        msg = resData
+      } else if (resData && typeof resData === 'object') {
         const rec = resData as Record<string, unknown>
         if (typeof rec.message === 'string') msg = rec.message
         else if (typeof rec.detail === 'string') msg = rec.detail
+        
+        // Razones comunes
+        if (msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('no autorizado')) {
+          reason = ' (Sesión expirada o sin permisos)'
+        } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no existe')) {
+          reason = ' (Actividad o estudiante no encontrado)'
+        } else if (msg.toLowerCase().includes('constraint') || msg.toLowerCase().includes('restricción')) {
+          reason = ' (Violación de restricción de BD)'
+        } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('timeout')) {
+          reason = ' (Error de conexión)'
+        }
       } else if (err && typeof err === 'object' && 'message' in (err as Record<string, unknown>)) {
         const eMsg = (err as Record<string, unknown>).message
         if (typeof eMsg === 'string') msg = eMsg
       }
-      setToast({ text: msg, type: 'error' })
+      
+      setToast({ text: `${msg}${reason}`, type: 'error' })
     }
   }
 

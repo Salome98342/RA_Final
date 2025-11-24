@@ -24,15 +24,40 @@ const SessionContext = createContext<Ctx | undefined>(undefined)
 export const SessionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [state, setState] = useState<SessionState>(() => {
     try {
-      const raw = localStorage.getItem('session')
-      return raw ? JSON.parse(raw) : defaultState
+      // Priorizar sessionStorage (aislado por pestaña)
+      const sessionRaw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('session') : null
+      if (sessionRaw) {
+        return JSON.parse(sessionRaw)
+      }
+
+      // Fallback a localStorage (migración automática)
+      const localRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('session') : null
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw)
+        // Migrar a sessionStorage
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('session', localRaw)
+        }
+        return parsed
+      }
+
+      return defaultState
     } catch {
       return defaultState
     }
   })
 
   useEffect(() => {
-    try { localStorage.setItem('session', JSON.stringify(state)) } catch { /* ignore */ }
+    try {
+      // Guardar en sessionStorage (aislado por pestaña)
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('session', JSON.stringify(state))
+      }
+      // También en localStorage para persistencia entre recargas
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('session', JSON.stringify(state))
+      }
+    } catch { /* ignore */ }
   }, [state])
 
   const value = useMemo<Ctx>(() => ({

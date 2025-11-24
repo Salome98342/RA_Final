@@ -8,11 +8,65 @@ export const api = axios.create({
   timeout: 30000, // 30 segundos timeout
 })
 
+// ==================== GESTIÓN DE TOKENS ====================
+/**
+ * Estrategia de almacenamiento de tokens:
+ * - sessionStorage: Aislado por pestaña (no se comparte entre pestañas)
+ * - localStorage: Compartido entre pestañas (fallback para compatibilidad)
+ * 
+ * PRIORIDAD: sessionStorage > localStorage
+ * Esto evita que múltiples sesiones se sobrescriban entre pestañas
+ */
+function getAuthToken(): string | null {
+  // Priorizar sessionStorage (aislado por pestaña)
+  if (typeof sessionStorage !== 'undefined') {
+    const sessionToken = sessionStorage.getItem('auth_token')
+    if (sessionToken) return sessionToken
+  }
+  
+  // Fallback a localStorage (compartido entre pestañas)
+  if (typeof localStorage !== 'undefined') {
+    const localToken = localStorage.getItem('auth_token')
+    if (localToken) {
+      // Migrar a sessionStorage para aislar la sesión
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('auth_token', localToken)
+      }
+      return localToken
+    }
+  }
+  
+  return null
+}
+
+function setAuthToken(token: string): void {
+  // Guardar en sessionStorage (aislado por pestaña)
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('auth_token', token)
+  }
+  // También en localStorage para persistencia entre recargas
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('auth_token', token)
+  }
+}
+
+function removeAuthToken(): void {
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('auth_token')
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('auth_token')
+  }
+}
+
+// Exportar funciones de gestión de tokens
+export { getAuthToken, setAuthToken, removeAuthToken }
+
 // ==================== REQUEST INTERCEPTOR ====================
 api.interceptors.request.use(
   (config) => {
-    // Attach Bearer token from localStorage on every request
-    const t = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
+    // Attach Bearer token usando la función de gestión de tokens
+    const t = getAuthToken()
     if (t) {
       if (!config.headers) config.headers = {} as AxiosRequestHeaders
       ;(config.headers as Record<string, string>)['Authorization'] = `Bearer ${t}`
@@ -84,11 +138,10 @@ api.interceptors.response.use(
       
       console.warn('⚠️ 401 Unauthorized - Redirecting to login...')
       
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('auth_token')
-      }
+      // Usar función centralizada para limpiar tokens
+      removeAuthToken()
       
-      // Limpiar estado de sesión si existe
+      // Limpiar todo el sessionStorage de la pestaña actual
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.clear()
       }

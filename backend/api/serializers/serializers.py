@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from ..models.models import (
     TipoDocumento, TipoActividad, Programa, Docente, Estudiante, Asignatura,
-    Task, ResultadoDeAprendizaje, Matricula, Recurso
+    Task, ResultadoDeAprendizaje, Matricula, Recurso, PasswordResetOTP
 )
 
 class TaskSerializer(serializers.ModelSerializer):

@@ -1,4 +1,4 @@
-import { api } from '@/connections/http'
+import { api, setAuthToken, removeAuthToken } from '@/connections/http'
 import { endpoints, type UserProfile } from '@/connections/endpoints'
 import type { ProfileDetails } from '@/types'
 
@@ -7,7 +7,8 @@ export async function login(code: string, password: string): Promise<UserProfile
   const token: string | undefined = data?.token
   const user = data?.user || {}
   if (token) {
-    try { localStorage.setItem('auth_token', token) } catch { /* ignore storage errors */ }
+    // Usar función centralizada para guardar token (sessionStorage + localStorage)
+    setAuthToken(token)
   }
   return {
     id: String(user.id ?? ''),
@@ -18,8 +19,15 @@ export async function login(code: string, password: string): Promise<UserProfile
 }
 
 export async function logout() {
-  try { await api.post(endpoints.auth.logout, {}) } finally {
-    try { localStorage.removeItem('auth_token') } catch { /* ignore */ }
+  try { 
+    await api.post(endpoints.auth.logout, {}) 
+  } finally {
+    // Usar función centralizada para limpiar token
+    removeAuthToken()
+    // Limpiar sessionStorage de la pestaña actual
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear()
+    }
   }
 }
 
@@ -27,8 +35,12 @@ export async function requestPasswordReset(email: string) {
   await api.post(endpoints.auth.forgot, { email })
 }
 
-export async function resetPassword(token: string, password: string) {
-  await api.post(endpoints.auth.reset, { token, password })
+export async function verifyOTP(email: string, otp_code: string) {
+  await api.post(endpoints.auth.verifyOtp, { email, otp_code })
+}
+
+export async function resetPassword(email: string, otp_code: string, password: string) {
+  await api.post(endpoints.auth.reset, { email, otp_code, password })
 }
 
 export async function getFullProfile(): Promise<ProfileDetails> {

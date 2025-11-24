@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 class Task(models.Model):
     title = models.CharField(max_length=100)
@@ -7,6 +8,28 @@ class Task(models.Model):
     completed = models.BooleanField(default=False)
     def __str__(self):
         return self.title
+
+
+class PasswordResetOTP(models.Model):
+    """Modelo para almacenar códigos OTP de recuperación de contraseña"""
+    id = models.BigAutoField(primary_key=True)
+    email = models.EmailField(max_length=255, db_index=True)
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    rol = models.CharField(max_length=20)  # 'estudiante' o 'docente'
+
+    class Meta:
+        db_table = "password_reset_otp"
+        ordering = ['-created_at']
+
+    def is_valid(self):
+        """Verifica si el OTP aún es válido (no usado y no expirado)"""
+        return not self.is_used and timezone.now() < self.expires_at
+
+    def __str__(self):
+        return f"OTP {self.otp_code} para {self.email}"
     
 
 
