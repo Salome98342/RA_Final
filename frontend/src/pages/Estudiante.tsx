@@ -25,6 +25,7 @@ const Estudiante: React.FC = () => {
   const [view, setView] = useState<'notifs'|'cursos'|'tareas'|'recursos'>('cursos')
   type TaskItem = { id: string; courseId: string; courseName: string; raId: string; actId: string; nombre: string; fechaCierre?: string | null; tipo?: string }
   const [tasks, setTasks] = useState<TaskItem[]>([])
+  const [rawResources, setRawResources] = useState<Array<{ curso: string; items: Array<{ id: string; titulo: string; url: string; fecha: string }> }>>([])
   // Nota ponderada por curso (0-5) y porcentaje (0-100)
   const [courseStats, setCourseStats] = useState<Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }>>({})
   const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, import('@/types').GradeSummaryResponse>>({})
@@ -173,6 +174,19 @@ const Estudiante: React.FC = () => {
           const db = b.fechaCierre ? new Date(b.fechaCierre).getTime() : Number.MAX_SAFE_INTEGER
           return da - db || a.courseName.localeCompare(b.courseName) || a.nombre.localeCompare(b.nombre)
         })
+
+        // Cargar recursos de todos los cursos
+        const { getRecursosByCourse } = await import('@/services/api')
+        const resourcesPromises = list.map(async (c) => {
+          try {
+            const items = await getRecursosByCourse(c.id)
+            return { curso: c.id, items }
+          } catch {
+            return { curso: c.id, items: [] }
+          }
+        })
+        const resourcesData = await Promise.all(resourcesPromises)
+        if (mounted) setRawResources(resourcesData)
 
         if (mounted) { setNotifications(notes); setTasks(todos); setCourseStats(stats); setGradeSummaryByCourse({...gradeSummaryByCourse}) }
       })
@@ -846,6 +860,94 @@ const Estudiante: React.FC = () => {
               </div>
               <button className="btn btn-outline-danger mt-3" onClick={()=>setSelectedGroupedActivity(null)}>
                 <i className="bi bi-arrow-left" /> Volver a actividades
+              </button>
+            </section>
+          )}
+
+          {/* Vista de RECURSOS */}
+          {view === 'recursos' && (
+            <section className="panel shown">
+              <div className="content-title d-flex align-items-center gap-2 mb-3">
+                <i className="bi bi-paperclip"></i>
+                Recursos y Documentos
+              </div>
+
+              {/* Mostrar todos los recursos de todos los cursos directamente */}
+              {(() => {
+                // Agrupar recursos por curso
+                const allResources = rawResources.flatMap(rc => 
+                  rc.items.map(item => ({
+                    ...item,
+                    cursoId: rc.curso,
+                    cursoNombre: courses.find(c => c.id === rc.curso)?.nombre || 'Curso desconocido'
+                  }))
+                )
+
+                if (allResources.length === 0) {
+                  return (
+                    <div className="alert alert-secondary shadow-sm d-flex align-items-center">
+                      <i className="bi bi-inbox-fill me-2 fs-5"></i>
+                      <span>No hay documentos disponibles en tus cursos aún.</span>
+                    </div>
+                  )
+                }
+
+                // Agrupar por curso para mostrar organizadamente
+                const resourcesByCourse = rawResources.filter(rc => rc.items.length > 0)
+
+                return (
+                  <div>
+                    {resourcesByCourse.map(rc => {
+                      const curso = courses.find(c => c.id === rc.curso)
+                      if (!curso || rc.items.length === 0) return null
+                      
+                      return (
+                        <div key={rc.curso} className="mb-4">
+                          <div className="d-flex align-items-center gap-2 mb-2">
+                            <i className="bi bi-book text-danger"></i>
+                            <h5 className="mb-0">{curso.nombre}</h5>
+                            <span className="badge bg-light text-dark">{rc.items.length} documento{rc.items.length !== 1 ? 's' : ''}</span>
+                          </div>
+                          
+                          <ul className="list-group ra-list-group">
+                            {rc.items.map((r: { id: string; titulo: string; url: string; fecha: string }) => (
+                              <li
+                                key={r.id}
+                                className="list-group-item shadow-sm d-flex justify-content-between align-items-center"
+                                onDoubleClick={() => window.open(r.url, '_blank')}
+                              >
+                                <div>
+                                  <div className="d-flex align-items-center gap-2">
+                                    <i className="bi bi-file-earmark-pdf-fill text-danger"></i>
+                                    <span className="fw-semibold">{r.titulo}</span>
+                                  </div>
+                                  <div className="ra-small text-muted mt-1">
+                                    <i className="bi bi-calendar3 me-1"></i>
+                                    {new Date(r.fecha).toLocaleString()}
+                                  </div>
+                                </div>
+                                <a
+                                  className="btn btn-sm btn-outline-danger shadow-sm"
+                                  href={r.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Descargar documento"
+                                >
+                                  <i className="bi bi-download me-1"></i>
+                                  Descargar
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
+              <button className="btn btn-outline-danger mt-3" onClick={() => setView('cursos')}>
+                <i className="bi bi-arrow-left" /> Volver a inicio
               </button>
             </section>
           )}

@@ -196,11 +196,14 @@ const DocenteCrearActividad: React.FC = () => {
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente') }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
         <main className="dash-content">
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div className="content-title">Crear actividad · Curso {curso} · RA {raId}</div>
+          <div className="d-flex align-items-center justify-content-between mb-4">
+            <div className="content-title">
+              <i className="bi bi-plus-circle-fill text-success me-2"></i>
+              Crear actividad · Curso {curso} · RA {raId}
+            </div>
             {state.role === 'coordinador' && (
               <button 
-                className="btn btn-outline-primary"
+                className="btn btn-outline-primary shadow-sm"
                 onClick={() => navigate('/coordinador/materias')}
                 title="Volver a la vista del coordinador"
               >
@@ -210,38 +213,41 @@ const DocenteCrearActividad: React.FC = () => {
             )}
           </div>
           {raVal && (
-            <div className="row g-2 mb-2">
+            <div className="row g-3 mb-3">
               <div className="col-md-6">
-                <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
-                  Actividades actuales: <strong>{raVal.actividades.suma.toFixed(2)}%</strong> · {raVal.actividades.ok ? '¡Listo 100%!' : `Faltan ${raVal.actividades.faltante.toFixed(2)}%`}
+                <div className={`alert shadow-sm ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`}>
+                  <i className={`bi ${raVal.actividades.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
+                  <div className="flex-grow-1">
+                    <div>Actividades actuales: <strong>{raVal.actividades.suma.toFixed(2)}%</strong> · {raVal.actividades.ok ? '¡Listo 100%!' : `Faltan ${raVal.actividades.faltante.toFixed(2)}%`}</div>
+                    {(() => {
+                      const suma = raVal.actividades.suma
+                      const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
+                      return (
+                        <progress
+                          className={`uv-progress mt-2 ${variant}`}
+                          value={Math.min(100, Math.max(0, suma))}
+                          max={100}
+                          aria-label="Progreso actividades a 100%"
+                          title={`Progreso actividades: ${suma.toFixed(0)}%`}
+                        />
+                      )
+                    })()}
+                    {nuevoTotalAct != null && !Number.isNaN(nuevoTotalAct) && (
+                      (() => {
+                        const variant = excedeAct ? 'prog-danger' : (Math.abs(nuevoTotalAct - 100) < 1e-9 ? 'prog-success' : 'prog-warning')
+                        return (
+                          <progress
+                            className={`uv-progress mt-1 ${variant}`}
+                            value={Math.min(100, Math.max(0, nuevoTotalAct))}
+                            max={100}
+                            aria-label="Nuevo total con esta actividad"
+                            title={`Nuevo total: ${nuevoTotalAct.toFixed(0)}%`}
+                          />
+                        )
+                      })()
+                    )}
+                  </div>
                 </div>
-                {(() => {
-                  const suma = raVal.actividades.suma
-                  const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
-                  return (
-                    <progress
-                      className={`uv-progress ${variant}`}
-                      value={Math.min(100, Math.max(0, suma))}
-                      max={100}
-                      aria-label="Progreso actividades a 100%"
-                      title={`Progreso actividades: ${suma.toFixed(0)}%`}
-                    />
-                  )
-                })()}
-                {nuevoTotalAct != null && !Number.isNaN(nuevoTotalAct) && (
-                  (() => {
-                    const variant = excedeAct ? 'prog-danger' : (Math.abs(nuevoTotalAct - 100) < 1e-9 ? 'prog-success' : 'prog-warning')
-                    return (
-                      <progress
-                        className={`uv-progress mt-1 ${variant}`}
-                        value={Math.min(100, Math.max(0, nuevoTotalAct))}
-                        max={100}
-                        aria-label="Nuevo total con esta actividad"
-                        title={`Nuevo total: ${nuevoTotalAct.toFixed(0)}%`}
-                      />
-                    )
-                  })()
-                )}
               </div>
               <div className="col-md-6">
                 {/* Bloque de indicadores eliminado: sin texto ni barras por requerimiento */}
@@ -303,9 +309,15 @@ const DocenteCrearActividad: React.FC = () => {
 
             {/* Selección de múltiples RAs del curso (opcional) */}
             <div className="col-12">
-              <div className="fw-bold mb-2">Aplicar también a otros RAs del curso</div>
+              <div className="fw-bold mb-3 d-flex align-items-center">
+                <i className="bi bi-diagram-3-fill text-primary me-2 fs-5"></i>
+                Aplicar también a otros RAs del curso
+              </div>
               {ras.length <= 1 ? (
-                <div className="text-muted">No hay más RAs en este curso.</div>
+                <div className="alert alert-info shadow-sm d-flex align-items-center">
+                  <i className="bi bi-info-circle-fill me-2 fs-5"></i>
+                  No hay más RAs en este curso.
+                </div>
               ) : (
                 <div className="row g-2">
                   {ras.map(r => (
@@ -346,14 +358,14 @@ const DocenteCrearActividad: React.FC = () => {
 
               {/* Vista previa de porcentajes por RA seleccionado */}
               {selectedRAs.length > 0 && (
-                <div className="table-responsive mt-2">
-                  <table className="table table-sm align-middle">
-                    <thead>
+                <div className="table-responsive mt-3 shadow-sm border rounded">
+                  <table className="table table-sm align-middle mb-0">
+                    <thead className="table-light">
                       <tr>
-                        <th>RA</th>
-                        <th className="w-220px">Total actual</th>
-                        <th className="w-160px">Aporte (%)</th>
-                        <th className="w-220px">Quedaría en</th>
+                        <th className="fw-bold"><i className="bi bi-bullseye me-1"></i>RA</th>
+                        <th className="w-220px fw-bold"><i className="bi bi-graph-up me-1"></i>Total actual</th>
+                        <th className="w-160px fw-bold"><i className="bi bi-percent me-1"></i>Aporte (%)</th>
+                        <th className="w-220px fw-bold"><i className="bi bi-calculator me-1"></i>Quedaría en</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -456,8 +468,16 @@ const DocenteCrearActividad: React.FC = () => {
 
               {/* Checklist de indicadores de logro asociados al RA */}
               <div className="col-12">
-                <div className="fw-bold mb-2">Indicadores de logro vinculados</div>
-                {allIndicators.length === 0 ? null : (
+                <div className="fw-bold mb-3 d-flex align-items-center">
+                  <i className="bi bi-check2-square text-success me-2 fs-5"></i>
+                  Indicadores de logro vinculados
+                </div>
+                {allIndicators.length === 0 ? (
+                  <div className="alert alert-info shadow-sm d-flex align-items-center">
+                    <i className="bi bi-info-circle-fill me-2 fs-5"></i>
+                    No hay indicadores definidos para este RA.
+                  </div>
+                ) : (
                   <div className="row">
                     {allIndicators.map((ind) => (
                       <div key={ind.id} className="col-md-6">
@@ -483,11 +503,24 @@ const DocenteCrearActividad: React.FC = () => {
                 <div className="form-text">Puedes asignar esta actividad a uno o varios indicadores del RA.</div>
               </div>
 
-            <div className="col-12 d-flex gap-2">
-              <button className="btn btn-danger" disabled={saving} onClick={submit}>
-                {saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Crear actividad'}
+            <div className="col-12 d-flex gap-2 mt-3">
+              <button className="btn btn-danger shadow" disabled={saving} onClick={submit}>
+                {saving ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    Guardando…
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-check-circle-fill me-2"></i>
+                    Crear actividad
+                  </>
+                )}
               </button>
-              <button className="btn btn-outline-secondary" onClick={()=>navigate(-1)}>Cancelar</button>
+              <button className="btn btn-outline-secondary shadow-sm" onClick={()=>navigate(-1)}>
+                <i className="bi bi-x-circle me-2"></i>
+                Cancelar
+              </button>
             </div>
           </div>
         </main>

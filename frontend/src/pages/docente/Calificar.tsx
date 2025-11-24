@@ -265,52 +265,157 @@ const DocenteCalificar: React.FC = () => {
       setToast({ text: 'Selecciona un indicador para esta actividad.', type: 'error' })
       return
     }
-    setEdits(prev => ({ ...prev, [key]: { ...(prev[key] || {}), saving: true } }))
-    try {
-      const resp = await upsertGrade({
-        matriculaId: selectedStudent.matriculaId,
-        raActividadId: key,
-        nota: notaNum,
-        retroalimentacion: eff.retro || undefined,
-        indicadorId: eff.indicadorId || undefined,
+
+    // 🔴 MULTI-RA: Detectar si esta actividad está en múltiples RAs
+    // Buscar todas las actividades con el mismo id_actividad (diferentes ra_actividad_id)
+    const relatedActivities = activities.filter(act => act.id === a.id && act.raActividadId)
+    const keysToUpdate = relatedActivities.map(act => act.raActividadId!)
+    
+    // Validación adicional: verificar que hay relaciones válidas
+    if (keysToUpdate.length === 0) {
+      setToast({ text: 'Error: No se encontraron relaciones RA-Actividad válidas.', type: 'error' })
+      return
+    }
+    
+    // Validación: verificar que la matrícula existe
+    if (!selectedStudent.matriculaId) {
+      setToast({ text: 'Error: Estudiante sin matrícula válida.', type: 'error' })
+      return
+    }
+    
+    // Marcar todas como "guardando"
+    setEdits(prev => {
+      const updated = { ...prev }
+      keysToUpdate.forEach(k => {
+        updated[k] = { ...(prev[k] || {}), saving: true }
       })
-      if (import.meta.env.DEV) {
-        // Log de ayuda en desarrollo
-        if (import.meta.env.DEV) console.debug('upsertGrade OK', resp)
+      return updated
+    })
+
+    try {
+      // Guardar la nota en TODAS las relaciones ra_actividad de esta actividad
+      const savePromises = keysToUpdate.map(async (raActId) => {
+        try {
+          return await upsertGrade({
+            matriculaId: selectedStudent.matriculaId,
+            raActividadId: raActId,
+            nota: notaNum,
+            retroalimentacion: eff.retro || undefined,
+            indicadorId: eff.indicadorId || undefined,
+          })
+        } catch (error) {
+          // Capturar error específico de esta relación
+          throw { raActId, error }
+        }
+      })
+      
+      const results = await Promise.allSettled(savePromises)
+      
+      // Verificar si alguna falló
+      const failed = results.filter(r => r.status === 'rejected')
+      
+      if (failed.length > 0) {
+        // Al menos una operación falló
+        const firstError = (failed[0] as PromiseRejectedResult).reason
+        const errorMsg = firstError?.error?.response?.data?.detail 
+          || firstError?.error?.response?.data?.message
+          || firstError?.error?.message
+          || 'Error desconocido'
+        
+        setEdits(prev => {
+          const updated = { ...prev }
+          keysToUpdate.forEach(k => {
+            updated[k] = { ...(prev[k] || {}), saving: false }
+          })
+          return updated
+        })
+        
+        setToast({ 
+          text: `Error al guardar: ${errorMsg}. ${failed.length > 1 ? `Fallaron ${failed.length} de ${keysToUpdate.length} operaciones.` : ''}`, 
+          type: 'error' 
+        })
+        return
       }
-      setEdits(prev => ({
-        ...prev,
-        [key]: { ...(prev[key] || {}), saving: false, dirty: false, savedAt: Date.now() },
-      }))
-      setActivities(prev => prev.map(x => x.raActividadId === key ? { ...x, nota: notaNum, retroalimentacion: eff.retro || null, indicadorId: eff.indicadorId || null } : x))
-      setToast({ text: 'Guardado correctamente.' })
-    // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
-    const raForAct = (a as unknown as { _raId?: string })._raId
+      
+      if (import.meta.env.DEV) {
+        console.debug(`✅ Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
+      }
+      
+      // Marcar todas como guardadas
+      setEdits(prev => {
+        const updated = { ...prev }
+        keysToUpdate.forEach(k => {
+          updated[k] = { ...(prev[k] || {}), saving: false, dirty: false, savedAt: Date.now() }
+        })
+        return updated
+      })
+      
+      // Actualizar TODAS las actividades relacionadas con la nueva nota
+      setActivities(prev => prev.map(x => 
+        keysToUpdate.includes(x.raActividadId || '') 
+          ? { ...x, nota: notaNum, retroalimentacion: eff.retro || null, indicadorId: eff.indicadorId || null } 
+          : x
+      ))
+      
+      const multiMsg = keysToUpdate.length > 1 ? ` (replicada en ${keysToUpdate.length} RAs)` : ''
+      setToast({ text: `Guardado correctamente${multiMsg}.` })
+      
+      // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
+      const raForAct = (a as unknown as { _raId?: string })._raId
       if (selectedStudent && raForAct) {
         try {
           const freshActs = await getActivitiesByRA(raForAct, { matriculaId: selectedStudent.matriculaId })
-          const updated = freshActs.find(f => String(f.raActividadId) === String(key))
-          if (updated) {
-            setActivities(prev => prev.map(x => x.raActividadId === key ? { ...x, nota: updated.nota ?? notaNum, retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), indicadorId: updated.indicadorId ?? (eff.indicadorId || null) } : x))
-          }
+          // Actualizar todas las relaciones con datos frescos del backend
+          keysToUpdate.forEach(k => {
+            const updated = freshActs.find(f => String(f.raActividadId) === String(k))
+            if (updated) {
+              setActivities(prev => prev.map(x => 
+                x.raActividadId === k 
+                  ? { ...x, nota: updated.nota ?? notaNum, retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), indicadorId: updated.indicadorId ?? (eff.indicadorId || null) } 
+                  : x
+              ))
+            }
+          })
         } catch {/* ignore */}
       }
       if (showChart && selectedStudent) await renderChart(selectedStudent)
     } catch (err: unknown) {
-      setEdits(prev => ({ ...prev, [key]: { ...(prev[key] || {}), saving: false } }))
+      // Marcar todas como error
+      setEdits(prev => {
+        const updated = { ...prev }
+        keysToUpdate.forEach(k => {
+          updated[k] = { ...(prev[k] || {}), saving: false }
+        })
+        return updated
+      })
       // Extraer mensaje de error de manera segura
       const resData = (err as { response?: { data?: unknown } })?.response?.data
-      let msg = 'No se pudo guardar. Inténtalo de nuevo.'
-      if (typeof resData === 'string') msg = resData
-      else if (resData && typeof resData === 'object') {
+      let msg = 'No se pudo guardar la nota.'
+      let reason = ''
+      
+      if (typeof resData === 'string') {
+        msg = resData
+      } else if (resData && typeof resData === 'object') {
         const rec = resData as Record<string, unknown>
         if (typeof rec.message === 'string') msg = rec.message
         else if (typeof rec.detail === 'string') msg = rec.detail
+        
+        // Razones comunes
+        if (msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('no autorizado')) {
+          reason = ' (Sesión expirada o sin permisos)'
+        } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no existe')) {
+          reason = ' (Actividad o estudiante no encontrado)'
+        } else if (msg.toLowerCase().includes('constraint') || msg.toLowerCase().includes('restricción')) {
+          reason = ' (Violación de restricción de BD)'
+        } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('timeout')) {
+          reason = ' (Error de conexión)'
+        }
       } else if (err && typeof err === 'object' && 'message' in (err as Record<string, unknown>)) {
         const eMsg = (err as Record<string, unknown>).message
         if (typeof eMsg === 'string') msg = eMsg
       }
-      setToast({ text: msg, type: 'error' })
+      
+      setToast({ text: `${msg}${reason}`, type: 'error' })
     }
   }
 
@@ -389,7 +494,10 @@ const DocenteCalificar: React.FC = () => {
         <Sidebar active={activeKey} onClick={onSidebarClick} items={sidebarItems} />
         <main className="dash-content">
           <div className="d-flex align-items-center justify-content-between mb-3">
-            <div className="content-title">Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}</div>
+            <div className="content-title">
+              <i className="bi bi-check2-square text-success me-2"></i>
+              Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}
+            </div>
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary"
@@ -408,8 +516,11 @@ const DocenteCalificar: React.FC = () => {
           )}
           <div className="row g-3">
             <div id="student-list-panel" className="col-md-3" tabIndex={-1}>
-              <div className="ra-card"><div className="ra-card-body">
-                <div className="fw-bold mb-2">Estudiantes</div>
+              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                <div className="fw-bold mb-3 d-flex align-items-center">
+                  <i className="bi bi-people-fill text-primary me-2 fs-5"></i>
+                  Estudiantes
+                </div>
                 {students.length === 0 ? <div className="text-muted ra-small">Sin estudiantes.</div> : (
                   <ul className="list-group ra-list-group" aria-label="Lista de estudiantes">
                     {students.map(s => (
@@ -429,24 +540,29 @@ const DocenteCalificar: React.FC = () => {
               </div></div>
             </div>
             <div className={showChart ? 'col-md-5' : 'col-md-9'}>
-              <div className="ra-card"><div className="ra-card-body">
-                <div className="d-flex align-items-center justify-content-between mb-2">
-                  <div className="fw-bold">Actividades {selectedStudent ? `— ${selectedStudent.name}` : '(selecciona un estudiante)'} {loadingActs && <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>}</div>
+              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="fw-bold d-flex align-items-center">
+                    <i className="bi bi-clipboard-check-fill text-success me-2 fs-5"></i>
+                    Actividades {selectedStudent ? `— ${selectedStudent.name}` : '(selecciona un estudiante)'} 
+                    {loadingActs && <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>}
+                  </div>
                   <div className="d-flex gap-2">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={exportCsvCurso} disabled={students.length===0 || activities.length===0 || exportingCourseCsv} title="Exportar CSV del curso">
-                      {exportingCourseCsv ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download" aria-hidden /> Exportar CSV (curso)</>)}
+                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsvCurso} disabled={students.length===0 || activities.length===0 || exportingCourseCsv} title="Exportar CSV del curso">
+                      {exportingCourseCsv ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download me-1" aria-hidden /> CSV (curso)</>)}
                     </button>
-                    <button className="btn btn-sm btn-outline-secondary" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
-                      <i className="bi bi-download" aria-hidden /> Exportar CSV (estudiante)
+                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
+                      <i className="bi bi-download me-1" aria-hidden /> CSV (est.)
                     </button>
-                    <button className="btn btn-sm btn-outline-secondary" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
-                      {showChart ? 'Ocultar progreso' : 'Ver progreso'}
+                    <button className="btn btn-sm btn-outline-info shadow-sm" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
+                      <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
+                      {showChart ? 'Ocultar' : 'Progreso'}
                     </button>
-                    <button className="btn btn-sm btn-outline-danger" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAll}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar todo'}
+                    <button className="btn btn-sm btn-outline-danger shadow-sm" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAll}>
+                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-save me-1"></i>Guardar todo</>)}
                     </button>
-                    <button className="btn btn-sm btn-danger" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAllAndNext}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar y siguiente'}
+                    <button className="btn btn-sm btn-danger shadow" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAllAndNext}>
+                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-arrow-right-circle me-1"></i>Guardar y siguiente</>)}
                     </button>
                   </div>
                 </div>
@@ -583,18 +699,29 @@ const DocenteCalificar: React.FC = () => {
             </div>
             {showChart && (
               <div className="col-md-4">
-                <div className="ra-card"><div className="ra-card-body">
-                  <div className="fw-bold mb-2">Indicadores (gráfico)</div>
+                <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                  <div className="fw-bold mb-3 d-flex align-items-center">
+                    <i className="bi bi-bar-chart-fill text-info me-2 fs-5"></i>
+                    Indicadores (gráfico)
+                  </div>
                   {chartEmpty ? (
-                    <div className="text-muted ra-small">Sin datos para graficar.</div>
+                    <div className="text-center py-4">
+                      <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
+                      <small className="text-muted">Sin datos para graficar</small>
+                    </div>
                   ) : (
-                    <canvas ref={chartRef} height={220} />
+                    <div className="border rounded p-3 bg-white shadow-sm">
+                      <canvas ref={chartRef} height={220} />
+                    </div>
                   )}
                 </div></div>
               </div>
             )}
           </div>
-          <button className="btn btn-outline-danger mt-3" onClick={()=>navigate(`/docente/${curso}/ras`)}><i className="bi bi-arrow-left" /> Volver a RA</button>
+          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={()=>navigate(`/docente/${curso}/ras`)}>
+            <i className="bi bi-arrow-left me-2"></i>
+            Volver a RAs
+          </button>
         </main>
       </div>
     </div>

@@ -229,36 +229,40 @@ const DocenteRAs: React.FC = () => {
             )}
           </div>
           {asigVal && (
-            <div className={`alert ${asigVal.ras.ok ? 'alert-success' : 'alert-warning'}`} role="status">
-              Suma de RAs: <strong>{fmtPct(asigVal.ras.suma)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${fmtPct(asigVal.ras.faltante)}% para llegar a 100%.`}
-              {(() => {
-                const suma = asigVal.ras.suma
-                const variant = suma > 100 ? 'prog-danger' : (asigVal.ras.ok ? 'prog-success' : 'prog-warning')
-                return (
-                  <progress
-                    className={`uv-progress mt-2 ${variant}`}
-                    value={Math.min(100, Math.max(0, suma))}
-                    max={100}
-                    aria-label="Progreso RAs a 100%"
-                    title={`Progreso RAs: ${fmtPct(suma)}%`}
-                  />
-                )
-              })()}
-              <div className="ra-small text-muted text-end">{fmtPct(asigVal.ras.suma)}%</div>
+            <div className={`alert shadow-sm ${asigVal.ras.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`} role="status">
+              <i className={`bi ${asigVal.ras.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
+              <div className="flex-grow-1">
+                <div>Suma de RAs: <strong>{fmtPct(asigVal.ras.suma)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${fmtPct(asigVal.ras.faltante)}% para llegar a 100%.`}</div>
+                {(() => {
+                  const suma = asigVal.ras.suma
+                  const variant = suma > 100 ? 'prog-danger' : (asigVal.ras.ok ? 'prog-success' : 'prog-warning')
+                  return (
+                    <progress
+                      className={`uv-progress mt-2 ${variant}`}
+                      value={Math.min(100, Math.max(0, suma))}
+                      max={100}
+                      aria-label="Progreso RAs a 100%"
+                      title={`Progreso RAs: ${fmtPct(suma)}%`}
+                    />
+                  )
+                })()}
+                <div className="ra-small text-muted text-end mt-1">{fmtPct(asigVal.ras.suma)}%</div>
+              </div>
             </div>
           )}
-          <div className="d-flex gap-2 mb-3">
+          <div className="d-flex gap-2 mb-4">
             {!readOnly && (
-              <button className="btn btn-danger" onClick={()=> navigate(`/docente/${curso}/actividades/nueva`)}>
-                <i className="bi bi-plus-circle" /> Nueva actividad (curso)
+              <button className="btn btn-danger shadow" onClick={()=> navigate(`/docente/${curso}/actividades/nueva`)}>
+                <i className="bi bi-plus-circle-fill me-2"></i>
+                Nueva actividad (curso)
               </button>
             )}
-            <button className="btn btn-outline-secondary" disabled={exportingAll || ras.length===0} onClick={exportAllRAsCsv} title="Exportar notas de todos los RAs del curso">
-              {exportingAll ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download" /> Exportar CSV (curso · todos los RAs)</>)}
+            <button className="btn btn-outline-secondary shadow-sm" disabled={exportingAll || ras.length===0} onClick={exportAllRAsCsv} title="Exportar notas de todos los RAs del curso">
+              {exportingAll ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download me-1"></i>Exportar CSV (todos los RAs)</>)}
             </button>
           </div>
           {/* El bloque de progreso general de RAs se integró dentro del alert anterior */}
-          {err && <div className="alert alert-danger">{err}</div>}
+          {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
           <CardGrid>
             {ras.map((ra, idx) => (
               <RaCard
@@ -273,28 +277,39 @@ const DocenteRAs: React.FC = () => {
           </CardGrid>
 
           {selectedRA && (
-            <div className="mt-3">
-              <div className="content-title">Detalle de RA: {selectedRA.titulo}</div>
-              {loadingDetail && <div className="text-muted mb-2">Cargando detalle…</div>}
+            <div className="mt-4">
+              <div className="content-title">
+                <i className="bi bi-clipboard-data text-success me-2"></i>
+                Detalle de RA: {selectedRA.titulo}
+              </div>
+              {loadingDetail && (
+                <div className="d-flex align-items-center text-muted mb-3">
+                  <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Cargando detalle…
+                </div>
+              )}
               {raVal && (
-                <div className="row g-3 mb-2">
+                <div className="row g-3 mb-3">
                   <div className="col-md-6">
-                    <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
-                      Actividades: <strong>{fmtPct(raVal.actividades.suma)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${fmtPct(raVal.actividades.faltante)}%`}
-                      {(() => {
-                        const suma = raVal.actividades.suma
-                        const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
-                        return (
-                          <progress
-                            className={`uv-progress mt-2 ${variant}`}
-                            value={Math.min(100, Math.max(0, suma))}
-                            max={100}
-                            aria-label="Progreso actividades a 100%"
-                            title={`Progreso actividades: ${fmtPct(suma)}%`}
-                          />
-                        )
-                      })()}
-                      <div className="ra-small text-muted text-end">{fmtPct(raVal.actividades.suma)}%</div>
+                    <div className={`alert shadow-sm ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`}>
+                      <i className={`bi ${raVal.actividades.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
+                      <div className="flex-grow-1">
+                        <div>Actividades: <strong>{fmtPct(raVal.actividades.suma)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${fmtPct(raVal.actividades.faltante)}%`}</div>
+                        {(() => {
+                          const suma = raVal.actividades.suma
+                          const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
+                          return (
+                            <progress
+                              className={`uv-progress mt-2 ${variant}`}
+                              value={Math.min(100, Math.max(0, suma))}
+                              max={100}
+                              aria-label="Progreso actividades a 100%"
+                              title={`Progreso actividades: ${fmtPct(suma)}%`}
+                            />
+                          )
+                        })()}
+                        <div className="ra-small text-muted text-end mt-1">{fmtPct(raVal.actividades.suma)}%</div>
+                      </div>
                     </div>
                   </div>
                   <div className="col-md-6">
@@ -304,21 +319,30 @@ const DocenteRAs: React.FC = () => {
               )}
               <div className="row g-3">
                 <div className="col-md-6">
-                  <div className="ra-card"><div className="ra-card-body">
-                    <div className="fw-bold mb-2">Indicadores</div>
-                    {indicators.length===0 ? <div className="text-muted">Sin indicadores</div> : (
+                  <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                    <div className="fw-bold mb-3 d-flex align-items-center">
+                      <i className="bi bi-bullseye text-info me-2 fs-5"></i>
+                      Indicadores
+                    </div>
+                    {indicators.length===0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-bullseye fs-1 text-muted d-block mb-2"></i>
+                        <small className="text-muted">Sin indicadores definidos</small>
+                      </div>
+                    ) : (
                       <ul className="list-group ra-list-group">
                         {indicators.map(ind => (
                           <li
                             key={ind.id}
-                            className="list-group-item d-flex justify-content-between align-items-center"
+                            className="list-group-item shadow-sm d-flex justify-content-between align-items-center"
                             tabIndex={0}
                             onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openIndicatorModal(ind) } }}
                           >
                             <span>{ind.descripcion}</span>
                             <div className="d-flex gap-2">
-                              <button className="btn btn-sm btn-outline-secondary" title="Ver indicador" aria-label="Ver indicador" onClick={() => openIndicatorModal(ind)}>
-                                <i className="bi bi-eye" /> Ver
+                              <button className="btn btn-sm btn-outline-info shadow-sm" title="Ver indicador" aria-label="Ver indicador" onClick={() => openIndicatorModal(ind)}>
+                                <i className="bi bi-eye-fill me-1"></i>
+                                Ver
                               </button>
                             </div>
                             {/* quitar porcentaje de indicador */}
@@ -329,14 +353,22 @@ const DocenteRAs: React.FC = () => {
                   </div></div>
                 </div>
                 <div className="col-md-6">
-                  <div className="ra-card"><div className="ra-card-body">
-                    <div className="fw-bold mb-2">Actividades</div>
-                    {activities.length===0 ? <div className="text-muted">Sin actividades</div> : (
+                  <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
+                    <div className="fw-bold mb-3 d-flex align-items-center">
+                      <i className="bi bi-clipboard-check-fill text-success me-2 fs-5"></i>
+                      Actividades
+                    </div>
+                    {activities.length===0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-clipboard-x fs-1 text-muted d-block mb-2"></i>
+                        <small className="text-muted">Sin actividades creadas</small>
+                      </div>
+                    ) : (
                       <ul className="list-group ra-list-group">
                         {activities.map(act => (
                           <li
                             key={act.id}
-                            className="list-group-item d-flex justify-content-between align-items-center"
+                            className="list-group-item shadow-sm d-flex justify-content-between align-items-center"
                             tabIndex={0}
                             onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openActivityModal(act) } }}
                           >
@@ -348,8 +380,9 @@ const DocenteRAs: React.FC = () => {
                               </div>
                             </div>
                             <div className="d-flex gap-2 align-items-center">
-                              <button className="btn btn-sm btn-outline-secondary" title={readOnly? 'Ver actividad' : 'Ver/editar actividad'} aria-label={readOnly? 'Ver actividad' : 'Ver o editar actividad'} onClick={() => openActivityModal(act)}>
-                                <i className={`bi ${readOnly? 'bi-eye' : 'bi-pencil-square'}`} /> {readOnly? 'Ver' : 'Ver/Editar'}
+                              <button className="btn btn-sm btn-outline-success shadow-sm" title={readOnly? 'Ver actividad' : 'Ver/editar actividad'} aria-label={readOnly? 'Ver actividad' : 'Ver o editar actividad'} onClick={() => openActivityModal(act)}>
+                                <i className={`bi ${readOnly? 'bi-eye-fill' : 'bi-pencil-square'} me-1`}></i>
+                                {readOnly? 'Ver' : 'Editar'}
                               </button>
                             </div>
                             {/* quitar porcentaje de actividad */}
@@ -361,12 +394,18 @@ const DocenteRAs: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-3 d-flex gap-2">
-                <button className="btn btn-outline-secondary" onClick={loadStudents}><i className="bi bi-people" /> Ver estudiantes</button>
+              <div className="mt-4 d-flex gap-2">
+                <button className="btn btn-outline-primary shadow-sm" onClick={loadStudents}>
+                  <i className="bi bi-arrow-clockwise me-2"></i>
+                  Recargar estudiantes
+                </button>
               </div>
 
-              <div className="mt-3">
-                <div className="content-title">Estudiantes - {curso}</div>
+              <div className="mt-4">
+                <div className="content-title">
+                  <i className="bi bi-people-fill text-primary me-2"></i>
+                  Estudiantes - {curso}
+                </div>
                 <div className="d-flex gap-2 align-items-center mb-2">
                   <label className="ra-small">Periodo</label>
                   <select
@@ -386,7 +425,10 @@ const DocenteRAs: React.FC = () => {
             </div>
           )}
 
-          <button className="btn btn-outline-danger mt-3" onClick={() => navigate('/docente')}><i className="bi bi-arrow-left" /> Volver a cursos</button>
+          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={() => navigate('/docente')}>
+            <i className="bi bi-arrow-left me-2"></i>
+            Volver a cursos
+          </button>
 
           {/* Modal de detalles de actividad/indicador */}
           <ActivityDetailsModal

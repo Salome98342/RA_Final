@@ -124,7 +124,7 @@ export default function Login() {
               onClick={() => setLangOpen((v) => !v)}
               role="combobox"
               aria-haspopup="listbox"
-              aria-expanded={langOpen ? "true" : "false"}
+              aria-expanded={langOpen}
               aria-label="Idioma"
               tabIndex={0}
               aria-controls="langOptions"

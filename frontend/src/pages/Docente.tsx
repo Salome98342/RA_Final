@@ -236,21 +236,20 @@ const Docente: React.FC = () => {
     }
   }
 
-  const title = view === 'cursos'
-    ? 'Cursos - Filtrar por código de carrera'
-    : view === 'ra'
-    ? `RA - ${selectedCurso}`
-    : `Estudiantes - ${selectedCurso}`
-
   const items = [
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
-    { key: 'crear', icon: 'bi-pencil-square', title: 'Crear' },
-    { key: 'listar', icon: 'bi-list-ul', title: 'Listado' },
+    { key: 'crear', icon: 'bi-pencil-square', title: 'Gestionar RAs' },
+    { key: 'listar', icon: 'bi-list-ul', title: 'Estudiantes' },
     { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' }
   ]
 
   const onSidebarClick = async (key: string) => {
-    if (key === 'cursos') setView('cursos')
+    if (key === 'cursos') { setView('cursos'); setSelectedRA(null) }
+    else if (key === 'crear') {
+      if (!selectedCurso) { setView('cursos'); return }
+      setView('ra')
+      setSelectedRA(null)
+    }
     else if (key === 'listar') {
       if (!selectedCurso) return
       await openEstudiantes()
@@ -267,18 +266,16 @@ const Docente: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar active={view === 'cursos' ? 'cursos' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
         <main className="dash-content">
-          <div className="content-title">{title}</div>
-
           {!!toast && (
-            <div className="mb-2" role="status" aria-live="polite">
+            <div className="mb-3" role="status" aria-live="polite">
               <Toast text={toast.text} type={toast.type} />
             </div>
           )}
 
           {errorMsg && (
-            <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+            <div className="alert alert-danger d-flex justify-content-between align-items-center mb-3" role="alert">
               <span>{errorMsg}</span>
-              <button className="btn btn-sm btn-outline-light" onClick={() => {
+              <button className="btn btn-sm btn-outline-danger" onClick={() => {
                 setErrorMsg(null)
                 setLoadingCourses(true)
                 getCourses()
@@ -291,159 +288,417 @@ const Docente: React.FC = () => {
 
           {view === 'cursos' && (
             <section className="panel shown">
-              <SearchPill icon="bi-search" placeholder="Cursos — Filtrar por código de carrera" value={filter} onChange={setFilter} />
+              <div className="content-title">
+                <i className="bi bi-book text-danger me-2"></i>
+                Mis Cursos
+              </div>
+              <SearchPill icon="bi-search" placeholder="Buscar por código, nombre o carrera..." value={filter} onChange={setFilter} />
               {loadingCourses ? (
-                <div className="text-muted d-flex align-items-center"><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Cargando cursos…</div>
+                <div className="text-center py-5">
+                  <div className="spinner-border spinner-lg text-danger mb-3" role="status">
+                    <span className="visually-hidden">Cargando...</span>
+                  </div>
+                  <p className="text-muted fw-semibold">Cargando tus cursos...</p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="alert alert-info mt-3 d-flex align-items-center shadow-sm">
+                  <i className="bi bi-info-circle me-2 fs-5"></i>
+                  <span>{filter ? 'No se encontraron cursos con ese criterio de búsqueda.' : 'No tienes cursos asignados.'}</span>
+                </div>
               ) : (
                 <CardGrid>
                   {filtered.map((c, idx) => (
-                    <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCurso(c)} />
+                    <RaCard 
+                      key={c.id} 
+                      headTone={idx % 2 === 0 ? 'dark' : 'light'} 
+                      title={c.nombre} 
+                      subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} 
+                      onClick={() => openCurso(c)} 
+                    />
                   ))}
                 </CardGrid>
               )}
             </section>
           )}
 
-          {view === 'ra' && (
+          {view === 'ra' && !selectedRA && (
             <section className="panel shown">
-              <SearchPill icon="bi-journal-text" label={`RA - ${selectedCurso}`} />
-              {/* Lista de RAs de la asignatura */}
-              <CardGrid>
-                {ras.map((ra, idx) => (
-                  <RaCard key={ra.id} headTone={idx===0?'dark':'light'} title={<><span className="text-uppercase small fw-bold d-block">Resultado de aprendizaje</span>{ra.titulo}</> as unknown as string} subtitle={ra.info} onClick={() => openRADetails(ra)} />
-                ))}
-              </CardGrid>
-
-              {/* Crear actividad en RA seleccionado */}
-              {selectedRA && (
-                <div className="mt-3">
-                  <div className="content-title">Crear actividad para: {selectedRA.titulo}</div>
-                  <div className="row g-2">
-                    <div className="col-md-4"><input className="form-control" placeholder="Nombre actividad" value={newAct.nombre} onChange={e=>setNewAct(a=>({...a, nombre:e.target.value}))} /></div>
-                    <div className="col-md-2"><input className="form-control" placeholder="% en RA" title="Aporte de esta actividad al RA" type="number" step="0.01" value={newAct.pctRA} onChange={e=>setNewAct(a=>({...a, pctRA:e.target.value}))} /></div>
-                    <div className="col-md-2"><input className="form-control" placeholder="Tipo (id)" value={newAct.tipo} onChange={e=>setNewAct(a=>({...a, tipo:e.target.value}))} /></div>
-                    <div className="col-md-2"><button className="btn btn-danger w-100" disabled={savingNewAct} onClick={submitNewActivity}>{savingNewAct?(<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Creando…</>):'Crear'}</button></div>
-                  </div>
-                  {newActError && <div className="alert alert-danger mt-2" role="alert">{newActError}</div>}
+              <div className="content-title">
+                <i className="bi bi-clipboard-check text-info me-2"></i>
+                Resultados de Aprendizaje
+                {selectedCurso && (
+                  <span className="text-muted fw-normal ms-2 text-subtitle">· {selectedCurso}</span>
+                )}
+              </div>
+              <SearchPill icon="bi-journal-text" placeholder="Selecciona un Resultado de Aprendizaje..." value="" onChange={() => {}} />
+              {ras.length === 0 ? (
+                <div className="alert alert-info mt-3 d-flex align-items-center shadow-sm">
+                  <i className="bi bi-info-circle me-2 fs-5"></i>
+                  <span>Este curso no tiene Resultados de Aprendizaje definidos aún.</span>
                 </div>
+              ) : (
+                <CardGrid>
+                  {ras.map((ra, idx) => (
+                    <RaCard 
+                      key={ra.id} 
+                      headTone={idx % 2 === 0 ? 'dark' : 'light'} 
+                      title={
+                        <>
+                          <span className="text-uppercase small fw-bold d-block mb-1">RA {idx + 1}</span>
+                          {ra.titulo}
+                        </> as unknown as string
+                      } 
+                      subtitle={ra.info} 
+                      onClick={() => openRADetails(ra)} 
+                    />
+                  ))}
+                </CardGrid>
               )}
+              <div className="d-flex gap-2 mt-4">
+                <button className="btn btn-outline-danger shadow-sm" onClick={() => { setView('cursos'); setSelectedCurso('') }}>
+                  <i className="bi bi-arrow-left me-1"></i>
+                  Volver a cursos
+                </button>
+              </div>
+            </section>
+          )}
 
-              {/* Detalle del RA seleccionado (indicadores y actividades) */}
-              {selectedRA && (
-                <div className="mt-3">
-                  <div className="content-title">Detalle de RA: {selectedRA.titulo}</div>
-                  {raVal && (
-                    <div className="row g-3 mb-2">
+          {view === 'ra' && selectedRA && (
+            <section className="panel shown">
+              <div className="content-title">
+                <i className="bi bi-clipboard-data text-success me-2"></i>
+                {selectedRA.titulo}
+                {selectedCurso && (
+                  <span className="text-muted fw-normal ms-2 text-subtitle">· {selectedCurso}</span>
+                )}
+              </div>
+
+              {/* Crear actividad */}
+              <div className="ra-card mb-4 shadow-sm border-0">
+                <div className="ra-card-head bg-danger text-white d-flex align-items-center p-1rem">
+                  <i className="bi bi-plus-circle-fill me-2 fs-5"></i>
+                  <span className="fw-bold">Crear Nueva Actividad</span>
+                </div>
+                <div className="ra-card-body p-1-5rem">
+                  <div className="row g-3">
+                    <div className="col-md-5">
+                      <label className="form-label small fw-bold text-danger mb-2">
+                        <i className="bi bi-pencil me-1"></i>
+                        Nombre de la actividad <span className="text-danger">*</span>
+                      </label>
+                      <input 
+                        className="form-control shadow-sm" 
+                        placeholder="Ej: Taller sobre algoritmos" 
+                        value={newAct.nombre} 
+                        onChange={e=>setNewAct(a=>({...a, nombre:e.target.value}))} 
+                      />
+                    </div>
+                    <div className="col-md-2">
+                      <label className="form-label small fw-bold text-danger mb-2">
+                        <i className="bi bi-percent me-1"></i>
+                        Peso (%) <span className="text-danger">*</span>
+                      </label>
+                      <input 
+                        className="form-control shadow-sm" 
+                        placeholder="25" 
+                        title="Aporte de esta actividad al RA" 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        max="100"
+                        value={newAct.pctRA} 
+                        onChange={e=>setNewAct(a=>({...a, pctRA:e.target.value}))} 
+                      />
+                    </div>
+                    <div className="col-md-2">
+                      <label className="form-label small fw-bold text-danger mb-2">
+                        <i className="bi bi-tag me-1"></i>
+                        Tipo
+                      </label>
+                      <input 
+                        className="form-control shadow-sm" 
+                        placeholder="1" 
+                        value={newAct.tipo} 
+                        onChange={e=>setNewAct(a=>({...a, tipo:e.target.value}))} 
+                      />
+                    </div>
+                    <div className="col-md-3 d-flex align-items-end">
+                      <button 
+                        className="btn btn-danger w-100 shadow" 
+                        disabled={savingNewAct} 
+                        onClick={submitNewActivity}
+                      >
+                        {savingNewAct ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                            Creando…
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-plus-lg me-2"></i>
+                            Crear Actividad
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  {newActError && (
+                    <div className="alert alert-danger mt-3 mb-0 d-flex align-items-center shadow-sm" role="alert">
+                      <i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                      <span>{newActError}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Validación de pesos */}
+              {raVal && (
+                <div className="ra-card mb-4 shadow-sm border-0">
+                  <div className="ra-card-head bg-light d-flex align-items-center">
+                    <i className="bi bi-calculator-fill me-2 text-primary fs-5"></i>
+                    <span className="fw-bold text-dark">Validación de Pesos</span>
+                  </div>
+                  <div className="ra-card-body">
+                    <div className="row g-4">
                       <div className="col-md-6">
-                        <div className={`alert ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
-                          Actividades: <strong>{raVal.actividades.suma.toFixed(2)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${raVal.actividades.faltante.toFixed(2)}%`}
+                        <div className={`alert mb-3 d-flex align-items-center shadow-sm ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'}`}>
+                          <i className={`bi ${raVal.actividades.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
+                          <div>
+                            <strong className="d-block">Actividades: {raVal.actividades.suma.toFixed(1)}%</strong>
+                            <small>{raVal.actividades.ok ? 'Completo ✓' : `Falta ${raVal.actividades.faltante.toFixed(1)}%`}</small>
+                          </div>
                         </div>
-                        <div className="d-flex align-items-center gap-2">
+                        <div className="d-flex align-items-center gap-3">
                           <progress
-                            className={`w-100 ${raVal.actividades.suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')}`}
+                            className={`flex-grow-1 uv-progress ${raVal.actividades.suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')}`}
                             aria-label="Progreso actividades a 100%"
                             max={100}
                             value={Math.min(100, Math.max(0, raVal.actividades.suma))}
                             title={`${raVal.actividades.suma.toFixed(2)}%`}
                           />
-                          <span className="text-muted small" aria-hidden="true">{raVal.actividades.suma.toFixed(0)}%</span>
+                          <span className="badge bg-secondary fs-6" aria-hidden="true">{raVal.actividades.suma.toFixed(0)}%</span>
                         </div>
                       </div>
                       <div className="col-md-6">
-                        <div className={`alert ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
-                          Indicadores: <strong>{raVal.indicadores.suma.toFixed(2)}%</strong>. {raVal.indicadores.ok ? '¡Listo!' : `Falta ${raVal.indicadores.faltante.toFixed(2)}%`}
+                        <div className={`alert mb-3 d-flex align-items-center shadow-sm ${raVal.indicadores.ok ? 'alert-success' : 'alert-warning'}`}>
+                          <i className={`bi ${raVal.indicadores.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
+                          <div>
+                            <strong className="d-block">Indicadores: {raVal.indicadores.suma.toFixed(1)}%</strong>
+                            <small>{raVal.indicadores.ok ? 'Completo ✓' : `Falta ${raVal.indicadores.faltante.toFixed(1)}%`}</small>
+                          </div>
                         </div>
-                        <div className="d-flex align-items-center gap-2">
+                        <div className="d-flex align-items-center gap-3">
                           <progress
-                            className={`w-100 ${raVal.indicadores.suma > 100 ? 'prog-danger' : (raVal.indicadores.ok ? 'prog-success' : 'prog-warning')}`}
+                            className={`flex-grow-1 uv-progress ${raVal.indicadores.suma > 100 ? 'prog-danger' : (raVal.indicadores.ok ? 'prog-success' : 'prog-warning')}`}
                             aria-label="Progreso indicadores a 100%"
                             max={100}
                             value={Math.min(100, Math.max(0, raVal.indicadores.suma))}
                             title={`${raVal.indicadores.suma.toFixed(2)}%`}
                           />
-                          <span className="text-muted small" aria-hidden="true">{raVal.indicadores.suma.toFixed(0)}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <div className="ra-card">
-                        <div className="ra-card-body">
-                          <div className="fw-bold mb-2">Indicadores de logro</div>
-                          {indicators.length === 0 ? (
-                            <div className="text-muted">Sin indicadores</div>
-                          ) : (
-                            <ul className="list-group ra-list-group">
-                              {indicators.map(ind => (
-                                <li key={ind.id} className="list-group-item d-flex justify-content-between align-items-center">
-                                  <span>{ind.descripcion}</span>
-                                  {/* indicator percentage hidden (visual only) */}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="ra-card">
-                        <div className="ra-card-body">
-                          <div className="fw-bold mb-2">Actividades</div>
-                          {activities.length === 0 ? (
-                            <div className="text-muted">Sin actividades</div>
-                          ) : (
-                            <ul className="list-group ra-list-group">
-                              {activities.map(act => (
-                                <li key={act.id} className="list-group-item d-flex justify-content-between align-items-center">
-                                  <span>{act.nombre}</span>
-                                  {/* activity aporte percentage hidden (visual only) */}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                          <span className="badge bg-secondary fs-6" aria-hidden="true">{raVal.indicadores.suma.toFixed(0)}%</span>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
 
-                  {/* Calificar estudiante por actividad */}
-                  <div className="mt-3">
-                    <div className="content-title">Calificar</div>
-                    <div className="row g-3">
-                      <div className="col-md-4">
-                        <div className="ra-card">
-                          <div className="ra-card-body">
-                            <div className="fw-bold mb-2">Estudiantes</div>
-                            <StudentList students={students} onSelect={onSelectStudent} />
-                            <button className="btn btn-outline-danger mt-2" onClick={openEstudiantes}><i className="bi bi-people" /> Cargar estudiantes</button>
-                          </div>
+              {/* Indicadores y actividades */}
+              <div className="row g-3 mb-3">
+                <div className="col-md-6">
+                  <div className="ra-card shadow-sm border-0">
+                    <div className="ra-card-head bg-info text-white d-flex align-items-center">
+                      <i className="bi bi-bullseye me-2 fs-5"></i>
+                      <span className="fw-bold">Indicadores de Logro</span>
+                    </div>
+                    <div className="ra-card-body">
+                      {indicators.length === 0 ? (
+                        <div className="text-center py-4 text-muted">
+                          <i className="bi bi-info-circle fs-1 d-block mb-2"></i>
+                          <small>No hay indicadores definidos</small>
                         </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="ra-card">
-                          <div className="ra-card-body">
-                            <div className="fw-bold mb-2">Ingresar nota {selectedStudent ? `a ${selectedStudent.name}` : ''}</div>
-                            <div className="mb-2">
-                              <select className="form-select" aria-label="Seleccionar indicador (opcional)" value={grade.indicadorId} onChange={e=>setGrade(g=>({...g, indicadorId:e.target.value}))}>
-                                <option value="">Seleccionar indicador (opcional)</option>
-                                {indicators.map(ind => <option key={ind.id} value={ind.id}>{ind.descripcion}</option>)}
-                              </select>
+                      ) : (
+                        <div className="ra-scroll-260">
+                          <ul className="list-group ra-list-group">
+                            {indicators.map((ind, idx) => (
+                              <li key={ind.id} className="list-group-item d-flex justify-content-between align-items-start shadow-sm">
+                                <div>
+                                  <div className="badge bg-info text-white mb-2">Indicador {idx + 1}</div>
+                                  <div>{ind.descripcion}</div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-6">
+                  <div className="ra-card shadow-sm border-0">
+                    <div className="ra-card-head bg-success text-white d-flex align-items-center">
+                      <i className="bi bi-clipboard-check-fill me-2 fs-5"></i>
+                      <span className="fw-bold">Actividades</span>
+                    </div>
+                    <div className="ra-card-body">
+                      {activities.length === 0 ? (
+                        <div className="text-center py-4 text-muted">
+                          <i className="bi bi-clipboard-x fs-1 d-block mb-2"></i>
+                          <small>No hay actividades creadas</small>
+                        </div>
+                      ) : (
+                        <div className="ra-scroll-260">
+                          <ul className="list-group ra-list-group">
+                            {activities.map((act, idx) => (
+                              <li key={act.id} className="list-group-item d-flex justify-content-between align-items-start shadow-sm">
+                                <div className="flex-grow-1">
+                                  <div className="badge bg-success text-white mb-2">Actividad {idx + 1}</div>
+                                  <div>{act.nombre}</div>
+                                </div>
+                                {act.porcentajeRA && (
+                                  <span className="badge bg-danger rounded-pill fs-6">{act.porcentajeRA}%</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calificar estudiante por actividad */}
+              <div className="ra-card mb-4 shadow border-0">
+                <div className="ra-card-head bg-danger text-white d-flex align-items-center">
+                  <i className="bi bi-pen-fill me-2 fs-5"></i>
+                  <span className="fw-bold">Calificar Estudiantes</span>
+                </div>
+                <div className="ra-card-body">
+                  <div className="row g-4">
+                    <div className="col-md-4">
+                      <div className="mb-2">
+                        <label className="form-label fw-bold text-danger d-flex align-items-center mb-3">
+                          <span className="badge bg-danger me-2">1</span>
+                          <i className="bi bi-people me-2"></i>
+                          Seleccionar Estudiante
+                        </label>
+                        {loadingStudents ? (
+                          <div className="text-center py-4">
+                            <div className="spinner-border text-danger mb-2" role="status">
+                              <span className="visually-hidden">Cargando...</span>
                             </div>
-                            <div className="mb-2">
-                              <select className="form-select" aria-label="Seleccionar actividad" value={selectedActivity} onChange={e=>setSelectedActivity(e.target.value)}>
-                                <option value="">Seleccione una actividad</option>
+                            <p className="text-muted small">Cargando estudiantes...</p>
+                          </div>
+                        ) : students.length === 0 ? (
+                          <div className="text-center py-4">
+                            <i className="bi bi-people fs-1 text-muted d-block mb-3"></i>
+                            <button className="btn btn-danger shadow" onClick={openEstudiantes}>
+                              <i className="bi bi-people me-2"></i>
+                              Cargar estudiantes
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {selectedStudent && (
+                              <div className="alert alert-success py-2 px-3 mb-3 small d-flex align-items-center shadow-sm">
+                                <i className="bi bi-check-circle-fill me-2 fs-5"></i>
+                                <strong>{selectedStudent.name}</strong>
+                              </div>
+                            )}
+                            <div className="ra-scroll-260 border rounded shadow-sm">
+                              <StudentList students={students} onSelect={onSelectStudent} />
+                            </div>
+                            <button className="btn btn-sm btn-outline-danger mt-3 w-100 shadow-sm" onClick={openEstudiantes}>
+                              <i className="bi bi-arrow-clockwise me-2"></i>
+                              Recargar lista
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-2">
+                        <label className="form-label fw-bold text-danger d-flex align-items-center mb-3">
+                          <span className="badge bg-danger me-2">2</span>
+                          <i className="bi bi-pencil me-2"></i>
+                          Ingresar Calificación
+                        </label>
+                        
+                        {!selectedStudent ? (
+                          <div className="alert alert-warning py-3 shadow-sm d-flex align-items-center">
+                            <i className="bi bi-arrow-left-circle-fill me-2 fs-5"></i>
+                            <span className="small">Primero selecciona un estudiante</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mb-3">
+                              <label className="form-label small fw-semibold">
+                                <i className="bi bi-clipboard-check me-1"></i>
+                                Actividad <span className="text-danger">*</span>
+                              </label>
+                              <select 
+                                className="form-select shadow-sm" 
+                                aria-label="Seleccionar actividad" 
+                                value={selectedActivity} 
+                                onChange={e=>setSelectedActivity(e.target.value)}
+                              >
+                                <option value="">Seleccione...</option>
                                 {activities.map(act => (
-                                  <option key={act.id} value={act.raActividadId}>{act.nombre}</option>
+                                  <option key={act.id} value={act.raActividadId}>
+                                    {act.nombre} {act.porcentajeRA && `(${act.porcentajeRA}%)`}
+                                  </option>
                                 ))}
                               </select>
                             </div>
-                            <div className="mb-2">
-                              <input className="form-control" type="number" step="0.1" min={0} max={5} placeholder="Nota (0-5)" value={grade.nota} onChange={e=>setGrade(g=>({...g, nota:e.target.value}))} />
+
+                            <div className="mb-3">
+                              <label className="form-label small fw-semibold">
+                                <i className="bi bi-bullseye me-1"></i>
+                                Indicador (opcional)
+                              </label>
+                              <select 
+                                className="form-select shadow-sm" 
+                                aria-label="Seleccionar indicador (opcional)" 
+                                value={grade.indicadorId} 
+                                onChange={e=>setGrade(g=>({...g, indicadorId:e.target.value}))}
+                              >
+                                <option value="">Todos</option>
+                                {indicators.map(ind => <option key={ind.id} value={ind.id}>{ind.descripcion}</option>)}
+                              </select>
                             </div>
-                            <div className="mb-2">
-                              <textarea className="form-control" placeholder="Retroalimentación (opcional)" value={grade.retro} onChange={e=>setGrade(g=>({...g, retro:e.target.value}))} />
+
+                            <div className="mb-3">
+                              <label className="form-label small fw-semibold">
+                                <i className="bi bi-star-fill text-warning me-1"></i>
+                                Nota (0-5) <span className="text-danger">*</span>
+                              </label>
+                              <input 
+                                className="form-control shadow-sm" 
+                                type="number" 
+                                step="0.1" 
+                                min={0} 
+                                max={5} 
+                                placeholder="Ej: 4.5" 
+                                value={grade.nota} 
+                                onChange={e=>setGrade(g=>({...g, nota:e.target.value}))} 
+                              />
                             </div>
+
+                            <div className="mb-3">
+                              <label className="form-label small fw-semibold">
+                                <i className="bi bi-chat-left-text me-1"></i>
+                                Retroalimentación
+                              </label>
+                              <textarea 
+                                className="form-control shadow-sm" 
+                                rows={3}
+                                placeholder="Comentarios para el estudiante..." 
+                                value={grade.retro} 
+                                onChange={e=>setGrade(g=>({...g, retro:e.target.value}))} 
+                              />
+                            </div>
+
                             <div className="d-grid">
                               {
                                 (() => {
@@ -451,46 +706,126 @@ const Docente: React.FC = () => {
                                   const req = Boolean(act && Array.isArray(act.indicadores) && act.indicadores.length > 0)
                                   const disabled = !selectedStudent || !grade.nota || !selectedActivity || (req && !grade.indicadorId)
                                   return (
-                                    <button className="btn btn-danger" disabled={disabled || savingGrade} onClick={submitGrade}>
-                                      {savingGrade ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar nota'}
+                                    <button className="btn btn-danger shadow" disabled={disabled || savingGrade} onClick={submitGrade}>
+                                      {savingGrade ? (
+                                        <>
+                                          <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                          Guardando…
+                                        </>
+                                      ) : (
+                                        <>
+                                          <i className="bi bi-check2-circle-fill me-2"></i>
+                                          Guardar nota
+                                        </>
+                                      )}
                                     </button>
                                   )
                                 })()
                               }
                             </div>
-                          </div>
-                        </div>
+                          </>
+                        )}
                       </div>
-                      <div className="col-md-4">
-                        <div className="ra-card">
-                          <div className="ra-card-body">
-                            <div className="fw-bold mb-2">Indicadores (gráfico)</div>
-                            {chartEmpty ? (
-                              <div className="text-muted ra-small">Sin datos para graficar.</div>
-                            ) : (
-                              <canvas ref={chartRef} height={220} />
-                            )}
+                    </div>
+                    <div className="col-md-4">
+                      <div className="mb-2">
+                        <label className="form-label fw-bold text-danger d-flex align-items-center mb-3">
+                          <span className="badge bg-danger me-2">3</span>
+                          <i className="bi bi-bar-chart me-2"></i>
+                          Progreso del Estudiante
+                        </label>
+                        {!selectedStudent ? (
+                          <div className="text-center py-5">
+                            <i className="bi bi-bar-chart-fill fs-1 text-muted d-block mb-3"></i>
+                            <p className="text-muted small mb-0">Selecciona un estudiante<br/>para ver su progreso</p>
                           </div>
-                        </div>
+                        ) : chartEmpty ? (
+                          <div className="alert alert-info shadow-sm d-flex align-items-start mb-0">
+                            <i className="bi bi-info-circle-fill me-2 fs-5 mt-1"></i>
+                            <div>
+                              <strong className="d-block mb-1">{selectedStudent.name}</strong>
+                              <small>No hay calificaciones aún. Ingresa notas para ver el progreso.</small>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="alert alert-light shadow-sm py-2 px-3 mb-3 d-flex align-items-center border">
+                              <i className="bi bi-person-circle me-2 text-primary fs-5"></i>
+                              <strong>{selectedStudent.name}</strong>
+                            </div>
+                            <div className="border rounded p-3 bg-white shadow-sm">
+                              <canvas ref={chartRef} height={220} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
-              <button className="btn btn-outline-danger mt-3" onClick={() => setView('cursos')}><i className="bi bi-arrow-left" /> Volver a cursos</button>
-              <button className="btn btn-danger mt-3 ms-2" onClick={openEstudiantes}><i className="bi bi-people" /> Ver estudiantes</button>
+              </div>
+
+              <div className="d-flex gap-3 mt-4">
+                <button className="btn btn-outline-danger shadow-sm" onClick={() => { setView('ra'); setSelectedRA(null) }}>
+                  <i className="bi bi-arrow-left me-2"></i>
+                  Volver a RAs
+                </button>
+                <button className="btn btn-outline-danger shadow-sm" onClick={() => { setView('cursos'); setSelectedRA(null); setSelectedCurso('') }}>
+                  <i className="bi bi-grid-3x3-gap me-2"></i>
+                  Ver cursos
+                </button>
+              </div>
             </section>
           )}
 
           {view === 'estudiantes' && (
             <section className="panel shown">
-              <SearchPill icon="bi-people" label={`Estudiantes - ${selectedCurso}`} />
+              <div className="content-title">
+                <i className="bi bi-people-fill text-primary me-2"></i>
+                Estudiantes
+                {selectedCurso && (
+                  <span className="text-muted fw-normal ms-2 text-subtitle">· {selectedCurso}</span>
+                )}
+              </div>
+              <SearchPill icon="bi-people" placeholder="Buscar estudiante..." value="" onChange={() => {}} />
               {loadingStudents ? (
-                <div className="text-muted d-flex align-items-center"><span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Cargando estudiantes…</div>
+                <div className="text-center py-5">
+                  <div className="spinner-border spinner-lg text-danger mb-3" role="status">
+                    <span className="visually-hidden">Cargando...</span>
+                  </div>
+                  <p className="text-muted fw-semibold">Cargando estudiantes...</p>
+                </div>
+              ) : students.length === 0 ? (
+                <div className="alert alert-info mt-3 d-flex align-items-center shadow-sm">
+                  <i className="bi bi-info-circle me-2 fs-5"></i>
+                  <span>No hay estudiantes matriculados en este curso.</span>
+                </div>
               ) : (
-                <StudentList students={students} />
+                <div className="ra-card mt-3 shadow-sm border-0">
+                  <div className="ra-card-head bg-primary text-white d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center">
+                      <i className="bi bi-people-fill me-2 fs-5"></i>
+                      <span className="fw-bold">Estudiantes Matriculados</span>
+                    </div>
+                    <span className="badge bg-light text-dark">{students.length}</span>
+                  </div>
+                  <div className="ra-card-body">
+                    <StudentList students={students} onSelect={async (s) => {
+                      await onSelectStudent(s)
+                      setView('ra')
+                    }} />
+                  </div>
+                </div>
               )}
-              <button className="btn btn-outline-danger mt-3" onClick={() => setView('ra')}><i className="bi bi-arrow-left" /> Volver a RA</button>
+              <div className="d-flex gap-3 mt-4">
+                <button className="btn btn-outline-danger shadow-sm" onClick={() => { setView('ra') }}>
+                  <i className="bi bi-arrow-left me-2"></i>
+                  Volver a RAs
+                </button>
+                <button className="btn btn-outline-danger shadow-sm" onClick={() => { setView('cursos'); setSelectedCurso('') }}>
+                  <i className="bi bi-grid-3x3-gap me-2"></i>
+                  Ver cursos
+                </button>
+              </div>
             </section>
           )}
         </main>

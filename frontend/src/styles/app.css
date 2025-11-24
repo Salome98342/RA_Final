@@ -32,6 +32,10 @@ body {
 /* Misc helpers */
 .w-110px { max-width: 110px; }
 .dropzone-drag { outline: 2px dashed #C8102E; outline-offset: 6px; }
+.text-subtitle { font-size: 0.85rem; }
+.spinner-lg { width: 3rem; height: 3rem; }
+.p-1rem { padding: 1rem; }
+.p-1-5rem { padding: 1.5rem; }
 
 /* Materias (coordinador) */
 .materias-scroll { max-height: 65vh; overflow: auto; }

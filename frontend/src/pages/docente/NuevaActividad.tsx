@@ -160,11 +160,14 @@ const NuevaActividadCurso: React.FC = () => {
         />
         <main className="dash-content">
           {toast ? <Toast text={toast.text} type={toast.type} /> : null}
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div className="content-title">Nueva actividad · Curso {curso}</div>
+          <div className="d-flex align-items-center justify-content-between mb-4">
+            <div className="content-title">
+              <i className="bi bi-file-earmark-plus-fill text-success me-2"></i>
+              Nueva actividad · Curso {curso}
+            </div>
             {state.role === 'coordinador' && (
               <button 
-                className="btn btn-outline-primary"
+                className="btn btn-outline-primary shadow-sm"
                 onClick={() => navigate('/coordinador/materias')}
                 title="Volver a la vista del coordinador"
               >
@@ -225,20 +228,26 @@ const NuevaActividadCurso: React.FC = () => {
             </div>
 
             <div className="col-12">
-              <div className="fw-bold mb-2">Aplicar a estos RAs del curso</div>
+              <div className="fw-bold mb-3 d-flex align-items-center">
+                <i className="bi bi-diagram-3-fill text-primary me-2 fs-5"></i>
+                Aplicar a estos RAs del curso
+              </div>
               {ras.length === 0 ? (
-                <div className="text-muted">Este curso no tiene RAs.</div>
+                <div className="alert alert-info shadow-sm d-flex align-items-center">
+                  <i className="bi bi-info-circle-fill me-2 fs-5"></i>
+                  Este curso no tiene RAs.
+                </div>
               ) : (
-                <div className="table-responsive">
-                  <table className="table table-sm align-middle">
-                    <thead>
+                <div className="table-responsive shadow-sm border rounded">
+                  <table className="table table-sm align-middle mb-0">
+                    <thead className="table-light">
                       <tr>
                         <th className="w-60px"><span className="visually-hidden">Seleccionar RA</span></th>
-                        <th>RA</th>
-                        <th className="w-160px">Aporte al RA (%)</th>
-                        <th className="w-220px">Total actividades actual</th>
-                        <th className="w-220px">Quedaría en</th>
-                        <th className="w-160px">Indicadores</th>
+                        <th className="fw-bold"><i className="bi bi-bullseye me-1"></i>RA</th>
+                        <th className="w-160px fw-bold"><i className="bi bi-percent me-1"></i>Aporte al RA (%)</th>
+                        <th className="w-220px fw-bold"><i className="bi bi-graph-up me-1"></i>Total actividades actual</th>
+                        <th className="w-220px fw-bold"><i className="bi bi-calculator me-1"></i>Quedaría en</th>
+                        <th className="w-160px fw-bold"><i className="bi bi-check2-square me-1"></i>Indicadores</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -442,18 +451,29 @@ const NuevaActividadCurso: React.FC = () => {
               </div>
             </div>
 
-            <div className="col-12 d-flex gap-2">
+            <div className="col-12 d-flex gap-2 mt-3">
               <button
-                className="btn btn-danger"
+                className="btn btn-danger shadow"
                 disabled={!canSave || saving}
                 onClick={submit}
               >
-                {saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Crear actividad'}
+                {saving ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    Guardando…
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-check-circle-fill me-2"></i>
+                    Crear actividad
+                  </>
+                )}
               </button>
               <button
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary shadow-sm"
                 onClick={() => navigate(`/docente/${curso}/ras`)}
               >
+                <i className="bi bi-x-circle me-2"></i>
                 Cancelar
               </button>
             </div>

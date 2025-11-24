@@ -1,6 +1,7 @@
 import React from 'react'
 import { useSession } from '@/state/SessionContext'
 import { useNavigate } from 'react-router-dom'
+import NotificationsBell from './NotificationsBell'
 // (logout removido de la barra – se mantiene lógica mínima)
 
 type Props = {
@@ -48,6 +49,9 @@ const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl,
         </div>
 
         <div className="text-end d-flex align-items-center gap-2">
+          {/* Notificaciones solo para estudiantes */}
+          {role === 'estudiante' && <NotificationsBell intervalMs={30000} />}
+          
           <div className="me-2 d-none d-sm-block" aria-label={`Usuario: ${name}`}> 
             <div className="fw-semibold small text-uppercase">{roleText}</div>
             <div className="fw-bold dash-username">{name}</div>
