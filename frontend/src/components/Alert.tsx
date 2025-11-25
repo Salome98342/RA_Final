@@ -8,11 +8,25 @@ interface AlertProps {
   duration?: number
   onClose?: () => void
   icon?: boolean
+  dismissible?: boolean
 }
 
-const Alert: React.FC<AlertProps> = ({ type, message, duration = 0, onClose, icon = true }) => {
-  const [visible, setVisible] = useState(true)
+const Alert: React.FC<AlertProps> = ({ 
+  type, 
+  message, 
+  duration = 0, 
+  onClose, 
+  icon = true,
+  dismissible = true 
+}) => {
+  const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
+
+  // Animación de entrada suave
+  useEffect(() => {
+    const showTimer = setTimeout(() => setVisible(true), 10)
+    return () => clearTimeout(showTimer)
+  }, [])
 
   useEffect(() => {
     if (duration > 0) {
@@ -28,29 +42,29 @@ const Alert: React.FC<AlertProps> = ({ type, message, duration = 0, onClose, ico
     setTimeout(() => {
       setVisible(false)
       onClose?.()
-    }, 300) // Duración de la animación de salida
+    }, 400)
   }
 
-  if (!visible) return null
+  if (!visible && closing) return null
 
   const typeConfig = {
     success: {
-      className: 'alert-success',
+      className: 'alert-success-modern',
       icon: 'bi-check-circle-fill',
       ariaLabel: 'Operación exitosa'
     },
     error: {
-      className: 'alert-danger',
-      icon: 'bi-exclamation-triangle-fill',
+      className: 'alert-danger-modern',
+      icon: 'bi-x-circle-fill',
       ariaLabel: 'Error'
     },
     warning: {
-      className: 'alert-warning',
-      icon: 'bi-exclamation-circle-fill',
+      className: 'alert-warning-modern',
+      icon: 'bi-exclamation-triangle-fill',
       ariaLabel: 'Advertencia'
     },
     info: {
-      className: 'alert-info',
+      className: 'alert-info-modern',
       icon: 'bi-info-circle-fill',
       ariaLabel: 'Información'
     }
@@ -60,22 +74,26 @@ const Alert: React.FC<AlertProps> = ({ type, message, duration = 0, onClose, ico
 
   return (
     <div
-      className={`alert ${config.className} alert-dismissible fade ${closing ? 'fade-out' : 'show'} d-flex align-items-center shadow-sm`}
+      className={`alert-modern ${config.className} ${visible && !closing ? 'alert-visible' : ''} ${closing ? 'alert-closing' : ''}`}
       role="alert"
       aria-live="polite"
       aria-label={config.ariaLabel}
     >
       {icon && (
-        <i className={`bi ${config.icon} me-2 fs-5`} aria-hidden="true"></i>
+        <div className="alert-icon-wrapper">
+          <i className={`bi ${config.icon} alert-icon`} aria-hidden="true"></i>
+        </div>
       )}
-      <div className="flex-grow-1">{message}</div>
-      {onClose && (
+      <div className="alert-message">{message}</div>
+      {(dismissible || onClose) && (
         <button
           type="button"
-          className="btn-close"
+          className="alert-close-btn"
           onClick={handleClose}
           aria-label="Cerrar alerta"
-        ></button>
+        >
+          <i className="bi bi-x-lg"></i>
+        </button>
       )}
     </div>
   )

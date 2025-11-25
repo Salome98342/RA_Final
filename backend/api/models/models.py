@@ -286,7 +286,12 @@ class NotasActividad(models.Model):
     class Meta:
         db_table = "notas_actividad"
         constraints = [
-            models.UniqueConstraint(fields=["matricula", "ra_actividad"], name="uq_notas_actividad"),
+            # Permite múltiples notas por ra_actividad si son para indicadores diferentes
+            # o una sola nota sin indicador específico
+            models.UniqueConstraint(
+                fields=["matricula", "ra_actividad", "indicador"], 
+                name="uq_notas_actividad_indicador"
+            ),
             models.CheckConstraint(
                 check=Q(nota_ra_actividad__isnull=True) | (Q(nota_ra_actividad__gte=0) & Q(nota_ra_actividad__lte=5)),
                 name="chk_nota_ra",

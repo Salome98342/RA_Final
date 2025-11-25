@@ -12,7 +12,7 @@ const Dropdown: React.FC<Props> = ({ options, value, onChange }) => {
       onBlur={() => setOpen(false)}
       role="combobox"
       aria-haspopup="listbox"
-      aria-expanded={open ? "true" : "false"}
+      aria-expanded={open}
       aria-controls={listId}
       aria-label="Selector"
     >

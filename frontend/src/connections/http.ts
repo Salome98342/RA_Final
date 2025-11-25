@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosRequestHeaders, AxiosError } from 'axios'
+import { loadingEventBus } from '@/utils/loadingEvents'
 
 // Centralized Axios client for all API calls
 export const api = axios.create({
@@ -65,6 +66,14 @@ export { getAuthToken, setAuthToken, removeAuthToken }
 // ==================== REQUEST INTERCEPTOR ====================
 api.interceptors.request.use(
   (config) => {
+    // Iniciar loading para peticiones que no sean de polling/notificaciones
+    const url = config.url || ''
+    const isBackgroundRequest = url.includes('/notificaciones') || url.includes('/polling')
+    
+    if (!isBackgroundRequest) {
+      loadingEventBus.start()
+    }
+
     // Attach Bearer token usando la función de gestión de tokens
     const t = getAuthToken()
     if (t) {
@@ -84,6 +93,7 @@ api.interceptors.request.use(
     return config
   },
   (error) => {
+    loadingEventBus.stop()
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
   }
@@ -94,6 +104,14 @@ let redirecting = false
 
 api.interceptors.response.use(
   (res) => {
+    // Detener loading al recibir respuesta exitosa
+    const url = res.config.url || ''
+    const isBackgroundRequest = url.includes('/notificaciones') || url.includes('/polling')
+    
+    if (!isBackgroundRequest) {
+      loadingEventBus.stop()
+    }
+
     // Reset redirecting flag on successful response
     if (redirecting && res.status === 200) {
       redirecting = false
@@ -101,6 +119,8 @@ api.interceptors.response.use(
     return res
   },
   async (error: AxiosError) => {
+    // Detener loading en caso de error
+    loadingEventBus.stop()
     const originalRequest = error.config as typeof error.config & { _retry?: boolean; _retryCount?: number }
     const status: number | undefined = error?.response?.status
 

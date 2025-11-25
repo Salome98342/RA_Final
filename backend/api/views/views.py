@@ -28,7 +28,8 @@ from ..models.models import (
 from ..serializers.serializers import (
     TipoDocumentoSerializer, TipoActividadSerializer, ProgramaSerializer,
     DocenteSerializer, EstudianteSerializer, AsignaturaSerializer,
-    TaskSerializer, ResultadoDeAprendizajeSerializer, RecursoSerializer
+    TaskSerializer, ResultadoDeAprendizajeSerializer, RecursoSerializer,
+    PasswordForgotSerializer, VerifyOTPSerializer, PasswordResetSerializer
 )
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
@@ -908,135 +909,273 @@ def logout_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_forgot_view(request):
+    """
+    Endpoint para solicitar recuperación de contraseña mediante OTP.
+    
+    Busca el correo primero en Estudiantes, luego en Docentes.
+    Genera un código OTP de 6 dígitos y lo envía por correo electrónico.
+    
+    Request Body:
+        - email (str): Correo electrónico del usuario
+    
+    Response:
+        - 200: {"ok": true, "message": "Si el correo existe, recibirás un código OTP"}
+        - 400: Error de validación
+    """
     import random
     from django.utils import timezone
     from datetime import timedelta
     from ..models.models import PasswordResetOTP
+    from ..serializers.serializers import PasswordForgotSerializer
 
-    email = (request.data or {}).get("email")
-    if not email:
-        return Response({"message": "Email requerido"}, status=status.HTTP_400_BAD_REQUEST)
+    # Validar datos de entrada con serializer
+    serializer = PasswordForgotSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Buscar usuario por correo (estudiante o docente)
-    u = Estudiante.objects.filter(correo=email).first()
-    rol = "estudiante"
-    if not u:
-        u = Docente.objects.filter(correo=email).first()
-        rol = "docente" if u else None
+    email = serializer.validated_data["email"]
+    
+    # Buscar usuario por correo - PRIORIDAD: Estudiantes primero, luego Docentes
+    user = None
+    rol = None
+    
+    # 1. Buscar en Estudiantes
+    estudiante = Estudiante.objects.filter(correo__iexact=email).first()
+    if estudiante:
+        user = estudiante
+        rol = "estudiante"
+    else:
+        # 2. Si no es estudiante, buscar en Docentes
+        docente = Docente.objects.filter(correo__iexact=email).first()
+        if docente:
+            user = docente
+            rol = "docente"
 
-    # Siempre responder 200 para evitar enumeración de usuarios
-    if u and rol:
-        # Invalidar OTPs anteriores no usados del mismo email
-        PasswordResetOTP.objects.filter(email=email, is_used=False).update(is_used=True)
-
-        # Generar código OTP de 6 dígitos
-        otp_code = str(random.randint(100000, 999999))
-        
-        # Crear registro OTP con expiración de 10 minutos
-        expires_at = timezone.now() + timedelta(minutes=10)
-        PasswordResetOTP.objects.create(
-            email=email,
-            otp_code=otp_code,
-            expires_at=expires_at,
-            rol=rol
-        )
-
-        # Enviar correo con el código OTP
-        subject = "Código de recuperación de contraseña"
-        message = (
-            "Hola,\n\n"
-            "Recibimos una solicitud para restablecer tu contraseña.\n"
-            f"Tu código de verificación es: {otp_code}\n\n"
-            "Este código es válido por 10 minutos.\n"
-            "Si no fuiste tú, puedes ignorar este mensaje.\n\n"
-            "— Universidad del Valle"
-        )
+    # Siempre responder 200 OK para evitar enumeración de usuarios
+    # (no revelar si el email existe o no en la base de datos)
+    if user and rol:
         try:
-            send_mail(subject, message, getattr(settings, "DEFAULT_FROM_EMAIL", None), [email], fail_silently=True)
-        except Exception:
-            # En desarrollo con console backend no debería fallar; igual no exponemos detalles
-            pass
+            # Invalidar todos los OTPs anteriores no usados del mismo email
+            PasswordResetOTP.objects.filter(
+                email__iexact=email, 
+                is_used=False
+            ).update(is_used=True)
 
-    return Response({"ok": True})
+            # Generar código OTP de 6 dígitos aleatorio
+            otp_code = str(random.randint(100000, 999999))
+            
+            # Crear nuevo registro OTP con expiración de 5 minutos (según requisitos)
+            expires_at = timezone.now() + timedelta(minutes=5)
+            PasswordResetOTP.objects.create(
+                email=email.lower(),
+                otp_code=otp_code,
+                expires_at=expires_at,
+                rol=rol
+            )
+
+            # Preparar y enviar correo electrónico
+            subject = "Código de Recuperación de Contraseña - RA Manager"
+            message = (
+                f"Hola {user.nombre},\n\n"
+                "Recibimos una solicitud para restablecer tu contraseña en RA Manager.\n\n"
+                f"Tu código de verificación es: {otp_code}\n\n"
+                "⚠️ Este código es válido por 5 minutos.\n\n"
+                "Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura.\n\n"
+                "Saludos,\n"
+                "Equipo RA Manager\n"
+                "Universidad del Valle"
+            )
+            
+            # Enviar correo (fail_silently=False para capturar errores en desarrollo)
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False  # Cambiar a True en producción si se desea
+            )
+            
+        except Exception as e:
+            # Log del error pero no exponer detalles al usuario
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al enviar OTP a {email}: {str(e)}")
+            # Continuar con respuesta genérica por seguridad
+
+    return Response({
+        "ok": True,
+        "message": "Si el correo está registrado, recibirás un código de verificación"
+    })
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def verify_otp_view(request):
-    """Verifica el código OTP ingresado por el usuario"""
+    """
+    Endpoint para verificar un código OTP.
+    
+    Valida que el código OTP sea correcto, no esté usado y no haya expirado.
+    
+    Request Body:
+        - email (str): Correo electrónico del usuario
+        - otp_code (str): Código OTP de 6 dígitos
+    
+    Response:
+        - 200: {"ok": true, "message": "Código verificado correctamente"}
+        - 400: Código inválido o expirado
+    """
     from django.utils import timezone
     from ..models.models import PasswordResetOTP
+    from ..serializers.serializers import VerifyOTPSerializer
 
-    email = (request.data or {}).get("email")
-    otp_code = (request.data or {}).get("otp_code")
+    # Validar datos de entrada con serializer
+    serializer = VerifyOTPSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not email or not otp_code:
-        return Response({"message": "Email y código OTP requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+    email = serializer.validated_data["email"]
+    otp_code = serializer.validated_data["otp_code"]
 
-    # Buscar OTP válido (no usado y no expirado)
+    # Buscar el OTP más reciente que coincida y sea válido
     otp = PasswordResetOTP.objects.filter(
-        email=email,
+        email__iexact=email,
         otp_code=otp_code,
         is_used=False,
         expires_at__gt=timezone.now()
-    ).first()
+    ).order_by('-created_at').first()
 
     if not otp:
-        return Response({"message": "Código OTP inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Código OTP inválido o expirado. Por favor, solicita uno nuevo."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # No marcar como usado todavía, se marcará cuando se cambie la contraseña
-    return Response({"ok": True, "message": "Código verificado correctamente"})
+    # Verificar si está a punto de expirar (opcional: advertir al usuario)
+    time_remaining = (otp.expires_at - timezone.now()).total_seconds()
+    warning = None
+    if time_remaining < 60:  # Menos de 1 minuto restante
+        warning = "Tu código expirará pronto. Completa el proceso rápidamente."
+
+    response_data = {
+        "ok": True,
+        "message": "Código verificado correctamente. Procede a cambiar tu contraseña."
+    }
+    
+    if warning:
+        response_data["warning"] = warning
+
+    return Response(response_data)
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_reset_view(request):
-    """Cambia la contraseña usando el código OTP verificado"""
-    from django.utils import timezone
-    from ..models.models import PasswordResetOTP
-
-    email = (request.data or {}).get("email")
-    otp_code = (request.data or {}).get("otp_code")
-    new_pass = (request.data or {}).get("password")
-
-    if not email or not otp_code or not new_pass:
-        return Response({"message": "Email, código OTP y contraseña requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+    """
+    Endpoint para restablecer la contraseña usando un código OTP verificado.
     
-    if len(str(new_pass)) < 6:
-        return Response({"message": "La nueva contraseña debe tener al menos 6 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
+    Cambia la contraseña del usuario y marca el OTP como usado.
+    Utiliza transacciones para garantizar consistencia.
+    
+    Request Body:
+        - email (str): Correo electrónico del usuario
+        - otp_code (str): Código OTP de 6 dígitos
+        - password (str): Nueva contraseña (mínimo 6 caracteres)
+    
+    Response:
+        - 200: {"ok": true, "message": "Contraseña actualizada correctamente"}
+        - 400: Error de validación o código inválido
+        - 404: Usuario no encontrado
+    """
+    from django.utils import timezone
+    from django.db import transaction
+    from ..models.models import PasswordResetOTP
+    from ..serializers.serializers import PasswordResetSerializer
 
-    # Buscar OTP válido (no usado y no expirado)
+    # Validar datos de entrada con serializer
+    serializer = PasswordResetSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    email = serializer.validated_data["email"]
+    otp_code = serializer.validated_data["otp_code"]
+    new_password = serializer.validated_data["password"]
+
+    # Buscar el OTP más reciente que coincida y sea válido
     otp = PasswordResetOTP.objects.filter(
-        email=email,
+        email__iexact=email,
         otp_code=otp_code,
         is_used=False,
         expires_at__gt=timezone.now()
-    ).first()
+    ).order_by('-created_at').first()
 
     if not otp:
-        return Response({"message": "Código OTP inválido o expirado"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Código OTP inválido o expirado. Solicita un nuevo código."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     rol = otp.rol
 
-    # Buscar usuario y cambiar contraseña
-    if rol == "docente":
-        u = Docente.objects.filter(correo=email).first()
-        if not u:
-            return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        u.contrasenia_docente = make_password(new_pass)
-        u.save(update_fields=["contrasenia_docente"])
-    else:
-        u = Estudiante.objects.filter(correo=email).first()
-        if not u:
-            return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        u.contrasena_estudiante = make_password(new_pass)
-        u.save(update_fields=["contrasena_estudiante"])
+    try:
+        # Usar transacción para garantizar atomicidad
+        with transaction.atomic():
+            # Buscar y actualizar contraseña según el rol
+            user = None
+            
+            if rol == "docente":
+                user = Docente.objects.filter(correo__iexact=email).first()
+                if not user:
+                    return Response(
+                        {"message": "Usuario docente no encontrado"},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                # Actualizar contraseña hasheada
+                user.contrasenia_docente = make_password(new_password)
+                user.save(update_fields=["contrasenia_docente"])
+                
+            elif rol == "estudiante":
+                user = Estudiante.objects.filter(correo__iexact=email).first()
+                if not user:
+                    return Response(
+                        {"message": "Usuario estudiante no encontrado"},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                # Actualizar contraseña hasheada
+                user.contrasena_estudiante = make_password(new_password)
+                user.save(update_fields=["contrasena_estudiante"])
+            else:
+                return Response(
+                    {"message": "Rol de usuario no válido"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-    # Marcar OTP como usado
-    otp.is_used = True
-    otp.save(update_fields=["is_used"])
+            # Marcar el OTP como usado para evitar reutilización
+            otp.is_used = True
+            otp.save(update_fields=["is_used"])
 
-    return Response({"ok": True, "message": "Contraseña actualizada correctamente"})
+            # Invalidar cualquier otro OTP pendiente para este email por seguridad
+            PasswordResetOTP.objects.filter(
+                email__iexact=email,
+                is_used=False
+            ).exclude(id=otp.id).update(is_used=True)
+
+        # Log de éxito (opcional)
+        logger_instance = logging.getLogger(__name__)
+        logger_instance.info(f"Contraseña restablecida exitosamente para {email} (rol: {rol})")
+
+        return Response({
+            "ok": True,
+            "message": "Tu contraseña ha sido actualizada correctamente. Ya puedes iniciar sesión."
+        })
+
+    except Exception as e:
+        # Log del error
+        logger_instance = logging.getLogger(__name__)
+        logger_instance.error(f"Error al restablecer contraseña para {email}: {str(e)}")
+        
+        return Response(
+            {"message": "Error al actualizar la contraseña. Por favor, intenta nuevamente."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 class TaskViewSet(viewsets.ModelViewSet):
@@ -1286,9 +1425,22 @@ def ra_actividades_view(request, ra_id: int):
                 "indicadores": inds,
             }
             if id_matricula:
-                nota = (NotasActividad.objects
+                # Si hay múltiples indicadores, pueden existir múltiples notas
+                # Devolver la nota con indicador coincidente si existe, sino la primera
+                notas = list(NotasActividad.objects
                         .filter(matricula_id=id_matricula, ra_actividad_id=rel.id_ra_actividad)
-                        .first())
+                        .order_by('-indicador_id'))  # Priorizamos las que tienen indicador
+                
+                # Si solo hay un indicador asignado, buscar su nota específica
+                if len(inds) == 1 and notas:
+                    nota_especifica = next((n for n in notas if n.indicador_id == inds[0]["id_ind"]), None)
+                    nota = nota_especifica or notas[0]
+                elif notas:
+                    # Si hay múltiples indicadores o ninguno, tomar la primera nota
+                    nota = notas[0]
+                else:
+                    nota = None
+                    
                 if nota:
                     row["nota"] = float(nota.nota_ra_actividad) if nota.nota_ra_actividad is not None else None
                     row["retroalimentacion"] = nota.retroalimentacion
@@ -1533,16 +1685,18 @@ def notas_view(request):
     id_ind = body.get("id_ind")
     if not (id_matricula and id_ra_actividad and nota is not None):
         return Response({"detail": "Campos requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Incluir indicador en la búsqueda para permitir múltiples notas por indicador
     obj, created = NotasActividad.objects.get_or_create(
         matricula_id=id_matricula,
         ra_actividad_id=id_ra_actividad,
-        defaults={"nota_ra_actividad": nota, "retroalimentacion": retro, "indicador_id": id_ind},
+        indicador_id=id_ind,  # Incluido en la clave única
+        defaults={"nota_ra_actividad": nota, "retroalimentacion": retro},
     )
     if not created:
         obj.nota_ra_actividad = nota
         obj.retroalimentacion = retro
-        obj.indicador_id = id_ind
-        obj.save(update_fields=["nota_ra_actividad", "retroalimentacion", "indicador_id"])
+        obj.save(update_fields=["nota_ra_actividad", "retroalimentacion"])
     
     # 🔔 Crear notificación personalizada para el estudiante
     try:

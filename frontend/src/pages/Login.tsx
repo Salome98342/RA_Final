@@ -3,20 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { login } from '@/services/auth'
 import { useSession } from '@/state/SessionContext'
+import Toast from '@/components/Toast'
 
 
-type ToastKind = "ok" | "error" | undefined;
+type ToastKind = "ok" | "error" | "warning" | "info";
 
 export default function Login() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [langOpen, setLangOpen] = useState(false);
   const [lang, setLang] = useState("Español - Internacional (es)");
-  const [toastMsg, setToastMsg] = useState<string>("");
-  const [toastKind, setToastKind] = useState<ToastKind>(undefined);
-  const [toastVisible, setToastVisible] = useState(false);
+  const [toast, setToast] = useState<{ text: string; type: ToastKind } | null>(null);
   const ddRef = useRef<HTMLDivElement | null>(null);
-  const toastTimeout = useRef<number | null>(null);
   const navigate = useNavigate();
   const { setName, setRole, setCode } = useSession()
 
@@ -31,32 +29,43 @@ export default function Login() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // Pequeño helper para toast
-  const showToast = (msg: string, kind: ToastKind = undefined, ms = 2200) => {
-    setToastMsg(msg);
-    setToastKind(kind);
-    setToastVisible(true); 
-    if (toastTimeout.current) window.clearTimeout(toastTimeout.current);
-    toastTimeout.current = window.setTimeout(() => setToastVisible(false), ms);
+  // Helper para mostrar toast
+  const showToast = (msg: string, kind: ToastKind = "error") => {
+    setToast({ text: msg, type: kind });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuario || !password) {
-      showToast("Complete usuario y contraseña", "error");
+      showToast("⚠️ Por favor complete usuario y contraseña", "warning");
       return;
     }
     try {
-  const profile = await login(usuario, password)
-    setName(profile.nombre)
-    setRole(profile.rol)
-    setCode(profile.code ?? usuario)
-    navigate(profile.rol === 'docente' ? '/docente' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante'))
+      const profile = await login(usuario, password)
+      setName(profile.nombre)
+      setRole(profile.rol)
+      setCode(profile.code ?? usuario)
+      navigate(profile.rol === 'docente' ? '/docente' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante'))
     } catch (err: unknown) {
       const data = (err as { response?: { data?: unknown } })?.response?.data
-      const msg = (data && typeof data === 'object')
-        ? String((data as Record<string, unknown>).detail ?? (data as Record<string, unknown>).message ?? 'Credenciales inválidas')
-        : 'Credenciales inválidas'
+      const statusCode = (err as { response?: { status?: number } })?.response?.status
+      
+      let msg = 'Error al iniciar sesión'
+      
+      // Mensaje específico según el código de estado
+      if (statusCode === 401) {
+        msg = '❌ Usuario o contraseña incorrectos. Verifique sus credenciales.'
+      } else if (statusCode === 400) {
+        msg = '⚠️ Complete todos los campos requeridos.'
+      } else if (statusCode === 500) {
+        msg = '🔧 Error en el servidor. Intente nuevamente más tarde.'
+      } else if (data && typeof data === 'object') {
+        const detail = (data as Record<string, unknown>).detail
+        const message = (data as Record<string, unknown>).message
+        if (detail) msg = String(detail)
+        else if (message) msg = String(message)
+      }
+      
       showToast(msg, 'error')
     }
   };
@@ -151,8 +160,8 @@ export default function Login() {
               role="button"
               onClick={() =>
                 showToast(
-                  "Este sitio usa cookies para mejorar su experiencia.",
-                  "ok"
+                  "🍪 Este sitio usa cookies para mejorar su experiencia.",
+                  "info"
                 )
               }
             >
@@ -162,17 +171,14 @@ export default function Login() {
         </section>
       </main>
 
-      {/* Toast/Mensaje flotante */}
-      <div
-        id="toast"
-        className={`mensaje${toastVisible ? " visible" : ""}${
-          toastKind ? " " + toastKind : ""
-        }`}
-        role="status"
-        aria-live="polite"
-      >
-        {toastMsg}
-      </div>
+      {/* Toast moderno con componente profesional */}
+      {toast && (
+        <Toast 
+          text={toast.text} 
+          type={toast.type} 
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

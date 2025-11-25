@@ -18,6 +18,7 @@ const DocenteCursos: React.FC = () => {
   const [err, setErr] = useState<string | null>(null)
   const [groups, setGroups] = useState<ProfilePeriodo[] | null>(null)
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null)
+  const [view, setView] = useState<'cursos' | 'recursos'>('cursos')
   const navigate = useNavigate()
   const { state } = useSession()
 
@@ -50,7 +51,10 @@ const DocenteCursos: React.FC = () => {
   // Construir conjuntos de códigos por periodo (si hay datos de perfil)
   const currentCodes = new Set<string>()
   const previousCodes = new Set<string>()
-  if (groups && groups.length > 0) {
+  
+  // Si hay grupos, clasificar cursos por periodo
+  const hasGroups = groups && groups.length > 0
+  if (hasGroups) {
     groups.forEach(g => {
       const codes = g.cursos.map(c => c.codigo)
       if (currentPeriodId != null && Number(g.periodo.id) === Number(currentPeriodId)) {
@@ -61,62 +65,64 @@ const DocenteCursos: React.FC = () => {
     })
   }
 
-  const filteredCurrent = groups ? filtered.filter(c => currentCodes.has(c.id)) : filtered
-  // (Deprecated single combined previous list replaced by per-period sections)
-  // const filteredPrevious = groups ? filtered.filter(c => previousCodes.has(c.id)) : []
-  // Mapa auxiliar (para intersectar por periodo manteniendo info y filtro aplicado)
+  // Si hay grupos, filtrar por periodo; sino, todos son "actuales"
+  const filteredCurrent = hasGroups ? filtered.filter(c => currentCodes.has(c.id)) : filtered
+  
+  // Mapa auxiliar para intersectar por periodo manteniendo info y filtro aplicado
   const filteredMap = new Map(filtered.map(c => [c.id, c]))
-  const previousGroups = groups ? groups.filter(g => currentPeriodId == null || Number(g.periodo.id) !== Number(currentPeriodId)) : []
+  const previousGroups = hasGroups ? groups.filter(g => currentPeriodId == null || Number(g.periodo.id) !== Number(currentPeriodId)) : []
 
   return (
   <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar
-          active="cursos"
+          active={view}
           onClick={(k)=>{
-            if (k === 'cursos') navigate('/docente')
+            if (k === 'cursos') setView('cursos')
             else if (k === 'recursos') {
               // Si el filtro deja 1 curso, abrimos directamente sus recursos
               const list = filtered
               if (list.length === 1) {
                 navigate(`/docente/${list[0].id}/recursos`)
               } else {
-                alert('Selecciona un curso (filtra hasta dejar uno) o entra al curso y usa el botón Recursos.')
+                setView('recursos')
               }
             }
           }}
           items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
         />
         <main className="dash-content">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div className="content-title">
-              <i className="bi bi-mortarboard text-primary me-2"></i>
-              Cursos - Filtrar por código de carrera
-            </div>
-            {state.role === 'coordinador' && (
-              <button 
-                className="btn btn-outline-primary"
-                onClick={() => navigate('/coordinador/materias')}
-                title="Volver a la vista del coordinador"
-              >
-                <i className="bi bi-arrow-left me-2"></i>
-                Regresar a Coordinador
-              </button>
-            )}
-          </div>
-          <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
-          {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
-          {loading ? (
+          {view === 'cursos' && (
+            <>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="content-title">
+                  <i className="bi bi-mortarboard text-primary me-2"></i>
+                  Cursos - Filtrar por código de carrera
+                </div>
+                {state.role === 'coordinador' && (
+                  <button 
+                    className="btn btn-outline-primary"
+                    onClick={() => navigate('/coordinador/materias')}
+                    title="Volver a la vista del coordinador"
+                  >
+                    <i className="bi bi-arrow-left me-2"></i>
+                    Regresar a Coordinador
+                  </button>
+                )}
+              </div>
+              <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
+              {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
+              {loading ? (
             <CardGrid>
               {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
             </CardGrid>
           ) : (
             <>
-              {groups && groups.length > 0 ? (
+              {hasGroups ? (
                 <>
-                  <div className="d-flex align-items-center gap-2 mb-3 mt-3" aria-label="Cursos del periodo actual">
-                    <i className="bi bi-calendar-check-fill text-success fs-5"></i>
+                  <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del periodo actual">
+                    <i className="bi bi-calendar-check text-success"></i>
                     <span className="fw-bold">Periodo actual</span>
                     {filteredCurrent.length > 0 && (
                       <span className="badge bg-success rounded-pill">{filteredCurrent.length}</span>
@@ -124,24 +130,24 @@ const DocenteCursos: React.FC = () => {
                   </div>
                   <CardGrid>
                     {filteredCurrent.length === 0 ? (
-                      <div className="alert alert-info shadow-sm d-flex align-items-center">
-                        <i className="bi bi-info-circle-fill me-2 fs-5"></i>
-                        <span>Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.</span>
+                      <div className="alert alert-info d-flex align-items-center">
+                        <i className="bi bi-info-circle me-2"></i>
+                        Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
                       </div>
                     ) : (
                       filteredCurrent.map((c, idx) => (
-                        <RaCard key={c.id} headTone={idx % 2 === 0 ? 'dark' : 'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                        <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                       ))
                     )}
                   </CardGrid>
-                  <div className="d-flex align-items-center gap-2 mb-3 mt-5" aria-label="Cursos de periodos anteriores">
-                    <i className="bi bi-clock-history fs-5 text-muted"></i>
-                    <span className="fw-bold text-muted">Periodos anteriores</span>
+                  <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
+                    <i className="bi bi-clock-history text-muted"></i>
+                    <span className="fw-bold">Periodos anteriores</span>
                   </div>
                   {previousGroups.length === 0 ? (
-                    <div className="alert alert-secondary shadow-sm d-flex align-items-center">
-                      <i className="bi bi-inbox-fill me-2 fs-5"></i>
-                      <span>Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.</span>
+                    <div className="alert alert-secondary d-flex align-items-center">
+                      <i className="bi bi-inbox me-2"></i>
+                      Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.
                     </div>
                   ) : (
                     previousGroups.map(pg => {
@@ -149,23 +155,23 @@ const DocenteCursos: React.FC = () => {
                         .map(c => filteredMap.get(c.codigo))
                         .filter((x): x is Course => Boolean(x))
                       return (
-                        <section key={pg.periodo.id} className="mb-4" aria-label={`Periodo ${pg.periodo.descripcion}`}>
+                        <section key={pg.periodo.id} className="mb-3" aria-label={`Periodo ${pg.periodo.descripcion}`}>
                           <div className="d-flex align-items-center gap-2 mb-2">
-                            <i className="bi bi-calendar2-event text-muted"></i>
-                            <span className="text-muted fw-semibold">{pg.periodo.descripcion}</span>
+                            <i className="bi bi-calendar2 text-muted ra-small"></i>
+                            <span className="ra-small text-muted fw-semibold">{pg.periodo.descripcion}</span>
                             {periodCourses.length > 0 && (
                               <span className="badge bg-secondary rounded-pill ra-small">{periodCourses.length}</span>
                             )}
                           </div>
                           <CardGrid>
                             {periodCourses.length === 0 ? (
-                              <div className="alert alert-secondary shadow-sm d-flex align-items-center">
-                                <i className="bi bi-inbox-fill me-2 fs-5"></i>
-                                <span>Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.</span>
+                              <div className="alert alert-secondary d-flex align-items-center">
+                                <i className="bi bi-inbox me-2"></i>
+                                Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.
                               </div>
                             ) : (
-                              periodCourses.map((c, idx) => (
-                                <RaCard key={c.id} headTone={idx % 2 === 0 ? 'dark' : 'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                              periodCourses.map(c => (
+                                <RaCard key={c.id} headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                               ))
                             )}
                           </CardGrid>
@@ -175,13 +181,31 @@ const DocenteCursos: React.FC = () => {
                   )}
                 </>
               ) : (
-                <CardGrid>
-                  {filtered.map((c, idx) => (
-                    <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
-                  ))}
-                </CardGrid>
+                <>
+                  {filtered.length === 0 ? (
+                    <div className="alert alert-info d-flex align-items-center">
+                      <i className="bi bi-info-circle me-2"></i>
+                      No se encontraron cursos{filter ? ' con ese filtro' : ''}.
+                    </div>
+                  ) : (
+                    <CardGrid>
+                      {filtered.map((c, idx) => (
+                        <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                      ))}
+                    </CardGrid>
+                  )}
+                </>
               )}
             </>
+          )}
+          </>
+          )}
+          
+          {view === 'recursos' && (
+            <div className="alert alert-info d-flex align-items-center">
+              <i className="bi bi-info-circle me-2"></i>
+              Filtra por un curso específico o navega al curso para ver sus recursos.
+            </div>
           )}
         </main>
       </div>

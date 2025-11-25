@@ -146,13 +146,19 @@ source env/bin/activate
 cd backend
 pip install -r requirements.txt
 
-# Copiar archivo de configuración
-cp .env.example backend/.env
+# Copiar archivo de configuración (IMPORTANTE: Cada desarrollador necesita su propio .env)
+# Windows:
+copy .env.example .env
+# Linux/Mac:
+cp .env.example .env
 
-# Editar backend/.env con tus credenciales
-# SECRET_KEY, DB_PASSWORD, etc.
+# Editar .env con TUS credenciales personales
+# ⚠️ NO COMPARTAS TU ARCHIVO .env - Es privado y ya está en .gitignore
 
-# Generar SECRET_KEY segura
+# Verificar tu configuración
+python check_env.py
+
+# Generar SECRET_KEY segura (opcional, pero recomendado)
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 
 # Crear base de datos PostgreSQL
@@ -207,6 +213,94 @@ Si cargaste los datos de prueba (`inserts.sql`):
 - **Contraseña**: `password123`
 
 ⚠️ **IMPORTANTE**: Cambiar estas contraseñas en producción.
+
+---
+
+## 🔐 Configuración de Variables de Entorno (.env)
+
+### ⚠️ Información Crítica sobre el archivo .env
+
+El archivo `.env` contiene **información sensible y personal** de cada desarrollador:
+
+- ✅ **Cada desarrollador debe crear su propio `.env`** copiando `.env.example`
+- ❌ **NUNCA subas tu `.env` a GitHub** (ya está protegido en `.gitignore`)
+- ✅ **El archivo `.env.example` sí se comparte** (es una plantilla sin datos reales)
+
+### 📖 Guías Disponibles
+
+Para información detallada sobre configuración:
+
+1. **[SETUP.md](backend/SETUP.md)** - Guía completa de instalación paso a paso
+2. **[ENV_GUIDE.md](backend/ENV_GUIDE.md)** - Explicación detallada del sistema de variables de entorno
+3. **[EMAIL_SETUP.md](backend/docs/EMAIL_SETUP.md)** - Configuración del sistema de correo electrónico
+
+### 🚀 Inicio Rápido
+
+```bash
+# 1. Ve a la carpeta backend
+cd backend
+
+# 2. Copia el archivo de ejemplo
+copy .env.example .env    # Windows
+# o
+cp .env.example .env      # Linux/Mac
+
+# 3. Edita .env con tus credenciales
+notepad .env              # Windows
+# o
+nano .env                 # Linux/Mac
+
+# 4. Verifica que todo esté configurado correctamente
+python check_env.py
+```
+
+### 📝 Variables Mínimas Requeridas
+
+```dotenv
+# Backend/.env (tu archivo personal)
+
+SECRET_KEY=tu-clave-secreta-unica-aqui
+DEBUG=True
+
+# Base de datos PostgreSQL (TU configuración local)
+DB_NAME=ra_manager
+DB_USER=postgres
+DB_PASSWORD=TU_PASSWORD_DE_POSTGRESQL
+
+# Email (desarrollo: imprime en consola)
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+```
+
+### 🔍 ¿Cómo funciona en equipo?
+
+```
+Tu computadora:
+  C:\Users\salome\...\backend\.env  ← Tu archivo personal
+
+Compañero 1:
+  C:\Users\juan\...\backend\.env    ← Su archivo personal
+
+Compañero 2:
+  /home/maria/.../backend/.env      ← Su archivo personal
+```
+
+**Todos usan la misma ruta relativa (`backend/.env`), pero cada uno tiene sus propias credenciales.**
+
+### ✅ Verificación Automática
+
+Ejecuta el script de verificación para asegurar que tu entorno está correctamente configurado:
+
+```bash
+cd backend
+python check_env.py
+```
+
+Este script verifica:
+- ✓ Existencia del archivo `.env`
+- ✓ Variables de entorno configuradas
+- ✓ Conexión a PostgreSQL
+- ✓ Dependencias de Python instaladas
+- ✓ Estado de migraciones
 
 ---
 
