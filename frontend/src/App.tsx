@@ -14,6 +14,7 @@ import CoordinadorDashboard from '@/pages/coordinador/Dashboard'
 import CoordinadorAsignatura from '@/pages/coordinador/Asignatura'
 import CoordinadorImports from '@/pages/coordinador/Imports'
 import CoordinadorMaterias from '@/pages/coordinador/Materias'
+import PortfolioPage from '@/portfolio/pages/PortfolioPage'
 import { useSession } from '@/state/SessionContext'
 import { getAuthToken } from '@/connections/http'
 
@@ -74,6 +75,9 @@ const App: React.FC = () => {
     // Quitar BrowserRouter aquí, ya está en main.tsx
     <>
     <Routes>
+      {/* Portfolio - Public route */}
+      <Route path="/portfolio" element={<PortfolioPage />} />
+      
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/recuperar" element={<Recuperar />} />
