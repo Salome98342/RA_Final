@@ -18,7 +18,7 @@ const Estudiante: React.FC = () => {
   const [err, setErr] = useState<string | null>(null)
   const [groups, setGroups] = useState<ProfilePeriodo[] | null>(null)
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null)
-  const [matriculaId, setMatriculaId] = useState<string | null>(null)
+  const [_matriculaId, setMatriculaId] = useState<string | null>(null)
   const [groupedActivities, setGroupedActivities] = useState<GroupedActivity[]>([])
   const [selectedGroupedActivity, setSelectedGroupedActivity] = useState<GroupedActivity | null>(null)
   const [notifications, setNotifications] = useState<{ id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[]>([])

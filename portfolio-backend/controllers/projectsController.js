@@ -3,12 +3,17 @@ const supabase = require('../config/supabase');
 // Get all projects
 const getProjects = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
+    let data = null;
+    
+    if (supabase) {
+      const result = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (result.error) throw result.error;
+      data = result.data;
+    }
 
     res.json(data || [
       {

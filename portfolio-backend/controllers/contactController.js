@@ -12,19 +12,28 @@ const createMessage = async (req, res) => {
 
     const { name, email, message } = req.body;
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert([
-        { 
-          name, 
-          email, 
-          message,
-          created_at: new Date().toISOString()
-        }
-      ])
-      .select();
-
-    if (error) throw error;
+    let data = null;
+    
+    if (supabase) {
+      const result = await supabase
+        .from('messages')
+        .insert([
+          { 
+            name, 
+            email, 
+            message,
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
+      
+      if (result.error) throw result.error;
+      data = result.data;
+    } else {
+      // Fallback: just log the message
+      console.log('Contact message received:', { name, email, message });
+      data = [{ name, email, message, created_at: new Date().toISOString() }];
+    }
 
     res.status(201).json({ 
       success: true,

@@ -3,12 +3,17 @@ const supabase = require('../config/supabase');
 // Get all skills
 const getSkills = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('skills')
-      .select('*')
-      .order('category', { ascending: true });
-
-    if (error) throw error;
+    let data = null;
+    
+    if (supabase) {
+      const result = await supabase
+        .from('skills')
+        .select('*')
+        .order('category', { ascending: true });
+      
+      if (result.error) throw result.error;
+      data = result.data;
+    }
 
     res.json(data || [
       { id: 1, name: 'React', category: 'Frontend' },

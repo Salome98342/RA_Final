@@ -3,12 +3,17 @@ const supabase = require('../config/supabase');
 // Get profile information
 const getProfile = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('profile')
-      .select('*')
-      .single();
-
-    if (error) throw error;
+    let data = null;
+    
+    if (supabase) {
+      const result = await supabase
+        .from('profile')
+        .select('*')
+        .single();
+      
+      if (result.error) throw result.error;
+      data = result.data;
+    }
 
     res.json(data || {
       name: 'Salomé Rodríguez Moscoso',
