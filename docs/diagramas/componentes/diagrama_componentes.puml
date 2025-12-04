@@ -1,0 +1,334 @@
+@startuml Diagrama de Componentes - RA Manager
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam component {
+  BackgroundColor #E1F5FE
+  BorderColor #0277BD
+  FontSize 11
+}
+skinparam interface {
+  BackgroundColor #FFF9C4
+  BorderColor #F57C00
+}
+
+' ==================== CAPA DE PRESENTACIÓN ====================
+
+package "Frontend - React Application" as frontend {
+  
+  [Browser] as browser
+  
+  package "Pages" {
+    [Login.tsx] as login_page
+    [Estudiante.tsx] as estudiante_page
+    [Docente.tsx] as docente_page
+    [Profile.tsx] as profile_page
+    [Recuperar.tsx] as recuperar_page
+    [Reset.tsx] as reset_page
+    
+    package "pages/coordinador" {
+      [Dashboard.tsx] as coord_dash
+      [Asignatura.tsx] as asignatura_page
+      [Imports.tsx] as imports_page
+      [Materias.tsx] as materias_page
+    }
+    
+    package "pages/docente" {
+      [Calificar.tsx] as calificar_page
+      [CrearActividad.tsx] as crear_act_page
+      [Cursos.tsx] as cursos_page
+      [NuevaActividad.tsx] as nueva_act_page
+      [RAs.tsx] as ras_page
+      [Recursos.tsx] as recursos_page
+    }
+  }
+  
+  package "Components" {
+    [ActivityDetailsModal.tsx] as act_modal
+    [Alert.tsx] as alert_comp
+    [CardGrid.tsx] as card_grid
+    [ConfirmDialog.tsx] as confirm_dialog
+    [GradeSummary.tsx] as grade_summary
+    [HeaderBar.tsx] as header_bar
+    [NotificationsBell.tsx] as notif_bell
+    [RaCard.tsx] as ra_card
+    [SearchPill.tsx] as search_pill
+    [Sidebar.tsx] as sidebar
+    [StudentList.tsx] as student_list
+    [Toast.tsx] as toast
+  }
+  
+  package "State Management" {
+    [SessionContext.tsx] as session
+    [LoadingContext.tsx] as loading
+  }
+  
+  package "Services" {
+    [api.ts] as api_svc
+    [auth.ts] as auth_svc
+    [coordinador.ts] as coord_svc
+    [http.ts] as http_svc
+  }
+  
+  package "Connections" {
+    [endpoints.ts] as endpoints
+    [http.ts] as http_client
+  }
+  
+  [App.tsx] as app
+  [main.tsx] as main
+  [types.ts] as types
+}
+
+' ==================== CAPA DE APLICACIÓN ====================
+
+package "Backend - Django REST API" as backend {
+  
+  package "API App" {
+    [models.py] as models
+    [views.py] as views
+    [serializers.py] as serializers
+    [urls.py] as api_urls
+    
+    package "Middleware" {
+      [error_handler.py] as error_handler
+    }
+    
+    package "Management Commands" {
+      [clean_expired_otps.py] as clean_otps
+      [list_urls.py] as list_urls
+    }
+  }
+  
+  [settings.py] as settings
+  [urls.py] as main_urls
+}
+
+' ==================== CAPA DE DATOS ====================
+
+package "Data Layer" as data_layer {
+  
+  database "PostgreSQL Database" as postgres {
+    [Tables & Constraints] as tables
+  }
+}
+
+' ==================== SERVICIOS EXTERNOS ====================
+
+package "External Services" as external {
+  [Gmail SMTP Server] as gmail
+  [File Storage (media/)] as storage
+}
+
+' ==================== INTERFACES ====================
+
+interface "REST API" as rest_api
+interface "HTTP/HTTPS" as http_protocol
+interface "Django ORM" as orm_interface
+interface "SMTP Protocol" as smtp
+interface "File System" as filesystem
+
+' ==================== RELACIONES - FRONTEND ====================
+
+browser --> main
+main --> app
+
+app --> session : "provee contexto"
+app --> loading : "provee contexto"
+
+login_page --> auth_svc : "login/logout"
+recuperar_page --> auth_svc : "solicita OTP"
+reset_page --> auth_svc : "resetea contraseña"
+profile_page --> auth_svc : "perfil"
+
+estudiante_page --> api_svc : "cursos, RAs, notas"
+estudiante_page --> header_bar : "usa"
+estudiante_page --> sidebar : "usa"
+estudiante_page --> ra_card : "usa"
+estudiante_page --> notif_bell : "usa"
+estudiante_page --> grade_summary : "usa"
+
+docente_page --> api_svc : "cursos, RAs"
+docente_page --> header_bar : "usa"
+docente_page --> student_list : "usa"
+docente_page --> act_modal : "usa"
+
+calificar_page --> api_svc : "calificaciones"
+crear_act_page --> api_svc : "crear actividad"
+recursos_page --> api_svc : "recursos"
+
+coord_dash --> coord_svc : "redirige"
+asignatura_page --> coord_svc : "avance"
+imports_page --> coord_svc : "importaciones"
+materias_page --> coord_svc : "listado"
+
+api_svc --> http_svc : "usa"
+api_svc --> endpoints : "usa"
+auth_svc --> http_client : "usa"
+coord_svc --> http_client : "usa"
+
+' ==================== RELACIONES - COMUNICACIÓN ====================
+
+http_client --> http_protocol
+http_svc --> http_protocol
+http_protocol --> rest_api
+rest_api --> main_urls
+
+' ==================== RELACIONES - BACKEND ====================
+
+main_urls --> api_urls : "incluye"
+settings --> error_handler : "configura"
+
+api_urls --> views : "rutea todas las peticiones"
+
+views --> serializers : "usa"
+views --> models : "consulta/modifica"
+
+serializers --> models : "serializa"
+
+clean_otps --> models : "limpia OTPs expirados"
+list_urls --> main_urls : "lista rutas"
+
+' ==================== RELACIONES - DATOS ====================
+
+models --> orm_interface
+orm_interface --> postgres
+postgres --> tables
+
+' ==================== RELACIONES - EXTERNOS ====================
+
+views --> smtp : "envía OTP"
+smtp --> gmail
+
+views --> filesystem : "recursos/avatares"
+filesystem --> storage
+
+' ==================== NOTAS ====================
+
+note right of session
+  Context API para gestión
+  de estado global:
+  - Usuario autenticado
+  - Rol actual (code)
+  - Nombre completo
+end note
+
+note right of http_client
+  Axios configurado con:
+  - Interceptores de request
+  - Manejo de errores
+  - Token en headers
+  - BaseURL desde endpoints
+end note
+
+note right of models
+  ARCHIVO ÚNICO (329 líneas)
+  Contiene TODOS los modelos:
+  - PasswordResetOTP
+  - TipoDocumento, Docente
+  - Estudiante, Asignatura
+  - Task, ResultadoDeAprendizaje
+  - Matricula, IndicadoresDeLogro
+  - Actividad, RaActividad
+  - NotasActividad, PeriodoAcademico
+  - Recurso, RaActividadIndicador
+  - Coordinador, ImportAudit
+end note
+
+note right of views
+  ARCHIVO ÚNICO (2519 líneas)
+  Contiene TODAS las vistas:
+  - login_view, OTP views
+  - estudiante_* views
+  - docente_* views
+  - coordinador_* views
+  - import_* views
+  - notificaciones views
+  - recursos_view
+  + Cache de notificaciones
+  + Algoritmos de cálculo:
+    * Nota progresiva
+    * Nota estricta
+    * Cobertura por RA
+end note
+
+note right of serializers
+  ARCHIVO ÚNICO (138 líneas)
+  Contiene TODOS los serializers:
+  - TaskSerializer
+  - TipoDocumentoSerializer
+  - DocenteSerializer
+  - EstudianteSerializer
+  - AsignaturaSerializer
+  - ResultadoDeAprendizajeSerializer
+  - RecursoSerializer
+  - Password Reset Serializers
+end note
+
+note left of postgres
+  Base de datos relacional con:
+  - Constraints
+  - Indexes
+  - Foreign Keys
+  - Check Constraints
+  Tablas principales:
+  - api_docente, api_estudiante
+  - api_asignatura, api_matricula
+  - api_resultadodeaprendizaje
+  - api_actividad, api_raactividad
+  - api_notasactividad
+  - api_recurso
+  - api_coordinador
+  - api_importaudit
+  - api_passwordresetotp
+end note
+
+note bottom of gmail
+  Envío de emails para:
+  - Códigos OTP (recuperación contraseña)
+  Configurado en settings.py
+end note
+
+note bottom of storage
+  Almacenamiento de:
+  - Recursos educativos (media/recursos/)
+  - Avatares de usuario (media/avatars/)
+end note
+
+note right of api_svc
+  api.ts (354 líneas)
+  Funciones principales:
+  - getCourses()
+  - getRAsByCourse()
+  - getIndicatorsByRA()
+  - getActivitiesByCourse()
+  - getGroupedActivities()
+  - getGradeSummary()
+  - getNotifications()
+  - markNotificationRead()
+end note
+
+note right of auth_svc
+  auth.ts (83 líneas)
+  Funciones principales:
+  - login()
+  - logout()
+  - requestPasswordReset()
+  - verifyOTP()
+  - resetPassword()
+  - getFullProfile()
+  - updateProfile()
+  - updateAvatar()
+end note
+
+note right of coord_svc
+  coordinador.ts (92 líneas)
+  Interfaces:
+  - AsignaturaRow
+  - EstudianteRow
+  - RARow
+  - AvanceRAItem
+  Funciones para coordinador
+end note
+
+@enduml
