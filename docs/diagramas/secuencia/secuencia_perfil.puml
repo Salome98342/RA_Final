@@ -1,0 +1,444 @@
+@startuml Diagrama de Secuencia - Perfil de Usuario
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Usuario\n(Todos los roles)" as user
+participant "Profile\n(React)" as ui
+participant "api.ts" as api
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+participant "FileSystem" as fs
+
+== Ver Perfil ==
+
+user -> ui : Navega a /perfil
+activate ui
+
+ui -> api : getFullProfile()
+activate api
+api -> http : GET /api/auth/profile/
+activate http
+http -> views : profile_view()
+activate views
+
+views -> views : Extraer user_id y rol del token JWT
+
+alt Rol: Estudiante
+  views -> models : Estudiante.objects.get(id_estudiante=user_id)
+  activate models
+  models -> db : SELECT * FROM estudiante WHERE id = :user_id
+  activate db
+  db --> models : Datos del estudiante
+  deactivate db
+  models --> views : Estudiante instance
+  deactivate models
+  
+  views -> models : Matricula.objects.filter(estudiante=user_id)
+  activate models
+  models -> db : SELECT * FROM matricula\nJOIN periodo_academico\nWHERE id_estudiante = :user_id
+  activate db
+  db --> models : Matrículas con periodos
+  deactivate db
+  models --> views : QuerySet
+  deactivate models
+  
+else Rol: Docente
+  views -> models : Docente.objects.get(id_docente=user_id)
+  activate models
+  models -> db : SELECT * FROM docente WHERE id = :user_id
+  activate db
+  db --> models : Datos del docente
+  deactivate db
+  models --> views : Docente instance
+  deactivate models
+  
+  views -> models : Asignatura.objects.filter(docente=user_id)
+  activate models
+  models -> db : SELECT * FROM asignatura\nWHERE codigo_docente = :user_id
+  activate db
+  db --> models : Asignaturas impartidas
+  deactivate db
+  models --> views : QuerySet
+  deactivate models
+  
+else Rol: Coordinador
+  views -> models : Coordinador.objects.get(id_coordinador=user_id)
+  activate models
+  models -> db : SELECT * FROM coordinador WHERE id = :user_id
+  activate db
+  db --> models : Datos del coordinador
+  deactivate db
+  models --> views : Coordinador instance
+  deactivate models
+  
+  views -> models : Programa.objects.filter(coordinador=user_id)
+  activate models
+  models -> db : SELECT * FROM programa\nWHERE id_coordinador = :user_id
+  activate db
+  db --> models : Programas coordinados
+  deactivate db
+  models --> views : QuerySet
+  deactivate models
+end
+
+views --> http : Response({...})
+deactivate views
+note right
+  Respuesta incluye:
+  - Datos personales
+  - Código/identificación
+  - Email
+  - Tipo de documento
+  - Avatar URL
+  - Periodos (estudiante)
+  - Asignaturas (docente)
+  - Programas (coordinador)
+end note
+http --> api : ProfileDetails
+deactivate http
+api --> ui : Profile data
+deactivate api
+
+ui --> user : Muestra perfil:
+note right
+  **Información Personal:**
+  - Foto de perfil (avatar)
+  - Nombre completo
+  - Código de usuario
+  - Email
+  - Tipo de documento
+  
+  **Información Académica:**
+  (Depende del rol)
+  
+  [Botón: Editar Perfil]
+  [Botón: Cambiar Contraseña]
+  [Botón: Cambiar Avatar]
+end note
+deactivate ui
+
+== Editar Perfil ==
+
+user -> ui : Click en "Editar Perfil"
+activate ui
+
+ui --> user : Muestra formulario de edición:
+note right
+  Campos editables:
+  - Nombre
+  - Email
+  - Teléfono (si aplica)
+  
+  Campos no editables:
+  - Código de usuario
+  - Tipo de documento
+  - Rol
+end note
+
+user -> ui : Modifica datos y envía
+ui -> ui : Validar datos localmente
+
+alt Validación local falla
+  ui --> user : Mostrar errores en formulario
+else Validación local exitosa
+  
+  ui -> api : updateProfile(profileData)
+  activate api
+  api -> http : PUT /api/auth/profile/
+  activate http
+  http -> views : profile_view() [PUT]
+  activate views
+  
+  views -> views : Extraer user_id y rol del token
+  views -> views : Validar datos recibidos
+  
+  alt Email ya existe (otro usuario)
+    views --> http : Response 400 (Bad Request)
+    deactivate views
+    http --> api : Error
+    deactivate http
+    api --> ui : Error message
+    deactivate api
+    ui --> user : Mostrar error
+  else Email disponible
+    
+    alt Rol: Estudiante
+      views -> models : estudiante.update(nombre=..., email=...)
+      activate models
+      models -> db : UPDATE estudiante SET ... WHERE id = :user_id
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+      
+    else Rol: Docente
+      views -> models : docente.update(...)
+      activate models
+      models -> db : UPDATE docente SET ... WHERE id = :user_id
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+      
+    else Rol: Coordinador
+      views -> models : coordinador.update(...)
+      activate models
+      models -> db : UPDATE coordinador SET ... WHERE id = :user_id
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+    end
+    
+    views --> http : Response 200 (Success)
+    deactivate views
+    http --> api : Updated profile
+    deactivate http
+    api --> ui : Success
+    deactivate api
+    
+    ui -> ui : Actualizar SessionContext
+    ui --> user : Mostrar mensaje: "Perfil actualizado"
+  end
+end
+
+deactivate ui
+
+== Cambiar Avatar ==
+
+user -> ui : Click en "Cambiar Avatar"
+activate ui
+
+ui --> user : Muestra selector de archivo
+note right
+  Restricciones:
+  - Formatos: JPG, PNG, GIF
+  - Tamaño máximo: 2MB
+  - Dimensiones: min 100x100px
+end note
+
+user -> ui : Selecciona imagen
+ui -> ui : Validar imagen localmente
+
+alt Validación local falla
+  ui --> user : Mostrar error
+else Validación local exitosa
+  
+  ui -> ui : Vista previa de imagen
+  user -> ui : Confirma cambio
+  
+  ui -> api : uploadAvatar(formData)
+  activate api
+  note left of api
+    formData = new FormData()
+    formData.append('avatar', file)
+  end note
+  
+  api -> http : POST /api/upload-avatar/\nContent-Type: multipart/form-data
+  activate http
+  http -> views : profile_avatar_view()
+  activate views
+  
+  views -> views : Validar imagen en backend
+  note right
+    Validaciones:
+    - Formato permitido
+    - Tamaño <= 2MB
+    - Es imagen válida
+    - No es maliciosa
+  end note
+  
+  alt Validación backend falla
+    views --> http : Response 400 (Bad Request)
+    deactivate views
+    http --> api : Error
+    deactivate http
+    api --> ui : Error message
+    deactivate api
+    ui --> user : Mostrar error
+  else Validación backend exitosa
+    
+    views -> fs : Guardar imagen en /media/avatars/
+    activate fs
+    note right
+      Estructura:
+      /media/avatars/
+        /<rol>_<user_id>_<timestamp>.jpg
+      
+      Ejemplo:
+      /media/avatars/est_123_1234567890.jpg
+    end note
+    fs --> views : Ruta del archivo guardado
+    deactivate fs
+    
+    alt Usuario tenía avatar anterior
+      views -> fs : Eliminar avatar anterior
+      activate fs
+      fs --> views : Archivo eliminado
+      deactivate fs
+    end
+    
+    alt Rol: Estudiante
+      views -> models : estudiante.update(avatar=ruta)
+      activate models
+      models -> db : UPDATE estudiante SET avatar = :ruta
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+      
+    else Rol: Docente
+      views -> models : docente.update(avatar=ruta)
+      activate models
+      models -> db : UPDATE docente SET avatar = :ruta
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+      
+    else Rol: Coordinador
+      views -> models : coordinador.update(avatar=ruta)
+      activate models
+      models -> db : UPDATE coordinador SET avatar = :ruta
+      activate db
+      db --> models : OK
+      deactivate db
+      models --> views : Updated
+      deactivate models
+    end
+    
+    views --> http : Response 200 (Success) con nueva URL
+    deactivate views
+    http --> api : Avatar URL
+    deactivate http
+    api --> ui : Nueva URL del avatar
+    deactivate api
+    
+    ui -> ui : Actualizar imagen en UI
+    ui -> ui : Actualizar SessionContext
+    ui --> user : Mostrar mensaje: "Avatar actualizado"
+  end
+end
+
+deactivate ui
+
+== Cambiar Contraseña ==
+
+user -> ui : Click en "Cambiar Contraseña"
+activate ui
+
+ui --> user : Muestra formulario:
+note right
+  - Contraseña actual
+  - Nueva contraseña
+  - Confirmar nueva contraseña
+  
+  Validaciones locales:
+  - Nueva contraseña >= 8 caracteres
+  - Nueva ≠ actual
+  - Confirmación coincide
+end note
+
+user -> ui : Completa formulario y envía
+ui -> ui : Validar datos localmente
+
+alt Validación local falla
+  ui --> user : Mostrar errores
+else Validación local exitosa
+  
+  ui -> api : changePassword(oldPassword, newPassword)
+  activate api
+  api -> http : POST /api/auth/change-password/
+  activate http
+  http -> views : password_change_view()
+  activate views
+  
+  views -> views : Extraer user_id y rol del token
+  
+  alt Rol: Estudiante
+    views -> models : Estudiante.objects.get(id=user_id)
+    activate models
+    models -> db : SELECT * FROM estudiante WHERE id = :user_id
+    activate db
+    db --> models : Estudiante
+    deactivate db
+    models --> views : Usuario
+    deactivate models
+    
+  else Rol: Docente
+    views -> models : Docente.objects.get(id=user_id)
+    activate models
+    models -> db : SELECT * FROM docente WHERE id = :user_id
+    activate db
+    db --> models : Docente
+    deactivate db
+    models --> views : Usuario
+    deactivate models
+    
+  else Rol: Coordinador
+    views -> models : Coordinador.objects.get(id=user_id)
+    activate models
+    models -> db : SELECT * FROM coordinador WHERE id = :user_id
+    activate db
+    db --> models : Coordinador
+    deactivate db
+    models --> views : Usuario
+    deactivate models
+  end
+  
+  views -> views : check_password(old_password, usuario.password)
+  
+  alt Contraseña actual incorrecta
+    views --> http : Response 400 (Bad Request)
+    deactivate views
+    http --> api : Error
+    deactivate http
+    api --> ui : Error message
+    deactivate api
+    ui --> user : Mostrar error: "Contraseña actual incorrecta"
+  else Contraseña actual correcta
+    
+    views -> views : make_password(new_password)
+    note right
+      Hash con PBKDF2-SHA256
+    end note
+    
+    views -> models : usuario.update(password=hashed)
+    activate models
+    models -> db : UPDATE [tabla] SET password = :hashed\nWHERE id = :user_id
+    activate db
+    db --> models : OK
+    deactivate db
+    models --> views : Updated
+    deactivate models
+    
+    views --> http : Response 200 (Success)
+    deactivate views
+    http --> api : Success
+    deactivate http
+    api --> ui : Contraseña cambiada
+    deactivate api
+    
+    ui --> user : Mostrar mensaje:
+    note right
+      "Contraseña actualizada exitosamente"
+      
+      Opcional: Redirigir a login
+      para re-autenticar con nueva contraseña
+    end note
+  end
+end
+
+deactivate ui
+
+@enduml

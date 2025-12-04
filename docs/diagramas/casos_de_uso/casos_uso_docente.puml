@@ -1,0 +1,204 @@
+@startuml Casos de Uso - Docente
+
+' Estilos
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam actorBackgroundColor #E8F5E9
+skinparam actorBorderColor #4CAF50
+skinparam usecaseBackgroundColor #FFF9C4
+skinparam usecaseBorderColor #F57C00
+
+left to right direction
+
+' Actor
+actor "Docente" as docente #LightGreen
+actor "Sistema de Email" as email #LightGray
+
+' Paquetes de casos de uso
+package "Gestión de Autenticación" {
+  usecase (Iniciar Sesión) as UC1
+  usecase (Recuperar Contraseña) as UC2
+  usecase (Verificar OTP) as UC3
+  usecase (Restablecer Contraseña) as UC4
+  usecase (Cerrar Sesión) as UC5
+  usecase (Cambiar Contraseña) as UC6
+}
+
+package "Gestión de Perfil" {
+  usecase (Ver Perfil) as UC7
+  usecase (Editar Perfil) as UC8
+  usecase (Actualizar Correo) as UC8A
+  usecase (Actualizar Teléfono) as UC8B
+  usecase (Subir Avatar) as UC9
+}
+
+package "Gestión de Cursos" {
+  usecase (Ver Cursos Asignados) as UC20
+  usecase (Filtrar Cursos por Periodo) as UC20A
+  usecase (Ver Cursos Actuales) as UC20B
+  usecase (Ver Cursos Anteriores) as UC20C
+  usecase (Gestionar RAs del Curso) as UC21
+  usecase (Ver Porcentajes por RA) as UC21A
+  usecase (Ver Indicadores de RA) as UC21B
+}
+
+package "Gestión de Actividades" {
+  usecase (Crear Actividad) as UC22
+  usecase (Seleccionar Tipo de Actividad) as UC22A
+  usecase (Asignar Porcentaje a RA) as UC22B
+  usecase (Establecer Fecha de Cierre) as UC22C
+  usecase (Asignar Indicadores a Actividad) as UC23
+  usecase (Seleccionar Múltiples Indicadores) as UC23A
+  usecase (Editar Actividad) as UC24
+  usecase (Ver Actividades del Curso) as UC25
+}
+
+package "Gestión de Calificaciones" {
+  usecase (Calificar Estudiantes) as UC30
+  usecase (Seleccionar Actividad) as UC30A
+  usecase (Registrar Notas por Indicador) as UC31
+  usecase (Calificar por Indicador Específico) as UC31A
+  usecase (Calificación General de Actividad) as UC31B
+  usecase (Dar Retroalimentación) as UC32
+  usecase (Editar Calificación) as UC33
+  usecase (Ver Estadísticas del Curso) as UC34
+  usecase (Ver Promedios por RA) as UC34A
+  usecase (Ver Cobertura de Calificaciones) as UC34B
+  usecase (Exportar Calificaciones) as UC35
+}
+
+package "Gestión de Recursos" {
+  usecase (Subir Recursos) as UC40
+  usecase (Seleccionar Archivo) as UC40A
+  usecase (Agregar Título y Descripción) as UC40B
+  usecase (Ver Recursos del Curso) as UC41
+  usecase (Eliminar Recursos) as UC42
+  usecase (Descargar Recursos) as UC43
+}
+
+package "Gestión de Estudiantes" {
+  usecase (Ver Lista de Estudiantes) as UC50
+  usecase (Filtrar por Periodo) as UC50A
+  usecase (Ver Detalles de Estudiante) as UC51
+  usecase (Ver Historial de Notas) as UC51A
+  usecase (Importar Estudiantes CSV) as UC52
+  usecase (Validar Archivo CSV) as UC52A
+  usecase (Procesar Matriculaciones) as UC52B
+}
+
+' Relaciones con Docente
+docente --> UC1
+docente --> UC2
+docente --> UC5
+docente --> UC6
+docente --> UC7
+docente --> UC8
+docente --> UC9
+docente --> UC20
+docente --> UC21
+docente --> UC22
+docente --> UC23
+docente --> UC24
+docente --> UC25
+docente --> UC30
+docente --> UC31
+docente --> UC32
+docente --> UC33
+docente --> UC34
+docente --> UC35
+docente --> UC40
+docente --> UC41
+docente --> UC42
+docente --> UC43
+docente --> UC50
+docente --> UC51
+docente --> UC52
+
+' Relaciones de autenticación
+UC2 ..> UC3 : <<include>>
+UC3 --> email : envía OTP
+UC3 ..> UC4 : <<include>>
+
+' Relaciones de perfil
+UC8 ..> UC8A : <<extend>>
+UC8 ..> UC8B : <<extend>>
+
+' Relaciones de cursos
+UC20 ..> UC20A : <<extend>>
+UC20 ..> UC20B : <<include>>
+UC20 ..> UC20C : <<extend>>
+UC21 ..> UC21A : <<include>>
+UC21 ..> UC21B : <<include>>
+
+' Relaciones de actividades
+UC22 ..> UC22A : <<include>>
+UC22 ..> UC22B : <<include>>
+UC22 ..> UC22C : <<extend>>
+UC22 ..> UC23 : <<extend>>
+UC23 ..> UC23A : <<include>>
+
+' Relaciones de calificaciones
+UC30 ..> UC30A : <<include>>
+UC30 ..> UC31 : <<include>>
+UC31 ..> UC31A : <<extend>>
+UC31 ..> UC31B : <<extend>>
+UC30 ..> UC32 : <<extend>>
+UC34 ..> UC34A : <<include>>
+UC34 ..> UC34B : <<include>>
+
+' Relaciones de recursos
+UC40 ..> UC40A : <<include>>
+UC40 ..> UC40B : <<include>>
+
+' Relaciones de estudiantes
+UC50 ..> UC50A : <<extend>>
+UC51 ..> UC51A : <<include>>
+UC52 ..> UC52A : <<include>>
+UC52 ..> UC52B : <<include>>
+
+' Notas explicativas
+note right of UC23
+  Permite asignar una actividad
+  a múltiples indicadores de logro
+  del mismo RA
+end note
+
+note right of UC31
+  Permite calificar por indicador
+  de logro específico, facilitando
+  la evaluación detallada del
+  desempeño del estudiante
+end note
+
+note bottom of UC31A
+  Calificación granular por
+  cada indicador de logro
+  asignado a la actividad
+end note
+
+note right of UC34
+  Muestra estadísticas del curso:
+  - Promedios por RA
+  - Cobertura de calificaciones
+  - Estudiantes con bajo rendimiento
+  - Distribución de notas
+end note
+
+note right of UC52
+  Importación masiva de estudiantes
+  desde archivo CSV del SIRA:
+  - Valida formato y datos
+  - Crea matriculaciones
+  - Reporta errores y duplicados
+end note
+
+note bottom of UC40
+  Subida de recursos educativos:
+  - Documentos (PDF, DOC)
+  - Presentaciones (PPT, PPTX)
+  - Videos, imágenes
+  - Límite de tamaño configurable
+end note
+
+@enduml

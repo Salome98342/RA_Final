@@ -1,0 +1,276 @@
+@startuml Diagrama de Secuencia - Calificar Estudiantes
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Docente" as docente
+participant "DocenteCalificar\n(React)" as ui
+participant "api.ts" as api
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+
+== Carga Inicial de Página ==
+
+docente -> ui : Navega a /docente/:curso/calificar
+activate ui
+
+ui -> api : getCourses()
+activate api
+api -> http : GET /api/asignaturas/
+activate http
+http -> views : asignaturas_list_view()
+activate views
+views -> models : Asignatura.objects.all()
+activate models
+models -> db : SELECT * FROM asignatura
+activate db
+db --> models : Datos asignaturas
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(data)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Course[]
+deactivate api
+
+ui -> api : getRAsByCourse(courseId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/ras/
+activate http
+http -> views : asignatura_ras_view()
+activate views
+views -> models : ResultadoDeAprendizaje.objects.filter()
+activate models
+models -> db : SELECT * FROM resultado_de_aprendizaje
+activate db
+db --> models : Datos RAs
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(data)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : RA[]
+deactivate api
+
+ui -> api : getStudentsByCourse(courseId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/estudiantes/
+activate http
+http -> views : asignatura_estudiantes_view()
+activate views
+views -> models : Matricula.objects.filter()
+activate models
+models -> db : SELECT * FROM matricula\nJOIN estudiante
+activate db
+db --> models : Datos estudiantes
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(data)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Student[]
+deactivate api
+
+ui --> docente : Muestra interfaz de calificación
+deactivate ui
+
+== Selección de RA y Actividad ==
+
+docente -> ui : Selecciona RA
+activate ui
+ui -> api : getActivitiesByRA(raId)
+activate api
+api -> http : GET /api/ras/:raId/actividades/
+activate http
+http -> views : ra_actividades_view()
+activate views
+views -> models : RaActividad.objects.filter()
+activate models
+models -> db : SELECT * FROM ra_actividad
+activate db
+db --> models : Datos actividades
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(data)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Activity[]
+deactivate api
+ui --> docente : Muestra actividades del RA
+deactivate ui
+
+docente -> ui : Selecciona actividad
+activate ui
+
+alt Actividad tiene indicadores asignados
+  ui -> api : getIndicatorsByRA(raId)
+  activate api
+  api -> http : GET /api/ras/:raId/indicadores/
+  activate http
+  http -> views : ra_indicadores_view()
+  activate views
+  views -> models : IndicadoresDeLogro.objects.filter()
+  activate models
+  models -> db : SELECT * FROM indicadores_de_logro
+  activate db
+  db --> models : Datos indicadores
+  deactivate db
+  models --> views : QuerySet
+  deactivate models
+  views --> http : Response(data)
+  deactivate views
+  http --> api : {data: [...]}
+  deactivate http
+  api --> ui : Indicator[]
+  deactivate api
+  ui --> docente : Muestra indicadores disponibles
+end
+
+deactivate ui
+
+== Calificación de Estudiante ==
+
+docente -> ui : Ingresa nota y selecciona indicador (opcional)
+activate ui
+docente -> ui : Agrega retroalimentación (opcional)
+docente -> ui : Click en "Guardar Calificación"
+
+ui -> api : saveGrade(studentMatricula, raActividadId, grade, feedback, indicadorId)
+activate api
+api -> http : POST /api/ra-actividades/:id/calificar/
+activate http
+note right
+  Payload:
+  {
+    "matricula_id": 123,
+    "nota": 4.5,
+    "retroalimentacion": "Buen trabajo",
+    "indicador_id": 5
+  }
+end note
+
+http -> views : ra_actividad_calificar_view()
+activate views
+
+views -> views : Validar token y permisos de docente
+
+alt Token válido y docente autorizado
+  
+  views -> models : Matricula.objects.get(id)
+  activate models
+  models -> db : SELECT * FROM matricula WHERE id=:id
+  activate db
+  db --> models : Datos matrícula
+  deactivate db
+  models --> views : Matricula instance
+  deactivate models
+  
+  views -> models : RaActividad.objects.get(id)
+  activate models
+  models -> db : SELECT * FROM ra_actividad WHERE id=:id
+  activate db
+  db --> models : Datos ra_actividad
+  deactivate db
+  models --> views : RaActividad instance
+  deactivate models
+  
+  alt Indicador especificado
+    views -> models : IndicadoresDeLogro.objects.get(id)
+    activate models
+    models -> db : SELECT * FROM indicadores_de_logro WHERE id=:id
+    activate db
+    db --> models : Datos indicador
+    deactivate db
+    models --> views : Indicador instance
+    deactivate models
+  end
+  
+  views -> models : NotasActividad.objects.update_or_create()
+  activate models
+  models -> db : INSERT/UPDATE notas_actividad
+  activate db
+  note right of db
+    Constraint único garantiza
+    una nota por (matricula, ra_actividad, indicador)
+  end note
+  db --> models : Nota guardada
+  deactivate db
+  models --> views : NotasActividad instance
+  deactivate models
+  
+  views -> views : Notificar estudiante (cache en memoria)
+  note right
+    _add_notification(
+      id_estudiante,
+      "grade",
+      "Nueva calificación disponible"
+    )
+  end note
+  
+  views --> http : Response({"success": true, "nota": {...}})
+  
+else Token inválido o no autorizado
+  views --> http : Response({"detail": "No autorizado"}, 401)
+end
+
+deactivate views
+http --> api : {success: true}
+deactivate http
+api --> ui : Success
+deactivate api
+
+ui --> docente : Muestra confirmación "Calificación guardada"
+deactivate ui
+
+== Actualización de Promedios ==
+
+ui -> api : getCourseGradeSummary(courseId, studentId)
+activate ui
+activate api
+api -> http : GET /api/cursos/:codigo/estudiantes/:id/resumen/
+activate http
+http -> views : course_grade_view()
+activate views
+
+views -> models : Calcular notas progresivas y estrictas
+activate models
+note right of models
+  Algoritmo:
+  1. Para cada RA:
+     - Obtener todas las RaActividad
+     - Calcular nota ponderada progresiva
+     - Calcular cobertura
+  2. Calcular promedio del curso
+     ponderado por % de cada RA
+end note
+
+models -> db : SELECT notas, ra, indicadores
+activate db
+db --> models : Datos completos de calificaciones
+deactivate db
+models --> views : Resumen calculado
+deactivate models
+
+views --> http : Response(summary)
+deactivate views
+http --> api : GradeSummaryResponse
+deactivate http
+api --> ui : GradeSummary
+deactivate api
+
+ui --> docente : Actualiza tabla con nueva nota
+deactivate ui
+
+@enduml

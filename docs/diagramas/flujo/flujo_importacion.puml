@@ -1,0 +1,235 @@
+@startuml Diagrama de Flujo - Importación de Datos (Coordinador)
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam activity {
+  BackgroundColor #E8EAF6
+  BorderColor #3F51B5
+  DiamondBackgroundColor #FFF9C4
+  DiamondBorderColor #F57C00
+  StartColor #4CAF50
+  EndColor #F44336
+}
+
+start
+
+:Coordinador accede a\n/coordinador/imports;
+
+:Seleccionar tipo de importación;
+
+if (Tipo de importación) then (Matriculados)
+  :Descargar plantilla CSV\n(opcional);
+  note right
+    Columnas requeridas:
+    - codigo_estudiante
+    - codigo_asignatura
+    - periodo
+  end note
+  
+  :Seleccionar archivo CSV;
+  
+  :Click en "Importar Matriculados";
+  
+elseif (Docentes) then
+  :Descargar plantilla CSV\n(opcional);
+  note right
+    Columnas requeridas:
+    - codigo_docente
+    - nombre, apellido
+    - correo
+    - tipo_documento
+    - num_documento
+  end note
+  
+  :Seleccionar archivo CSV;
+  
+  :Click en "Importar Docentes";
+  
+elseif (Asignaturas y RAs) then
+  :Descargar plantilla CSV\n(opcional);
+  note right
+    Columnas requeridas:
+    - codigo_asignatura
+    - nombre_asignatura
+    - codigo_programa
+    - codigo_docente
+    - ras (JSON)
+  end note
+  
+  :Seleccionar archivo CSV;
+  
+  :Click en "Importar Asignaturas";
+endif
+
+:Validar archivo seleccionado;
+
+if (¿Archivo es CSV?) then (No)
+  :Mostrar error\n"Se requiere archivo .csv";
+  stop
+else (Sí)
+  if (¿Tamaño < 5MB?) then (No)
+    :Mostrar error\n"Archivo excede 5MB";
+    stop
+  else (Sí)
+    
+    :Enviar archivo al backend;
+    
+    :Validar token y rol coordinador;
+    
+    if (¿Token válido y\nrol = coordinador?) then (No)
+      :Retornar 401/403\n"No autorizado";
+      stop
+    else (Sí)
+      
+      :Leer archivo CSV;
+      
+      :Parsear cabeceras y filas;
+      
+      partition "Procesamiento por Fila" {
+        :Inicializar contadores:\n- created = 0\n- existing = 0\n- errors = [];
+        
+        repeat
+          :Leer siguiente fila;
+          
+          :Normalizar columnas\n(sinónimos y aliases);
+          
+          :Sanitizar datos\n(trim, max length);
+          
+          if (¿Faltan columnas\nrequeridas?) then (Sí)
+            :Agregar error:\n"Faltan columnas requeridas";
+          else (No)
+            
+            if (Importación = Matriculados) then
+              
+              :Buscar estudiante por código;
+              
+              if (¿Estudiante existe?) then (No)
+                :Agregar error:\n"Estudiante no encontrado";
+              else (Sí)
+                :Buscar asignatura por código;
+                
+                if (¿Asignatura existe?) then (No)
+                  :Agregar error:\n"Asignatura no encontrada";
+                else (Sí)
+                  :Buscar periodo por descripción;
+                  
+                  if (¿Periodo existe?) then (No)
+                    :Agregar error:\n"Periodo no encontrado";
+                  else (Sí)
+                    
+                    :get_or_create Matricula;
+                    
+                    if (¿Creado nuevo?) then (Sí)
+                      :created++;
+                    else (No)
+                      :existing++;
+                    endif
+                  endif
+                endif
+              endif
+              
+            elseif (Importación = Docentes) then
+              
+              :Buscar tipo_documento;
+              
+              if (¿Tipo documento existe?) then (No)
+                :Agregar error:\n"Tipo documento no encontrado";
+              else (Sí)
+                :Generar contraseña aleatoria\n(si no provista);
+                
+                :Hash contraseña con make_password();
+                
+                :get_or_create Docente;
+                
+                if (¿Creado nuevo?) then (Sí)
+                  :created++;
+                else (No)
+                  :existing++;
+                endif
+              endif
+              
+            elseif (Importación = Asignaturas) then
+              
+              :Buscar docente por código;
+              :Buscar programa por código;
+              
+              if (¿Docente y programa existen?) then (No)
+                :Agregar error:\n"Docente/Programa no encontrado";
+              else (Sí)
+                :get_or_create Asignatura;
+                
+                if (¿Creado nuevo?) then (Sí)
+                  :created++;
+                else (No)
+                  :existing++;
+                endif
+                
+                :Parsear JSON de RAs;
+                
+                repeat
+                  :Crear ResultadoDeAprendizaje;
+                  
+                  if (¿RA tiene indicadores?) then (Sí)
+                    repeat
+                      :Crear IndicadoresDeLogro;
+                    repeat while (¿Más indicadores?)
+                  endif
+                  
+                repeat while (¿Más RAs?)
+              endif
+            endif
+          endif
+          
+          if (¿Excede límite\nde 5000 filas?) then (Sí)
+            :Agregar error:\n"Excede límite de filas";
+            break
+          endif
+          
+        repeat while (¿Hay más filas?)
+      }
+      
+      :Limitar errores a 100\n(para respuesta);
+      
+      partition "Auditoría" {
+        :Crear registro ImportAudit;
+        note right
+          - coordinador_id
+          - kind (tipo importación)
+          - filename
+          - created_count
+          - existing_count
+          - errors_count
+          - created_at
+        end note
+        
+        :Guardar en BD;
+        
+        :Registrar en logs;
+      }
+      
+      :Retornar respuesta;
+      
+      :Mostrar resumen de importación;
+      note right
+        "Creados: X
+        Existentes: Y
+        Errores: Z"
+      end note
+      
+      if (¿Hay errores?) then (Sí)
+        :Mostrar listado de errores;
+        note right
+          Formato:
+          - Fila N: [mensaje error]
+        end note
+      endif
+      
+      :Actualizar tabla de asignaturas;
+      
+    endif
+  endif
+endif
+
+stop
+
+@enduml

@@ -1,0 +1,252 @@
+@startuml Diagrama de Despliegue - RA Manager
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam node {
+  BackgroundColor #E8EAF6
+  BorderColor #3F51B5
+  FontSize 11
+}
+skinparam artifact {
+  BackgroundColor #E1F5FE
+  BorderColor #0277BD
+}
+skinparam database {
+  BackgroundColor #E8F5E9
+  BorderColor #4CAF50
+}
+
+' ==================== NODO CLIENTE ====================
+
+node "Client Device" as client {
+  artifact "Web Browser" as browser {
+    artifact "React SPA\n(JavaScript Bundle)" as react_app
+    note right of react_app
+      - React 18.x
+      - TypeScript
+      - Vite bundler
+      - React Router
+      - Axios client
+    end note
+  }
+}
+
+' ==================== NODO FRONTEND SERVER ====================
+
+node "Frontend Server\n<<Web Server>>" as frontend_server {
+  artifact "Nginx / Apache" as web_server {
+    artifact "Static Files" as static_files
+    note right of static_files
+      - HTML, CSS, JS
+      - Images, fonts
+      - Build artifacts
+    end note
+  }
+}
+
+' ==================== NODO BACKEND SERVER ====================
+
+node "Backend Server\n<<Application Server>>" as backend_server {
+  
+  artifact "WSGI Server\n(Gunicorn/uWSGI)" as wsgi {
+    
+    artifact "Django Application" as django_app {
+      component "Django REST Framework" as drf
+      component "Business Logic" as logic
+      component "ORM Models" as models
+      component "Middleware" as middleware
+      note right of django_app
+        - Python 3.11+
+        - Django 5.2.6
+        - REST Framework
+        - CORS headers
+      end note
+    }
+  }
+  
+  artifact "Static Files Storage" as media_storage
+  note right of media_storage
+    - Avatares
+    - Recursos educativos
+    - Archivos CSV
+  end note
+}
+
+' ==================== NODO BASE DE DATOS ====================
+
+node "Database Server\n<<Database>>" as db_server {
+  database "PostgreSQL 14+" as postgres {
+    artifact "RA Manager DB" as ra_db
+    note right of ra_db
+      Tablas:
+      - Usuarios (docente, estudiante, coordinador)
+      - Estructura académica
+      - Resultados de aprendizaje
+      - Actividades y calificaciones
+      - Auditoría
+    end note
+  }
+}
+
+' ==================== NODO EMAIL SERVER ====================
+
+node "Email Server\n<<External Service>>" as email_server {
+  artifact "Gmail SMTP" as gmail {
+    note right of gmail
+      smtp.gmail.com:587
+      TLS/SSL
+      OAuth2 / App Password
+    end note
+  }
+}
+
+' ==================== NODO REVERSE PROXY ====================
+
+node "Reverse Proxy / Load Balancer\n<<Infrastructure>>" as proxy {
+  artifact "Nginx" as nginx_proxy
+  note right of nginx_proxy
+    - SSL/TLS termination
+    - Load balancing
+    - Request routing
+    - Rate limiting
+  end note
+}
+
+' ==================== RELACIONES ====================
+
+' Cliente a Proxy
+client --> proxy : HTTPS (443)
+
+' Proxy a Servers
+proxy --> frontend_server : HTTP (80/443)
+proxy --> backend_server : HTTP (8000)
+
+' Browser a Frontend
+browser --> web_server : GET /
+
+' Frontend a Backend
+react_app --> drf : REST API\nHTTP/HTTPS
+
+' Backend a Database
+models --> postgres : TCP (5432)\nPostgreSQL Protocol
+
+' Backend a Email
+django_app --> gmail : SMTP (587)\nTLS
+
+' Backend a Storage
+django_app --> media_storage : File System
+
+' Static files serving
+web_server --> static_files : serves
+
+' ==================== DEPLOYMENT NOTES ====================
+
+note right of client
+  **Requisitos Cliente:**
+  - Navegador moderno
+  - JavaScript habilitado
+  - Soporte ES6+
+  - localStorage/sessionStorage
+end note
+
+note bottom of frontend_server
+  **Configuración Web Server:**
+  - Compression (gzip)
+  - Caching headers
+  - Security headers
+  - HTTPS redirect
+end note
+
+note bottom of backend_server
+  **Configuración Backend:**
+  - Workers: 2-4 por CPU
+  - Timeout: 30s
+  - Max requests: 1000
+  - Environment variables:
+    * SECRET_KEY
+    * DATABASE_URL
+    * EMAIL_HOST_PASSWORD
+    * DEBUG=False
+end note
+
+note bottom of db_server
+  **Configuración Database:**
+  - Connection pooling
+  - Regular backups
+  - Read replicas (opcional)
+  - Monitoring & metrics
+  - Constraints & indexes
+end note
+
+note top of proxy
+  **Seguridad:**
+  - HTTPS/TLS 1.2+
+  - CORS configurado
+  - Rate limiting
+  - CSRF protection
+  - XSS protection
+end note
+
+' ==================== ESCALABILIDAD ====================
+
+node "Backend Server 2\n<<Optional Scale>>" as backend_server_2 {
+  artifact "Django Instance 2" as django_2
+}
+
+node "Backend Server N\n<<Optional Scale>>" as backend_server_n {
+  artifact "Django Instance N" as django_n
+}
+
+proxy .down.> backend_server_2 : Load balancing
+proxy .down.> backend_server_n : Load balancing
+
+backend_server_2 .right.> postgres : shared
+backend_server_n .right.> postgres : shared
+
+note right of backend_server_2
+  **Horizontal Scaling:**
+  - Múltiples instancias Django
+  - Load balancer distribuye tráfico
+  - Base de datos compartida
+  - Sesiones stateless (JWT)
+end note
+
+' ==================== MONITOREO ====================
+
+node "Monitoring & Logging\n<<Infrastructure>>" as monitoring {
+  artifact "Application Logs" as logs
+  artifact "Metrics & Alerts" as metrics
+  note right of logs
+    - Django logging
+    - Access logs
+    - Error logs
+    - Audit logs
+  end note
+}
+
+backend_server --> monitoring : sends logs
+proxy --> monitoring : access logs
+db_server --> monitoring : metrics
+
+' ==================== OPCIONES DE DESPLIEGUE ====================
+
+note bottom of client
+  **Opciones de Despliegue:**
+  
+  1. **Desarrollo Local:**
+     - Frontend: npm run dev (Vite)
+     - Backend: python manage.py runserver
+     - DB: PostgreSQL local
+  
+  2. **Producción Cloud:**
+     - Frontend: Vercel, Netlify, AWS S3+CloudFront
+     - Backend: AWS EC2, Heroku, DigitalOcean
+     - DB: AWS RDS, Google Cloud SQL
+  
+  3. **Contenedores:**
+     - Docker containers
+     - Kubernetes orchestration
+     - CI/CD pipelines
+end note
+
+@enduml

@@ -352,9 +352,19 @@ const Estudiante: React.FC = () => {
                             Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
                           </div>
                         ) : (
-                          filteredCurrent.map((c, idx) => (
-                            <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
-                          ))
+                          filteredCurrent.map((c, idx) => {
+                            const stat = courseStats[c.id]
+                            const noteText = stat?.progressive != null ? ` · Nota: ${stat.progressive.toFixed(2)}/5.0` : ''
+                            return (
+                              <RaCard 
+                                key={c.id} 
+                                headTone={idx===0?'dark':'light'} 
+                                title={c.nombre} 
+                                subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
+                                onClick={() => openCourse(c)} 
+                              />
+                            )
+                          })
                         )}
                       </CardGrid>
                       <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
@@ -387,9 +397,19 @@ const Estudiante: React.FC = () => {
                                     Sin cursos en este periodo{filter ? ' (filtro aplicado)' : ''}.
                                   </div>
                                 ) : (
-                                  periodCourses.map(c => (
-                                    <RaCard key={c.id} headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
-                                  ))
+                                  periodCourses.map(c => {
+                                    const stat = courseStats[c.id]
+                                    const noteText = stat?.progressive != null ? ` · Nota: ${stat.progressive.toFixed(2)}/5.0` : ''
+                                    return (
+                                      <RaCard 
+                                        key={c.id} 
+                                        headTone={'light'} 
+                                        title={c.nombre} 
+                                        subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
+                                        onClick={() => openCourse(c)} 
+                                      />
+                                    )
+                                  })
                                 )}
                               </CardGrid>
                             </section>
@@ -406,9 +426,19 @@ const Estudiante: React.FC = () => {
                         </div>
                       ) : (
                         <CardGrid>
-                          {filteredCourses.map((c, idx) => (
-                            <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={() => openCourse(c)} />
-                          ))}
+                          {filteredCourses.map((c, idx) => {
+                            const stat = courseStats[c.id]
+                            const noteText = stat?.progressive != null ? ` · Nota: ${stat.progressive.toFixed(2)}/5.0` : ''
+                            return (
+                              <RaCard 
+                                key={c.id} 
+                                headTone={idx===0?'dark':'light'} 
+                                title={c.nombre} 
+                                subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
+                                onClick={() => openCourse(c)} 
+                              />
+                            )
+                          })}
                         </CardGrid>
                       )}
                     </>
@@ -808,6 +838,128 @@ const Estudiante: React.FC = () => {
                             <span className="badge bg-warning text-dark">Pendiente</span>
                           )}
                         </div>
+                        
+                        {/* Aporte a la nota definitiva - MEJORADO */}
+                        {selectedGroupedActivity.nota != null && (
+                          <div className="card border-success shadow-sm mb-3">
+                            <div className="card-header bg-success bg-opacity-10 border-success">
+                              <div className="d-flex align-items-center gap-2">
+                                <i className="bi bi-calculator-fill text-success fs-5"></i>
+                                <span className="fw-bold text-success">Impacto en tu nota final del curso</span>
+                              </div>
+                            </div>
+                            <div className="card-body">
+                              {(() => {
+                                const nota = Number(selectedGroupedActivity.nota)
+                                const pesoTotal = selectedGroupedActivity.porcentaje_total
+                                
+                                // La fórmula correcta del sistema es:
+                                // Cada RA tiene un peso (porcentaje_ra) en la asignatura
+                                // Cada actividad tiene un peso (porcentaje_actividad) dentro de ese RA
+                                // El aporte de la actividad al curso = Σ(nota_RA × peso_RA / 100)
+                                // donde nota_RA = nota_actividad × (peso_actividad_en_RA / 100)
+                                
+                                // Para mostrar de forma simplificada usamos el porcentaje_total
+                                // que ya suma todos los pesos de la actividad en todos los RAs donde aparece
+                                
+                                // Desglose por RA
+                                const desglosePorRA = selectedGroupedActivity.ras_asociados.map(ra => {
+                                  const notaEnRA = nota // La misma nota aplica en todos los RAs
+                                  const pesoActEnRA = ra.porcentaje_actividad // % de la actividad dentro del RA
+                                  const pesoRAEnCurso = ra.porcentaje_ra // % del RA en el curso
+                                  
+                                  // Contribución de esta actividad al RA (en escala 0-5)
+                                  const contribucionAlRA = (notaEnRA / 5) * (pesoActEnRA / 100)
+                                  
+                                  // Contribución del RA a la nota final del curso (en escala 0-5)
+                                  const contribucionAlCurso = contribucionAlRA * (pesoRAEnCurso / 100) * 5
+                                  
+                                  return {
+                                    titulo: ra.titulo_ra,
+                                    pesoActEnRA,
+                                    pesoRAEnCurso,
+                                    contribucionAlRA,
+                                    contribucionAlCurso
+                                  }
+                                })
+                                
+                                const aporteTotal = desglosePorRA.reduce((sum, ra) => sum + ra.contribucionAlCurso, 0)
+                                
+                                return (
+                                  <div>
+                                    {/* Resultado destacado */}
+                                    <div className="alert alert-success mb-3">
+                                      <div className="d-flex justify-content-between align-items-center">
+                                        <div>
+                                          <div className="ra-small text-muted mb-1">Tu nota en esta actividad</div>
+                                          <div className="fs-4 fw-bold text-success">{nota.toFixed(2)} / 5.0</div>
+                                        </div>
+                                        <div className="text-center">
+                                          <i className="bi bi-arrow-right fs-4 text-muted"></i>
+                                        </div>
+                                        <div className="text-end">
+                                          <div className="ra-small text-muted mb-1">Aporta a tu nota final</div>
+                                          <div className="fs-4 fw-bold text-success">{aporteTotal.toFixed(4)} / 5.0</div>
+                                          <div className="ra-small text-muted">({((aporteTotal / 5) * 100).toFixed(2)}% del curso)</div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Desglose detallado por RA */}
+                                    <div className="border-top pt-3">
+                                      <div className="fw-semibold mb-2 d-flex align-items-center gap-2">
+                                        <i className="bi bi-list-ol text-primary"></i>
+                                        Desglose por Resultado de Aprendizaje
+                                      </div>
+                                      {desglosePorRA.map((ra, idx) => (
+                                        <div key={idx} className="card bg-light mb-2">
+                                          <div className="card-body p-3">
+                                            <div className="fw-semibold text-primary mb-2">{ra.titulo}</div>
+                                            
+                                            <div className="d-flex flex-column gap-1 ra-small">
+                                              <div className="d-flex justify-content-between">
+                                                <span className="text-muted">• Peso de la actividad en este RA:</span>
+                                                <span className="fw-semibold">{ra.pesoActEnRA.toFixed(1)}%</span>
+                                              </div>
+                                              <div className="d-flex justify-content-between">
+                                                <span className="text-muted">• Peso del RA en el curso:</span>
+                                                <span className="fw-semibold">{ra.pesoRAEnCurso.toFixed(1)}%</span>
+                                              </div>
+                                              <div className="d-flex justify-content-between border-top pt-1 mt-1">
+                                                <span className="text-muted">• Contribución al RA:</span>
+                                                <code className="bg-white px-2 rounded">{nota.toFixed(2)} × {(ra.pesoActEnRA / 100).toFixed(4)} = {(ra.contribucionAlRA * 5).toFixed(4)} / 5.0</code>
+                                              </div>
+                                              <div className="d-flex justify-content-between bg-success bg-opacity-10 p-2 rounded mt-1">
+                                                <span className="fw-semibold text-success">→ Aporte al curso desde este RA:</span>
+                                                <span className="fw-bold text-success">{ra.contribucionAlCurso.toFixed(4)} / 5.0</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Fórmula resumida */}
+                                    <div className="border-top mt-3 pt-3">
+                                      <div className="ra-small text-muted">
+                                        <strong><i className="bi bi-lightbulb text-warning"></i> ¿Cómo se calcula?</strong>
+                                        <p className="mb-1 mt-2">
+                                          Tu nota ({nota.toFixed(2)}) se pondera según el peso de la actividad en cada RA donde aparece, 
+                                          y luego se multiplica por el peso de ese RA en la asignatura.
+                                        </p>
+                                        <div className="bg-light p-2 rounded mt-2">
+                                          <code className="text-dark">
+                                            Aporte = Σ [(Nota × Peso_Actividad_en_RA) × Peso_RA_en_Curso]
+                                          </code>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        )}
                         {selectedGroupedActivity.retroalimentacion && (
                           <div className="border-bottom pb-2">
                             <span className="ra-small text-muted d-block mb-1">Retroalimentación</span>

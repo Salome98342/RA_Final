@@ -1,0 +1,311 @@
+@startuml Diagrama de Secuencia - Estudiante: Ver Notas y Actividades
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Estudiante" as est
+participant "Estudiante\n(React)" as ui
+participant "api.ts" as api
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+
+== Carga Inicial del Dashboard ==
+
+est -> ui : Navega a /estudiante
+activate ui
+
+ui -> api : getCourses()
+activate api
+api -> http : GET /api/asignaturas/
+activate http
+http -> views : asignaturas_list_view()
+activate views
+views -> models : Asignatura.objects.all()
+activate models
+models -> db : SELECT FROM asignatura
+activate db
+db --> models : Asignaturas
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response([...])
+deactivate views
+http --> api : Course[]
+deactivate http
+api --> ui : Lista de cursos
+deactivate api
+
+ui -> api : getFullProfile()
+activate api
+api -> http : GET /api/auth/profile/
+activate http
+http -> views : profile_detail_view()
+activate views
+views --> http : ProfileDetails
+deactivate views
+http --> api : ProfileDetails
+deactivate http
+api --> ui : Perfil con periodos
+deactivate api
+
+loop Para cada curso
+  ui -> api : getMyMatricula(cursoId)
+  activate api
+  api --> ui : matriculaId
+  deactivate api
+  
+  ui -> api : getCourseActivitiesGrouped(cursoId, {matriculaId})
+  activate api
+  api -> http : GET /api/asignaturas/:codigo/actividades-agrupadas/\n?id_matricula=:matriculaId
+  activate http
+  http -> views : asignatura_actividades_agrupadas_view()
+  activate views
+  
+  views -> models : Obtener actividades con múltiples RAs
+  activate models
+  models -> db : SELECT actividad, ras_asociados, notas
+  activate db
+  note right of db
+    Query compleja que agrupa:
+    - Actividades
+    - RAs asociados con %
+    - Indicadores por RA
+    - Notas del estudiante
+  end note
+  db --> models : Actividades agrupadas
+  deactivate db
+  models --> views : Lista agrupada
+  deactivate models
+  
+  views --> http : GroupedActivity[]
+  deactivate views
+  http --> api : GroupedActivity[]
+  deactivate http
+  api --> ui : Actividades con RAs
+  deactivate api
+  
+  ui -> api : getCourseGradeSummary(cursoId, studentId)
+  activate api
+  api -> http : GET /api/cursos/:codigo/estudiantes/:id/resumen/
+  activate http
+  http -> views : course_grade_view()
+  activate views
+  
+  views -> models : Calcular notas progresivas y estrictas
+  activate models
+  note right of models
+    Algoritmo de cálculo:
+    1. Por cada RA:
+       - Nota progresiva = promedio ponderado
+         de actividades calificadas
+       - Cobertura = % actividades calificadas
+    2. Nota curso:
+       - Progresiva = promedio de RAs
+         ponderado por % de cada RA
+       - Estricta = nota sobre total curso
+  end note
+  models --> views : GradeSummaryResponse
+  deactivate models
+  
+  views --> http : GradeSummaryResponse
+  deactivate views
+  http --> api : Summary
+  deactivate http
+  api --> ui : Resumen de calificaciones
+  deactivate api
+end
+
+ui --> est : Muestra dashboard con cursos y estadísticas
+deactivate ui
+
+== Seleccionar Curso ==
+
+est -> ui : Click en curso
+activate ui
+
+ui -> ui : setSelected(curso)
+
+ui -> api : getRAsByCourse(cursoId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/ras/
+activate http
+http -> views : asignatura_ras_view()
+activate views
+views -> models : ResultadoDeAprendizaje.objects.filter()
+activate models
+models -> db : SELECT FROM resultado_de_aprendizaje
+activate db
+db --> models : RAs
+deactivate db
+models --> views : RAs con indicadores
+deactivate models
+views --> http : RA[]
+deactivate views
+http --> api : RA[]
+deactivate http
+api --> ui : Lista de RAs
+deactivate api
+
+ui --> est : Muestra detalle del curso con RAs
+deactivate ui
+
+== Ver Actividades de un RA ==
+
+est -> ui : Selecciona RA
+activate ui
+
+ui -> ui : Filtrar actividades agrupadas por RA
+
+ui --> est : Muestra actividades del RA con:
+note right
+  - Nombre de actividad
+  - Tipo (Quiz, Taller, etc)
+  - Fecha de cierre
+  - Porcentaje en el RA
+  - Nota (si está calificada)
+  - Retroalimentación
+  - Múltiples RAs asociados
+end note
+deactivate ui
+
+== Ver Detalle de Actividad Agrupada ==
+
+est -> ui : Click en actividad agrupada
+activate ui
+
+ui -> ui : setSelectedGroupedActivity(activity)
+
+ui --> est : Muestra modal con:
+note right
+  **Información de la Actividad:**
+  - Nombre y descripción
+  - Tipo de actividad
+  - Fecha de creación y cierre
+  - Porcentaje total (suma de todos los RAs)
+  
+  **RAs Asociados:**
+  Para cada RA:
+  - Nombre del RA
+  - Porcentaje de la actividad en ese RA
+  - Porcentaje del RA en el curso
+  - Indicadores asignados
+  
+  **Calificación:**
+  - Nota obtenida (única para toda la actividad)
+  - Retroalimentación del docente
+  
+  **Estado:**
+  - Calificada / Pendiente
+  - Próxima a vencer (si aplica)
+end note
+deactivate ui
+
+== Ver Resumen de Calificaciones ==
+
+est -> ui : Click en pestaña "Resumen"
+activate ui
+
+ui -> ui : Mostrar componente GradeSummary
+
+ui --> est : Muestra tabla con:
+note right
+  **Métricas Globales:**
+  - Nota acumulada (progresiva)
+  - Nota sobre el total (estricta)
+  
+  **Por cada RA:**
+  - Nombre y porcentaje en curso
+  - Nota progresiva del RA
+  - Nota estricta del RA
+  - Cobertura (% actividades calificadas)
+  - Barra visual de progreso
+  
+  **Información adicional:**
+  - Botón de info con explicación
+    de cálculo de notas
+  - Código y nombre de asignatura
+  - Umbral de aprobación (3.0)
+end note
+deactivate ui
+
+== Ver Recursos del Curso ==
+
+est -> ui : Click en pestaña "Recursos"
+activate ui
+
+ui -> api : getRecursosByCourse(cursoId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/recursos/
+activate http
+http -> views : asignatura_recursos_view()
+activate views
+views -> models : Recurso.objects.filter(asignatura=asig)
+activate models
+models -> db : SELECT FROM recurso
+activate db
+db --> models : Recursos
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response([...])
+deactivate views
+http --> api : Recurso[]
+deactivate http
+api --> ui : Lista de recursos
+deactivate api
+
+ui --> est : Muestra lista de recursos con:
+note right
+  - Título del recurso
+  - Fecha de subida
+  - Botón de descarga
+  - Icono según tipo de archivo
+end note
+deactivate ui
+
+est -> ui : Click en descargar recurso
+activate ui
+ui -> http : GET /media/recursos/:path
+activate http
+http --> ui : Archivo descargado
+deactivate http
+ui --> est : Descarga iniciada
+deactivate ui
+
+== Ver Notificaciones ==
+
+est -> ui : Click en campana de notificaciones
+activate ui
+
+ui -> api : getNotifications()
+activate api
+api -> http : GET /api/estudiante/notificaciones/
+activate http
+http -> views : estudiante_notifications_view()
+activate views
+views -> views : _NOTIFICATIONS_CACHE[id_estudiante]
+note right
+  Sistema de notificaciones
+  en memoria (cache simple)
+end note
+views --> http : Notificaciones[]
+deactivate views
+http --> api : NotificationItem[]
+deactivate http
+api --> ui : Lista de notificaciones
+deactivate api
+
+ui --> est : Muestra dropdown con:
+note right
+  - Nueva calificación disponible
+  - Actividad próxima a vencer
+  - Recurso nuevo subido
+  - Badge con cantidad no leídas
+end note
+deactivate ui
+
+@enduml

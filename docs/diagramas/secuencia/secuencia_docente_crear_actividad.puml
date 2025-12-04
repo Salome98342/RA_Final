@@ -1,0 +1,298 @@
+@startuml Diagrama de Secuencia - Docente Crea Actividad
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Docente" as docente
+participant "NuevaActividad\n(React)" as ui
+participant "api.ts" as api
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+
+== Carga Inicial de Formulario ==
+
+docente -> ui : Navega a /docente/:curso/actividades/nueva
+activate ui
+
+ui -> api : getRAsByCourse(courseId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/ras/
+activate http
+http -> views : asignatura_ras_view()
+activate views
+views -> models : ResultadoDeAprendizaje.objects.filter()
+activate models
+models -> db : SELECT * FROM resultado_de_aprendizaje
+activate db
+db --> models : Lista de RAs
+deactivate db
+models --> views : QuerySet de RAs
+deactivate models
+views --> http : Response(ras)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : RA[]
+deactivate api
+
+ui -> api : getTiposActividad()
+activate api
+api -> http : GET /api/tipos-actividad/
+activate http
+http -> views : tipos_actividad_list_view()
+activate views
+views -> models : TipoActividad.objects.all()
+activate models
+models -> db : SELECT * FROM tipo_actividad
+activate db
+db --> models : Tipos de actividad
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(tipos)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : TipoActividad[]
+deactivate api
+
+ui --> docente : Muestra formulario con RAs y tipos
+deactivate ui
+
+== Selección de RA y Carga de Indicadores ==
+
+docente -> ui : Selecciona un RA
+activate ui
+
+ui -> api : getIndicatorsByRA(raId)
+activate api
+api -> http : GET /api/ras/:raId/indicadores/
+activate http
+http -> views : ra_indicadores_view()
+activate views
+views -> models : IndicadoresDeLogro.objects.filter(ra=raId)
+activate models
+models -> db : SELECT * FROM indicadores_de_logro\nWHERE id_ra = :raId
+activate db
+db --> models : Lista de indicadores
+deactivate db
+models --> views : QuerySet de indicadores
+deactivate models
+views --> http : Response(indicadores)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Indicator[]
+deactivate api
+
+ui --> docente : Muestra lista de indicadores disponibles
+deactivate ui
+
+== Creación de Actividad ==
+
+docente -> ui : Completa formulario:
+note right
+  - Nombre de actividad
+  - Tipo de actividad
+  - Descripción
+  - Porcentaje del RA (%)
+  - Fecha de cierre
+  - Indicadores seleccionados (múltiples)
+end note
+
+docente -> ui : Click en "Crear Actividad"
+activate ui
+
+ui -> ui : Validar datos del formulario
+note right
+  Validaciones:
+  - Nombre no vacío
+  - Porcentaje entre 0-100
+  - Fecha cierre > fecha actual
+  - Al menos un indicador seleccionado
+end note
+
+alt Validación exitosa
+
+  ui -> api : createActivityForRA(raId, payload)
+  activate api
+  api -> http : POST /api/ras/:raId/actividades/
+  activate http
+  note right
+    Payload:
+    {
+      "nombre_actividad": "Taller 1",
+      "id_tipo_actividad": 2,
+      "porcentaje_ra_actividad": 25.0,
+      "descripcion": "Taller sobre...",
+      "fecha_cierre": "2025-12-15",
+      "indicadores": [1, 3, 5]
+    }
+  end note
+  
+  http -> views : ra_actividad_create_view()
+  activate views
+  
+  views -> views : Validar token y permisos de docente
+  
+  alt Docente autorizado
+    
+    views -> models : Validar que RA pertenece a asignatura del docente
+    activate models
+    models -> db : SELECT asignatura FROM resultado_de_aprendizaje
+    activate db
+    db --> models : Asignatura del RA
+    deactivate db
+    models --> views : Asignatura validada
+    deactivate models
+    
+    views -> views : Validar porcentaje no excede 100%
+    note right
+      Suma de porcentajes de actividades
+      del RA no debe exceder 100%
+    end note
+    
+    alt Porcentaje válido
+      
+      partition "Transacción de Base de Datos" {
+        
+        views -> models : Actividad.objects.create()
+        activate models
+        models -> db : INSERT INTO actividad
+        activate db
+        note right of db
+          INSERT INTO actividad (
+            id_tipo_actividad,
+            nombre_actividad,
+            descripcion,
+            fecha_creacion,
+            fecha_cierre
+          ) VALUES (...)
+        end note
+        db --> models : Actividad creada
+        deactivate db
+        models --> views : Actividad instance
+        deactivate models
+        
+        views -> models : RaActividad.objects.create()
+        activate models
+        models -> db : INSERT INTO ra_actividad
+        activate db
+        note right of db
+          INSERT INTO ra_actividad (
+            id_actividad,
+            id_ra,
+            porcentaje_ra_actividad
+          ) VALUES (...)
+        end note
+        db --> models : RaActividad creada
+        deactivate db
+        models --> views : RaActividad instance
+        deactivate models
+        
+        loop Para cada indicador seleccionado
+          
+          views -> models : RaActividadIndicador.objects.create()
+          activate models
+          models -> db : INSERT INTO ra_actividad_indicador
+          activate db
+          note right of db
+            INSERT INTO ra_actividad_indicador (
+              id_ra_actividad,
+              id_ind
+            ) VALUES (...)
+          end note
+          db --> models : Relación creada
+          deactivate db
+          models --> views : RaActividadIndicador instance
+          deactivate models
+          
+        end
+        
+        views -> views : Commit transacción
+        note right
+          Todas las inserciones son atómicas
+          Si falla alguna, se hace rollback
+        end note
+        
+      }
+      
+      views -> views : Notificar estudiantes matriculados
+      note right
+        Para cada estudiante del curso:
+        _add_notification(
+          id_estudiante,
+          "deadline",
+          "Nueva actividad: [nombre]"
+        )
+      end note
+      
+      views --> http : Response({"success": true, "actividad": {...}})
+      
+    else Porcentaje excede límite
+      views --> http : Response({"detail": "Porcentaje excede 100%"}, 400)
+    end
+    
+  else Docente no autorizado
+    views --> http : Response({"detail": "No autorizado"}, 403)
+  end
+  
+  deactivate views
+  http --> api : Activity created
+  deactivate http
+  api --> ui : Activity
+  deactivate api
+  
+  ui --> docente : Muestra éxito y redirige a lista de actividades
+  
+else Validación fallida
+  ui --> docente : Muestra errores de validación
+end
+
+deactivate ui
+
+== Actualización de Vista de Actividades ==
+
+docente -> ui : Automático después de creación
+activate ui
+
+ui -> api : getActivitiesByRA(raId)
+activate api
+api -> http : GET /api/ras/:raId/actividades/
+activate http
+http -> views : ra_actividades_view()
+activate views
+views -> models : RaActividad.objects.filter()
+activate models
+models -> db : SELECT con JOINs
+activate db
+note right of db
+  SELECT 
+    ra_actividad.*,
+    actividad.*,
+    COUNT(notas_actividad) as estudiantes_calificados
+  FROM ra_actividad
+  JOIN actividad ON ...
+  LEFT JOIN notas_actividad ON ...
+  WHERE id_ra = :raId
+  GROUP BY ra_actividad.id
+end note
+db --> models : Actividades con estadísticas
+deactivate db
+models --> views : QuerySet enriquecido
+deactivate models
+views --> http : Response(actividades)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Activity[] con indicadores
+deactivate api
+
+ui --> docente : Muestra tabla actualizada con nueva actividad
+deactivate ui
+
+@enduml

@@ -1,0 +1,255 @@
+@startuml Diagrama de Secuencia - Coordinador: Ver Avance de Asignatura
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Coordinador" as coord
+participant "CoordinadorAsignatura\n(React)" as ui
+participant "coordinador.ts" as coord_svc
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+
+== Carga Inicial de Asignatura ==
+
+coord -> ui : Navega a /coordinador/asignatura/:codigo
+activate ui
+
+ui -> coord_svc : getAsignaturaDetalle(codigo)
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/asignaturas/\n?codigo=:codigo&page=1
+activate http
+http -> views : coordinador_asignaturas_view()
+activate views
+
+views -> views : _require_coordinador(request)
+
+views -> models : Asignatura.objects.filter()
+activate models
+models -> db : SELECT FROM asignatura
+activate db
+db --> models : Asignatura
+deactivate db
+models --> views : Asignatura instance
+deactivate models
+
+views --> http : Response({codigo, nombre, programa, docente, ...})
+deactivate views
+http --> coord_svc : AsignaturaRow
+deactivate http
+coord_svc --> ui : Asignatura details
+deactivate coord_svc
+
+== Cargar RAs de la Asignatura ==
+
+ui -> coord_svc : getAsignaturaRAs(codigo, periodo)
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/asignaturas/ras/\n?codigo_asignatura=:codigo&periodo=:periodo
+activate http
+http -> views : coordinador_asignatura_ras_view()
+activate views
+
+views -> views : _require_coordinador(request)
+
+views -> models : ResultadoDeAprendizaje.objects.filter()
+activate models
+models -> db : SELECT FROM resultado_de_aprendizaje
+activate db
+db --> models : RAs
+deactivate db
+models --> views : QuerySet de RAs
+deactivate models
+
+loop Para cada RA
+  views -> models : RaActividad.objects.filter(ra=ra)
+  activate models
+  models -> db : SELECT FROM ra_actividad
+  activate db
+  
+  alt Con filtro de periodo
+    models -> db : JOIN con notas_actividad y matricula\nWHERE periodo.descripcion = :periodo
+  end
+  
+  db --> models : Actividades
+  deactivate db
+  models --> views : Count de actividades
+  deactivate models
+end
+
+views --> http : Response({ras: [...], total_ras: N})
+deactivate views
+http --> coord_svc : RARow[]
+deactivate http
+coord_svc --> ui : Lista de RAs
+deactivate coord_svc
+
+== Cargar Estudiantes Matriculados ==
+
+ui -> coord_svc : getAsignaturaEstudiantes(codigo, periodo, page)
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/asignaturas/estudiantes/\n?codigo_asignatura=:codigo&periodo=:periodo&page=:page
+activate http
+http -> views : coordinador_asignatura_estudiantes_view()
+activate views
+
+views -> views : _require_coordinador(request)
+
+views -> models : Matricula.objects.filter(asignatura=asig)
+activate models
+models -> db : SELECT FROM matricula\nJOIN estudiante\nJOIN periodo_academico
+activate db
+db --> models : Matrículas con estudiantes
+deactivate db
+models --> views : QuerySet paginado
+deactivate models
+
+views --> http : Response({page, page_size, total, results: [...]})
+deactivate views
+http --> coord_svc : Paged<EstudianteRow>
+deactivate http
+coord_svc --> ui : Lista paginada de estudiantes
+deactivate coord_svc
+
+ui --> coord : Muestra interfaz completa
+deactivate ui
+
+== Ver Avance Estadístico ==
+
+coord -> ui : Click en pestaña "Avance"
+activate ui
+
+ui -> coord_svc : getAsignaturaAvance(codigo, periodo)
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/asignaturas/avance/\n?codigo_asignatura=:codigo&periodo=:periodo
+activate http
+http -> views : coordinador_asignatura_avance_view()
+activate views
+
+views -> views : _require_coordinador(request)
+
+views -> models : Obtener matrículas filtradas
+activate models
+models -> db : SELECT FROM matricula
+activate db
+db --> models : Lista de matrículas
+deactivate db
+models --> views : Matrículas[]
+deactivate models
+
+views -> models : Obtener RAs de la asignatura
+activate models
+models -> db : SELECT FROM resultado_de_aprendizaje
+activate db
+db --> models : RAs
+deactivate db
+models --> views : RAs[]
+deactivate models
+
+views -> models : Obtener relaciones RA-Actividad
+activate models
+models -> db : SELECT FROM ra_actividad\nWHERE ra.asignatura = :asignatura
+activate db
+db --> models : RaActividad[]
+deactivate db
+models --> views : Relaciones por RA
+deactivate models
+
+views -> models : Obtener todas las notas
+activate models
+models -> db : SELECT FROM notas_actividad\nWHERE matricula IN (...)\nAND ra_actividad.ra.asignatura = :asignatura
+activate db
+db --> models : NotasActividad[]
+deactivate db
+models --> views : Notas por (matricula, ra_actividad)
+deactivate models
+
+views -> views : Calcular métricas por estudiante y RA
+note right
+  Para cada estudiante:
+    Para cada RA:
+      1. Obtener actividades del RA
+      2. Calcular nota progresiva:
+         - Suma ponderada de actividades calificadas
+         - Dividida por suma de pesos calificados
+      3. Calcular cobertura:
+         - Suma de pesos calificados / suma total pesos
+      4. Guardar (nota_prog, cobertura)
+end note
+
+views -> views : Agregar métricas por RA
+note right
+  Para cada RA:
+    - avg: Promedio de notas progresivas
+    - ok_pct: % estudiantes con nota >= 3.0
+    - low_pct: % estudiantes con nota < 3.0
+    - coverage_avg: Promedio de cobertura
+end note
+
+views -> views : Calcular consolidado del curso
+note right
+  Para cada estudiante:
+    1. Calcular promedio ponderado de RAs
+       (usando porcentaje_ra de cada RA)
+    2. Calcular cobertura ponderada
+    3. Determinar si aprueba (>= 3.0)
+  
+  Total:
+    - avg: Promedio general
+    - ok_pct: % estudiantes aprobando
+    - low_pct: % estudiantes reprobando
+    - coverage_avg: Cobertura promedio
+end note
+
+views --> http : Response({codigo, periodo, total_estudiantes,\ntotal: {avg, ok_pct, low_pct, coverage_avg},\nras: [...]})
+deactivate views
+http --> coord_svc : AvanceResponse
+deactivate http
+coord_svc --> ui : Datos de avance
+deactivate coord_svc
+
+ui -> ui : Renderizar gráficos y tablas
+note right
+  - Tabla de RAs con promedios
+  - Gráfico de distribución de notas
+  - Indicadores de cobertura
+  - Semáforo por % de aprobación:
+    * Verde: >= 70%
+    * Amarillo: >= 40%
+    * Rojo: < 40%
+end note
+
+ui --> coord : Muestra dashboard de avance
+deactivate ui
+
+== Filtrar por Periodo ==
+
+coord -> ui : Selecciona periodo del dropdown
+activate ui
+
+ui -> ui : Actualizar estado periodo
+
+ui -> coord_svc : getAsignaturaRAs(codigo, nuevoPeriodo)
+activate coord_svc
+note right: Recargar RAs
+coord_svc --> ui
+deactivate coord_svc
+
+ui -> coord_svc : getAsignaturaEstudiantes(codigo, nuevoPeriodo, 1)
+activate coord_svc
+note right: Recargar estudiantes
+coord_svc --> ui
+deactivate coord_svc
+
+ui -> coord_svc : getAsignaturaAvance(codigo, nuevoPeriodo)
+activate coord_svc
+note right: Recalcular avance
+coord_svc --> ui
+deactivate coord_svc
+
+ui --> coord : Actualiza toda la información
+deactivate ui
+
+@enduml

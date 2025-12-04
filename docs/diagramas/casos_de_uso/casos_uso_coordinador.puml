@@ -1,0 +1,227 @@
+@startuml Casos de Uso - Coordinador
+
+' Estilos
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam actorBackgroundColor #FFEBEE
+skinparam actorBorderColor #F44336
+skinparam usecaseBackgroundColor #FFF9C4
+skinparam usecaseBorderColor #F57C00
+
+left to right direction
+
+' Actor
+actor "Coordinador" as coordinador #LightSalmon
+
+
+
+
+package "Visualización de Dashboard" {
+  usecase (Ver Dashboard General) as UC40
+  usecase (Ver Estadísticas Globales) as UC40A
+  usecase (Ver Métricas por Periodo) as UC40B
+  usecase (Ver Todas las Asignaturas) as UC41
+  usecase (Aplicar Paginación) as UC41A
+}
+
+package "Gestión de Asignaturas" {
+  usecase (Filtrar Asignaturas) as UC42
+  usecase (Filtrar por Programa) as UC42A
+  usecase (Filtrar por Docente) as UC42B
+  usecase (Filtrar por Periodo) as UC42C
+  usecase (Ver Detalles de Asignatura) as UC43
+  usecase (Ver RAs de Asignatura) as UC44
+  usecase (Ver Actividades por RA) as UC44A
+  usecase (Ver Indicadores por RA) as UC44B
+  usecase (Ver Estudiantes por Asignatura) as UC45
+  usecase (Filtrar Estudiantes por Periodo) as UC45A
+  usecase (Ver Avance por Asignatura) as UC46
+  usecase (Ver Promedios por RA) as UC46A
+  usecase (Ver Cobertura Global) as UC46B
+  usecase (Ver Estudiantes en Riesgo) as UC46C
+}
+
+package "Importación Masiva de Datos" {
+  usecase (Importar Matriculados) as UC50
+  usecase (Descargar Plantilla CSV) as UC50A
+  usecase (Validar Archivo CSV) as UC50B
+  usecase (Procesar Matriculaciones) as UC50C
+  usecase (Ver Reporte de Importación) as UC50D
+  
+  usecase (Importar Docentes) as UC51
+  usecase (Validar Datos de Docentes) as UC51A
+  usecase (Generar Contraseñas) as UC51B
+  usecase (Crear Cuentas de Docentes) as UC51C
+  
+  usecase (Importar Asignaturas y RAs) as UC52
+  usecase (Validar Estructura de Asignaturas) as UC52A
+  usecase (Procesar RAs e Indicadores) as UC52B
+  usecase (Asignar Docentes a Asignaturas) as UC52C
+}
+
+package "Gestión de Programas Académicos" {
+  usecase (Ver Programas) as UC60
+  usecase (Crear Programa) as UC61
+  usecase (Editar Programa) as UC62
+  usecase (Ver Asignaturas por Programa) as UC63
+}
+
+package "Gestión de Periodos Académicos" {
+  usecase (Ver Periodos Académicos) as UC70
+  usecase (Crear Periodo Académico) as UC71
+  usecase (Establecer Fechas) as UC71A
+  usecase (Editar Periodo Académico) as UC72
+  usecase (Ver Matriculaciones por Periodo) as UC73
+}
+
+package "Auditoría y Reportes" {
+  usecase (Ver Historial de Importaciones) as UC80
+  usecase (Ver Detalles de Auditoría) as UC80A
+  usecase (Filtrar por Tipo de Importación) as UC80B
+  usecase (Exportar Reportes) as UC81
+  usecase (Generar Reporte de Asignatura) as UC81A
+  usecase (Generar Reporte de Programa) as UC81B
+}
+
+package "Vista de Docente (Acceso Completo)" {
+  usecase (Acceder como Docente) as UC90
+  usecase (Ver Cursos como Docente) as UC91
+  usecase (Calificar en Cualquier Curso) as UC92
+}
+
+' Relaciones con Coordinador
+coordinador --> UC1
+coordinador --> UC2
+coordinador --> UC5
+coordinador --> UC6
+coordinador --> UC7
+coordinador --> UC8
+coordinador --> UC9
+coordinador --> UC40
+coordinador --> UC41
+coordinador --> UC42
+coordinador --> UC43
+coordinador --> UC44
+coordinador --> UC45
+coordinador --> UC46
+coordinador --> UC50
+coordinador --> UC51
+coordinador --> UC52
+coordinador --> UC60
+coordinador --> UC61
+coordinador --> UC62
+coordinador --> UC63
+coordinador --> UC70
+coordinador --> UC71
+coordinador --> UC72
+coordinador --> UC73
+coordinador --> UC80
+coordinador --> UC81
+coordinador --> UC90
+coordinador --> UC91
+coordinador --> UC92
+
+' Relaciones de autenticación
+UC2 ..> UC3 : <<include>>
+UC3 --> email : envía OTP
+UC3 ..> UC4 : <<include>>
+
+' Relaciones de perfil
+UC8 ..> UC8A : <<extend>>
+
+' Relaciones de dashboard
+UC40 ..> UC40A : <<include>>
+UC40 ..> UC40B : <<extend>>
+UC41 ..> UC41A : <<include>>
+
+' Relaciones de asignaturas
+UC42 ..> UC42A : <<extend>>
+UC42 ..> UC42B : <<extend>>
+UC42 ..> UC42C : <<extend>>
+UC43 ..> UC44 : <<include>>
+UC43 ..> UC45 : <<include>>
+UC43 ..> UC46 : <<include>>
+UC44 ..> UC44A : <<include>>
+UC44 ..> UC44B : <<include>>
+UC45 ..> UC45A : <<extend>>
+UC46 ..> UC46A : <<include>>
+UC46 ..> UC46B : <<include>>
+UC46 ..> UC46C : <<include>>
+
+' Relaciones de importación
+UC50 ..> UC50A : <<extend>>
+UC50 ..> UC50B : <<include>>
+UC50 ..> UC50C : <<include>>
+UC50 ..> UC50D : <<include>>
+UC51 ..> UC51A : <<include>>
+UC51 ..> UC51B : <<include>>
+UC51 ..> UC51C : <<include>>
+UC52 ..> UC52A : <<include>>
+UC52 ..> UC52B : <<include>>
+UC52 ..> UC52C : <<include>>
+
+' Relaciones de periodos
+UC71 ..> UC71A : <<include>>
+
+' Relaciones de auditoría
+UC80 ..> UC80A : <<include>>
+UC80 ..> UC80B : <<extend>>
+UC81 ..> UC81A : <<extend>>
+UC81 ..> UC81B : <<extend>>
+
+' Notas explicativas
+note right of UC46
+  Muestra avance consolidado:
+  - Promedio por cada RA
+  - Cobertura de calificaciones
+  - % estudiantes sobre umbral (3.0)
+  - % estudiantes en riesgo
+  - Estadísticas comparativas
+end note
+
+note bottom of UC50
+  Importación masiva desde CSV:
+  - Valida estudiantes, asignaturas y periodos
+  - Crea matriculaciones automáticas
+  - Detecta duplicados
+  - Genera reporte detallado con errores
+  - Guarda auditoría de la importación
+end note
+
+note bottom of UC51
+  Importación de docentes:
+  - Valida tipo de documento
+  - Genera contraseñas aleatorias
+  - Hash seguro de contraseñas
+  - Evita duplicados por código o correo
+  - Registra creados vs existentes
+end note
+
+note bottom of UC52
+  Importación completa:
+  - Asignaturas con sus RAs
+  - Indicadores de logro
+  - Porcentajes configurables
+  - Asignación automática de docentes
+  - Validación de programas académicos
+end note
+
+note right of UC80
+  Sistema de auditoría que registra:
+  - Fecha y hora de importación
+  - Usuario que realizó la acción
+  - Tipo de importación
+  - Cantidad de registros creados/existentes
+  - Cantidad de errores
+  - Nombre del archivo procesado
+end note
+
+note right of UC90
+  El coordinador puede acceder a
+  todas las funcionalidades de docente
+  en cualquier asignatura, permitiendo
+  supervisión y apoyo completo
+end note
+
+@enduml

@@ -1,0 +1,692 @@
+@startuml Diagrama de Secuencia - Coordinador: Importación de Datos
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Coordinador" as coordinador
+participant "CoordinadorImports\n(React)" as ui
+participant "coordinador.ts" as coord_svc
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+participant "Logging" as logger
+
+== Carga de Página de Importación ==
+
+coordinador -> ui : Navega a /coordinador/imports
+activate ui
+
+ui --> coordinador : Muestra interfaz de importación
+note right of ui
+  **Tres secciones de importación:**
+  
+  1. **Importar Matriculados**
+     - Plantilla CSV
+     - Selector de archivo
+     - Botón importar
+  
+  2. **Importar Docentes**
+     - Plantilla CSV
+     - Selector de archivo
+     - Botón importar
+  
+  3. **Importar Asignaturas y RAs**
+     - Plantilla CSV
+     - Selector de archivo
+     - Botón importar
+  
+  **Auditoría:**
+  - Historial de importaciones
+  - Estado (exitosa/fallida)
+  - Errores registrados
+end note
+
+deactivate ui
+
+== Opción 1: Importar Matriculados ==
+
+coordinador -> ui : Selecciona archivo CSV de matriculados
+activate ui
+note left
+  Formato esperado:
+  codigo_estudiante,codigo_asignatura,periodo
+  E001,MAT101,2025-1
+  E002,MAT101,2025-1
+  E001,FIS201,2025-1
+end note
+
+ui -> coord_svc : importMatriculados(file)
+activate coord_svc
+coord_svc -> http : POST /api/coordinador/import-matriculados/\nContent-Type: multipart/form-data
+activate http
+http -> views : coordinador_import_matriculados_view()
+activate views
+
+views -> views : Leer y parsear CSV
+note right
+  Validaciones iniciales:
+  - Archivo no vacío
+  - Headers correctos
+  - Encoding UTF-8
+end note
+
+alt CSV inválido
+  views --> http : Response 400 (BadRequest)
+  deactivate views
+  http --> coord_svc : Error
+  deactivate http
+  coord_svc --> ui : Error message
+  deactivate coord_svc
+  ui --> coordinador : Mostrar error
+else CSV válido
+  
+  views -> models : transaction.atomic()
+  activate models
+  models -> db : BEGIN TRANSACTION
+  activate db
+  
+  views -> models : ImportAudit.objects.create(tipo='matriculados')
+  models -> db : INSERT INTO import_audit
+  db --> models : audit_id
+  
+  loop Para cada fila del CSV
+    views -> models : Validar estudiante existe
+    models -> db : SELECT FROM estudiante WHERE codigo = :codigo
+    db --> models : Estudiante o None
+    
+    alt Estudiante no existe
+      models -> logger : Log error de estudiante faltante
+      models -> db : UPDATE import_audit SET errores = errores || :error
+    else Estudiante existe
+      
+      views -> models : Validar asignatura existe
+      models -> db : SELECT FROM asignatura WHERE codigo = :codigo
+      db --> models : Asignatura o None
+      
+      alt Asignatura no existe
+        models -> logger : Log error de asignatura faltante
+        models -> db : UPDATE import_audit SET errores = errores || :error
+      else Asignatura existe
+        
+        views -> models : Validar periodo existe
+        models -> db : SELECT FROM periodo_academico WHERE nombre = :periodo
+        db --> models : Periodo o None
+        
+        alt Periodo no existe
+          models -> logger : Log error de periodo faltante
+          models -> db : UPDATE import_audit SET errores = errores || :error
+        else Periodo existe
+          
+          views -> models : Verificar si matrícula ya existe
+          models -> db : SELECT FROM matricula\nWHERE codigo_estudiante = :est\nAND codigo_asignatura = :asig\nAND nombre_periodo = :per
+          db --> models : Matricula o None
+          
+          alt Matrícula ya existe
+            models -> logger : Log warning de duplicado
+            models -> db : UPDATE import_audit SET warnings = warnings || :warn
+          else Matrícula nueva
+            models -> db : INSERT INTO matricula\n(codigo_estudiante, codigo_asignatura, nombre_periodo)
+            db --> models : matricula_id creada
+            
+            ' Crear registros de notas vacíos para todas las actividades
+            models -> db : SELECT id FROM actividad\nWHERE codigo_asignatura = :asig
+            db --> models : Lista de actividades
+            
+            loop Para cada actividad
+              models -> db : SELECT id FROM ra_actividad\nWHERE id_actividad = :act
+              db --> models : Lista de ra_actividad
+              
+              loop Para cada ra_actividad
+                models -> db : INSERT INTO notas_actividad\n(id_ra_actividad, id_estudiante, nota=NULL)
+                db --> models : Nota creada
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  
+  models -> db : UPDATE import_audit SET estado = 'completada'
+  models -> db : COMMIT
+  db --> models : OK
+  deactivate db
+  models --> views : Importación completada
+  deactivate models
+  
+  views --> http : Response 200 (Success) con reporte
+  deactivate views
+  note right
+    Reporte incluye:
+    - Total de filas procesadas
+    - Matrículas creadas
+    - Errores encontrados
+    - Warnings de duplicados
+    - audit_id para consulta
+  end note
+  http --> coord_svc : Success + Report
+  deactivate http
+  coord_svc --> ui : Resultado de importación
+  deactivate coord_svc
+  
+  ui --> coordinador : Muestra resumen:
+  note right
+    **Importación Completada**
+    
+    ✓ 45 matrículas creadas
+    ⚠ 3 duplicados omitidos
+    ✗ 2 errores:
+      - E999: Estudiante no existe
+      - MAT999: Asignatura no existe
+    
+    Ver detalles en historial
+  end note
+end
+
+deactivate ui
+
+== Opción 2: Importar Docentes ==
+
+coordinador -> ui : Selecciona archivo CSV de docentes
+activate ui
+note left
+  Formato esperado:
+  codigo_docente,codigo_asignatura
+  D001,MAT101
+  D001,MAT102
+  D002,FIS201
+end note
+
+ui -> coord_svc : importDocentes(file)
+activate coord_svc
+coord_svc -> http : POST /api/coordinador/import-docentes/
+activate http
+http -> views : coordinador_import_docentes_view()
+activate views
+
+views -> models : Proceso similar a matriculados
+activate models
+note right
+  Validaciones:
+  1. Docente existe en BD
+  2. Asignatura existe en BD
+  3. No existe asignación previa
+  
+  Acciones:
+  - Crear relación en tabla intermedia
+    docente_asignatura (si existe)
+  - O actualizar campo codigo_docente
+    en asignatura
+  - Crear ImportAudit
+  - Registrar errores/warnings
+end note
+models --> views : Resultado
+deactivate models
+views --> http : Response + Report
+deactivate views
+http --> coord_svc : Success
+deactivate http
+coord_svc --> ui : Resultado
+deactivate coord_svc
+
+ui --> coordinador : Muestra resumen de importación
+deactivate ui
+
+== Opción 3: Importar Asignaturas y RAs ==
+
+coordinador -> ui : Selecciona archivo CSV de asignaturas
+activate ui
+note left
+  Formato esperado (complejo):
+  codigo_asig,nombre_asig,codigo_ra,
+  nombre_ra,porcentaje_ra,codigo_ind,
+  nombre_ind
+  
+  MAT101,Álgebra,RA1,Matrices,40,
+  IND1,Resolver sistemas 2x2
+  MAT101,Álgebra,RA1,Matrices,40,
+  IND2,Calcular determinantes
+  MAT101,Álgebra,RA2,Vectores,60,
+  IND3,Suma de vectores
+end note
+
+ui -> coord_svc : importAsignaturasRAs(file)
+activate coord_svc
+coord_svc -> http : POST /api/coordinador/import-asignaturas-ras/
+activate http
+http -> views : coordinador_import_asignaturas_ras_view()
+activate views
+
+views -> models : transaction.atomic()
+activate models
+models -> db : BEGIN TRANSACTION
+activate db
+
+views -> models : Agrupar filas por asignatura y RA
+note right
+  Procesamiento en 3 niveles:
+  1. Crear/actualizar Asignatura
+  2. Crear RAs con porcentajes
+  3. Crear Indicadores por RA
+  
+  Validar que suma de % de RAs = 100%
+end note
+
+loop Para cada asignatura única
+  models -> db : INSERT OR UPDATE asignatura
+  db --> models : asignatura_id
+  
+  loop Para cada RA de la asignatura
+    models -> db : INSERT INTO resultado_de_aprendizaje
+    db --> models : ra_id
+    
+    loop Para cada indicador del RA
+      models -> db : INSERT INTO indicadores_de_logro
+      db --> models : indicador_id
+    end
+  end
+  
+  models -> models : Validar suma de porcentajes = 100%
+  alt Suma ≠ 100%
+    models -> logger : Log error de porcentajes
+    models -> db : UPDATE import_audit SET errores = errores || :error
+    models -> db : ROLLBACK asignatura
+  end
+end
+
+models -> db : COMMIT
+db --> models : OK
+deactivate db
+models --> views : Importación completada
+deactivate models
+
+views --> http : Response 200 + Report
+deactivate views
+http --> coord_svc : Success
+deactivate http
+coord_svc --> ui : Resultado
+deactivate coord_svc
+
+ui --> coordinador : Muestra resumen:
+note right
+  **Importación Completada**
+  
+  Asignaturas:
+  ✓ 5 creadas
+  ✓ 2 actualizadas
+  
+  RAs:
+  ✓ 23 creados
+  
+  Indicadores:
+  ✓ 67 creados
+  
+  Errores:
+  ✗ 1 asignatura rechazada:
+    MAT999 - Suma de % RAs ≠ 100%
+end note
+deactivate ui
+
+== Ver Historial de Importaciones ==
+
+coordinador -> ui : Click en "Ver Historial"
+activate ui
+
+ui -> coord_svc : getImportAudits()
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/import-audits/
+activate http
+http -> views : import_audits_list_view()
+activate views
+views -> models : ImportAudit.objects.all().order_by('-fecha')
+activate models
+models -> db : SELECT * FROM import_audit ORDER BY fecha DESC
+activate db
+db --> models : Lista de auditorías
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response([...])
+deactivate views
+http --> coord_svc : ImportAudit[]
+deactivate http
+coord_svc --> ui : Lista de auditorías
+deactivate coord_svc
+
+ui --> coordinador : Muestra tabla:
+note right
+  **Historial de Importaciones**
+  
+  | Fecha | Tipo | Estado | Registros | Errores |
+  |-------|------|--------|-----------|---------|
+  | 01/05 | Matriculados | ✓ | 45 | 2 |
+  | 01/05 | Docentes | ✓ | 12 | 0 |
+  | 30/04 | Asig+RAs | ✗ | 0 | 5 |
+  
+  [Click para ver detalles de errores]
+end note
+deactivate ui
+  E002,MAT101,2025-1
+end note
+
+coord_svc --> ui : Blob CSV
+deactivate coord_svc
+
+ui --> coordinador : Descarga archivo "plantilla_matriculados.csv"
+deactivate ui
+
+== Selección y Validación de Archivo ==
+
+coordinador -> ui : Selecciona archivo CSV
+activate ui
+
+ui -> ui : Validar archivo localmente
+note right
+  Validaciones cliente:
+  - Extensión .csv
+  - Tamaño < 5MB
+  - Archivo no vacío
+end note
+
+alt Archivo válido en cliente
+  ui --> coordinador : Muestra vista previa (primeras 5 filas)
+else Archivo inválido
+  ui --> coordinador : Muestra error de validación
+  deactivate ui
+  stop
+end
+
+deactivate ui
+
+== Proceso de Importación ==
+
+coordinador -> ui : Click en "Importar Matriculados"
+activate ui
+
+ui -> ui : Crear FormData con archivo
+ui -> coord_svc : importMatriculados(file)
+activate coord_svc
+coord_svc -> http : POST /api/coordinador/importar-matriculados/
+activate http
+note right
+  Headers:
+  - Authorization: Bearer [token]
+  - Content-Type: multipart/form-data
+  
+  Body:
+  - file: [CSV file]
+end note
+
+http -> views : coordinador_import_matriculados_view()
+activate views
+
+views -> views : _require_coordinador(request)
+note right
+  Validaciones:
+  1. Extraer token del header
+  2. Verificar firma JWT
+  3. Verificar rol = coordinador
+  4. Obtener instancia Coordinador
+end note
+
+alt Token válido y rol coordinador
+
+  views -> views : Validar archivo
+  note right
+    - Verificar que existe
+    - Validar extensión .csv
+    - Validar Content-Type
+    - Verificar tamaño < 5MB
+  end note
+  
+  alt Archivo válido
+    
+    views -> views : Leer y parsear CSV
+    note right
+      1. Detectar encoding (utf-8-sig)
+      2. Crear TextIOWrapper
+      3. csv.DictReader para parsear
+    end note
+    
+    views -> views : Inicializar contadores
+    note right
+      created = 0
+      existing = 0
+      errors = []
+    end note
+    
+    loop Para cada fila del CSV (máx 5000)
+      
+      views -> views : Normalizar columnas
+      note right
+        Acepta sinónimos:
+        - codigo_estudiante | estudiante | code
+        - codigo_asignatura | asignatura | curso
+        - periodo | periodo_academico
+      end note
+      
+      views -> views : Sanitizar datos
+      note right
+        - strip() espacios
+        - Eliminar caracteres nulos
+        - Limitar a 255 caracteres
+      end note
+      
+      alt Faltan columnas requeridas
+        views -> views : Agregar error
+        note right
+          errors.append({
+            "row": rownum,
+            "error": "Faltan columnas requeridas"
+          })
+        end note
+      else Datos completos
+        
+        views -> models : Estudiante.objects.filter(codigo=cod_est)
+        activate models
+        models -> db : SELECT * FROM estudiante WHERE codigo_estudiante=:code
+        activate db
+        db --> models : Estudiante o None
+        deactivate db
+        models --> views : Estudiante instance o None
+        deactivate models
+        
+        alt Estudiante no encontrado
+          views -> views : Agregar error
+          note right
+            errors.append({
+              "row": rownum,
+              "error": "Estudiante no encontrado: cod_est"
+            })
+          end note
+        else Estudiante encontrado
+          
+          views -> models : Asignatura.objects.filter(codigo=cod_asig)
+          activate models
+          models -> db : SELECT * FROM asignatura
+          activate db
+          db --> models : Asignatura o None
+          deactivate db
+          models --> views : Asignatura instance o None
+          deactivate models
+          
+          alt Asignatura no encontrada
+            views -> views : Agregar error
+          else Asignatura encontrada
+            
+            views -> models : PeriodoAcademico.objects.filter(descripcion=periodo)
+            activate models
+            models -> db : SELECT * FROM periodo_academico
+            activate db
+            db --> models : Periodo o None
+            deactivate db
+            models --> views : Periodo instance o None
+            deactivate models
+            
+            alt Periodo no encontrado
+              views -> views : Agregar error
+            else Periodo encontrado
+              
+              views -> models : Matricula.objects.get_or_create()
+              activate models
+              models -> db : SELECT o INSERT
+              activate db
+              note right of db
+                SELECT * FROM matricula
+                WHERE id_estudiante=:est
+                  AND id_periodo=:per
+                  AND id_asignatura=:asig
+                
+                Si no existe:
+                INSERT INTO matricula (...)
+              end note
+              db --> models : (Matricula, was_created)
+              deactivate db
+              models --> views : (instance, created)
+              deactivate models
+              
+              alt Nuevo registro creado
+                views -> views : created++
+              else Ya existía
+                views -> views : existing++
+              end
+              
+            end
+          end
+        end
+      end
+      
+    end
+    
+    views -> views : Limitar errores a 100
+    note right
+      Si hay más de 100 errores,
+      solo mostrar los primeros 100
+      y agregar mensaje "se omitieron más"
+    end note
+    
+    partition "Auditoría" {
+      
+      views -> models : ImportAudit.objects.create()
+      activate models
+      note right
+        Crear registro de auditoría:
+        - coordinador: coordinador instance
+        - kind: "matriculados"
+        - filename: nombre del archivo
+        - created_count: created
+        - existing_count: existing
+        - errors_count: len(errors)
+        - created_at: now()
+      end note
+      
+      models -> db : INSERT INTO import_audit
+      activate db
+      db --> models : Registro creado
+      deactivate db
+      models --> views : ImportAudit instance
+      deactivate models
+      
+      views -> logger : logger.info()
+      activate logger
+      note right
+        Log detallado:
+        - Coordinador que importó
+        - Nombre del archivo
+        - Cantidades procesadas
+        - Timestamp
+      end note
+      logger --> views : Logged
+      deactivate logger
+      
+    }
+    
+    views --> http : Response({created, existing, errors})
+    note right
+      Response payload:
+      {
+        "created": 25,
+        "existing": 3,
+        "errors": [
+          {"row": 5, "error": "..."},
+          ...
+        ]
+      }
+    end note
+    
+  else Archivo inválido
+    views --> http : Response({"detail": "Archivo inválido"}, 400)
+  end
+  
+else Token inválido o rol incorrecto
+  views --> http : Response({"detail": "No autorizado"}, 401/403)
+end
+
+deactivate views
+http --> coord_svc : Import result
+deactivate http
+coord_svc --> ui : {created, existing, errors}
+deactivate coord_svc
+
+ui --> coordinador : Muestra resumen de importación
+note right of ui
+  Resumen visual:
+  ✅ Creados: 25
+  ℹ️ Existentes: 3
+  ❌ Errores: 2
+  
+  Tabla de errores (si hay):
+  Fila | Error
+  -----|------
+  5    | Estudiante no encontrado
+  12   | Asignatura no encontrada
+end note
+
+deactivate ui
+
+== Consulta de Historial de Auditoría ==
+
+coordinador -> ui : Click en "Ver Historial"
+activate ui
+
+ui -> coord_svc : getImportHistory()
+activate coord_svc
+coord_svc -> http : GET /api/coordinador/historial-importaciones/
+activate http
+http -> views : coordinador_import_history_view()
+activate views
+
+views -> views : _require_coordinador(request)
+
+views -> models : ImportAudit.objects.all()
+activate models
+models -> db : SELECT * FROM import_audit\nORDER BY created_at DESC
+activate db
+db --> models : Historial de importaciones
+deactivate db
+models --> views : QuerySet ordenado
+deactivate models
+
+views --> http : Response(history)
+deactivate views
+http --> coord_svc : {data: [...]}
+deactivate http
+coord_svc --> ui : ImportAudit[]
+deactivate coord_svc
+
+ui --> coordinador : Muestra tabla de historial
+note right of ui
+  Tabla con columnas:
+  - Fecha y hora
+  - Tipo de importación
+  - Archivo
+  - Creados / Existentes / Errores
+  - Coordinador que ejecutó
+end note
+
+deactivate ui
+
+@enduml

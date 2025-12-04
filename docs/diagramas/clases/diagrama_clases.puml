@@ -1,0 +1,265 @@
+@startuml Diagrama de Clases - RA Manager
+
+' Estilos
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FEFEFE
+skinparam class {
+  BackgroundColor #E3F2FD
+  BorderColor #1976D2
+  ArrowColor #1976D2
+}
+
+' ==================== MODELOS DE AUTENTICACIÓN ====================
+
+class TipoDocumento {
+  + id_tipo_documento: BigInt <<PK>>
+  + descripcion: String
+  --
+  + __str__(): String
+}
+
+class PasswordResetOTP {
+  + id: BigInt <<PK>>
+  + email: String
+  + otp_code: String
+  + created_at: DateTime
+  + expires_at: DateTime
+  + is_used: Boolean
+  + rol: String
+  --
+  + is_valid(): Boolean
+  + __str__(): String
+}
+
+' ==================== ACTORES ====================
+
+class Docente {
+  + id_docente: BigInt <<PK>>
+  + nombre: String
+  + apellido: String
+  + codigo_docente: String <<unique>>
+  + contrasenia_docente: String
+  + correo: String <<unique>>
+  + tipo_documento: FK
+  + num_documento: String <<unique>>
+  + num_telefono: String
+  --
+  + __str__(): String
+}
+
+class Estudiante {
+  + id_estudiante: BigInt <<PK>>
+  + nombre: String
+  + apellido: String
+  + codigo_estudiante: String <<unique>>
+  + contrasena_estudiante: String
+  + tipo_documento: FK
+  + num_documento: String <<unique>>
+  + correo: String <<unique>>
+  + jornada: String
+  --
+  + __str__(): String
+}
+
+class Coordinador {
+  + id_coordinador: BigInt <<PK>>
+  + nombre: String
+  + codigo_coordinador: String <<unique>>
+  + contrasenia_coord: String
+  + correo: String <<unique>>
+  --
+  + __str__(): String
+}
+
+' ==================== ESTRUCTURA ACADÉMICA ====================
+
+class Programa {
+  + id_programa: BigInt <<PK>>
+  + nombre: String
+  + codigo_programa: String <<unique>>
+  --
+  + __str__(): String
+}
+
+class PeriodoAcademico {
+  + id_periodo: BigInt <<PK>>
+  + descripcion: String <<unique>>
+  + fecha_inicio: Date
+  + fecha_finalizacion: Date
+  --
+  + __str__(): String
+}
+
+class Asignatura {
+  + id_asignatura: BigInt <<PK>>
+  + nombre: String
+  + codigo_asignatura: String <<unique>>
+  + docente: FK
+  + grupo: String
+  + programa: FK
+  --
+  + __str__(): String
+}
+
+class ResultadoDeAprendizaje {
+  + id_ra: BigInt <<PK>>
+  + asignatura: FK
+  + porcentaje_ra: Decimal
+  + descripcion: Text
+  --
+  + __str__(): String
+}
+
+class IndicadoresDeLogro {
+  + id_ind: BigInt <<PK>>
+  + ra: FK
+  + porcentaje_ind: Decimal
+  + descripcion: Text
+  --
+}
+
+' ==================== ACTIVIDADES ====================
+
+class TipoActividad {
+  + id_tipo_actividad: BigInt <<PK>>
+  + descripcion: String <<unique>>
+  --
+  + __str__(): String
+}
+
+class Actividad {
+  + id_actividad: BigInt <<PK>>
+  + tipo_actividad: FK
+  + nombre_actividad: String
+  + descripcion: Text
+  + fecha_creacion: Date
+  + fecha_cierre: Date
+  --
+  + __str__(): String
+}
+
+class RaActividad {
+  + id_ra_actividad: BigInt <<PK>>
+  + actividad: FK
+  + ra: FK
+  + porcentaje_ra_actividad: Decimal
+  --
+}
+
+class RaActividadIndicador {
+  + id: BigInt <<PK>>
+  + ra_actividad: FK
+  + indicador: FK
+  --
+}
+
+' ==================== MATRÍCULA Y NOTAS ====================
+
+class Matricula {
+  + id_matricula: BigInt <<PK>>
+  + estudiante: FK
+  + periodo: FK
+  + asignatura: FK
+  + nota_final: Decimal
+  --
+}
+
+class NotasActividad {
+  + id: BigInt <<PK>>
+  + matricula: FK
+  + ra_actividad: FK
+  + nota_ra_actividad: Decimal
+  + retroalimentacion: Text
+  + indicador: FK
+  --
+}
+
+' ==================== RECURSOS ====================
+
+class Recurso {
+  + id_recurso: BigInt <<PK>>
+  + asignatura: FK
+  + titulo: String
+  + archivo: FileField
+  + fecha_subida: DateTime
+  --
+  + __str__(): String
+}
+
+' ==================== AUDITORÍA ====================
+
+class ImportAudit {
+  + id: BigInt <<PK>>
+  + coordinador: FK
+  + kind: String
+  + filename: String
+  + created_count: Integer
+  + existing_count: Integer
+  + errors_count: Integer
+  + created_at: DateTime
+  --
+  + __str__(): String
+}
+
+' ==================== RELACIONES ====================
+
+' Tipo Documento
+TipoDocumento "1" -- "0..*" Docente : tipo_documento
+TipoDocumento "1" -- "0..*" Estudiante : tipo_documento
+
+' Programa y Asignatura
+Programa "1" -- "0..*" Asignatura : programa
+
+' Docente y Asignatura
+Docente "1" -- "0..*" Asignatura : docente
+
+' Asignatura y RA
+Asignatura "1" -- "0..*" ResultadoDeAprendizaje : asignatura
+
+' RA e Indicadores
+ResultadoDeAprendizaje "1" -- "0..*" IndicadoresDeLogro : ra
+
+' RA y Actividades
+ResultadoDeAprendizaje "1" -- "0..*" RaActividad : ra
+Actividad "1" -- "0..*" RaActividad : actividad
+
+' RaActividad e Indicadores (relación N:N)
+RaActividad "1" -- "0..*" RaActividadIndicador : ra_actividad
+IndicadoresDeLogro "1" -- "0..*" RaActividadIndicador : indicador
+
+' Tipo Actividad
+TipoActividad "1" -- "0..*" Actividad : tipo_actividad
+
+' Matrícula
+Estudiante "1" -- "0..*" Matricula : estudiante
+PeriodoAcademico "1" -- "0..*" Matricula : periodo
+Asignatura "1" -- "0..*" Matricula : asignatura
+
+' Notas
+Matricula "1" -- "0..*" NotasActividad : matricula
+RaActividad "1" -- "0..*" NotasActividad : ra_actividad
+IndicadoresDeLogro "0..1" -- "0..*" NotasActividad : indicador
+
+' Recursos
+Asignatura "1" -- "0..*" Recurso : asignatura
+
+' Auditoría
+Coordinador "0..1" -- "0..*" ImportAudit : coordinador
+
+' Notas adicionales
+note top of NotasActividad
+  Permite múltiples notas por ra_actividad
+  si son para indicadores diferentes
+end note
+
+note top of RaActividadIndicador
+  Relación N:N que permite asignar
+  una actividad a múltiples indicadores
+end note
+
+note top of ImportAudit
+  Registra auditoría de importaciones
+  realizadas por coordinadores
+end note
+
+@enduml

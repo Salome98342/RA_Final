@@ -1,0 +1,241 @@
+@startuml Diagrama de Paquetes - RA Manager
+
+' Estilos
+skinparam packageStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam package {
+  BackgroundColor #E8EAF6
+  BorderColor #3F51B5
+  FontSize 12
+  FontStyle bold
+}
+
+' ==================== FRONTEND ====================
+
+package "Frontend (React + TypeScript)" as frontend #LightCyan {
+  
+  package "src" {
+    
+    package "pages" {
+      package "Auth" {
+        component [Login]
+        component [Recuperar]
+        component [Reset]
+      }
+      
+      package "Estudiante" {
+        component [Estudiante Dashboard]
+      }
+      
+      package "Docente" {
+        component [DocenteCursos]
+        component [DocenteRAs]
+        component [DocenteCalificar]
+        component [NuevaActividad]
+        component [DocenteRecursos]
+      }
+      
+      package "Coordinador" {
+        component [CoordinadorDashboard]
+        component [CoordinadorMaterias]
+        component [CoordinadorAsignatura]
+        component [CoordinadorImports]
+      }
+      
+      package "Shared" {
+        component [Profile]
+      }
+    }
+    
+    package "components" {
+      component [HeaderBar]
+      component [Sidebar]
+      component [RaCard]
+      component [GradeSummary]
+      component [SearchPill]
+      component [CardGrid]
+      component [Skeleton]
+    }
+    
+    package "services" {
+      component [api.ts]
+      component [auth.ts]
+      component [coordinador.ts]
+      component [http.ts]
+    }
+    
+    package "state" {
+      component [SessionContext]
+    }
+    
+    package "connections" {
+      component [endpoints.ts]
+      component [http config]
+    }
+    
+    package "hooks" {
+      component [Custom Hooks]
+    }
+    
+    package "utils" {
+      component [Utilities]
+    }
+    
+    package "types" {
+      component [TypeScript Types]
+    }
+  }
+}
+
+' ==================== BACKEND ====================
+
+package "Backend (Django + REST Framework)" as backend #LightYellow {
+  
+  package "backend" {
+    component [settings.py]
+    component [urls.py]
+    component [wsgi.py]
+    component [asgi.py]
+  }
+  
+  package "api" {
+    
+    package "models" {
+      component [models.py]
+      note right of [models.py]
+        - TipoDocumento
+        - Docente, Estudiante, Coordinador
+        - Programa, PeriodoAcademico
+        - Asignatura, ResultadoDeAprendizaje
+        - IndicadoresDeLogro
+        - Actividad, RaActividad
+        - Matricula, NotasActividad
+        - Recurso, ImportAudit
+        - PasswordResetOTP
+      end note
+    }
+    
+    package "views" {
+      component [views.py]
+      note right of [views.py]
+        - login_view, me_view
+        - Password recovery (OTP)
+        - CRUD Estudiantes
+        - CRUD Docentes
+        - CRUD Asignaturas
+        - RAs y Actividades
+        - Calificaciones
+        - Recursos
+        - Coordinador views
+        - Import CSV
+      end note
+    }
+    
+    package "serializers" {
+      component [serializers.py]
+    }
+    
+    package "middleware" {
+      component [error_handler.py]
+      note right of [error_handler.py]
+        - RequestLoggingMiddleware
+        - ErrorHandlerMiddleware
+      end note
+    }
+    
+    package "urls" {
+      component [URL routing]
+    }
+    
+    package "management" {
+      package "commands" {
+        component [Custom Commands]
+      }
+    }
+    
+    package "migrations" {
+      component [Database Migrations]
+    }
+  }
+}
+
+' ==================== BASE DE DATOS ====================
+
+package "Database" as db #LightGreen {
+  database "PostgreSQL" {
+    component [RA Manager DB]
+  }
+}
+
+' ==================== SERVICIOS EXTERNOS ====================
+
+package "External Services" as external #LightSalmon {
+  component [Gmail SMTP]
+  component [File Storage]
+}
+
+' ==================== RELACIONES ====================
+
+' Frontend a Backend
+[api.ts] -down-> [views.py] : HTTP/REST API
+[auth.ts] -down-> [views.py] : Authentication
+[coordinador.ts] -down-> [views.py] : Admin API
+[http.ts] -down-> [views.py] : Axios Client
+
+' Pages a Services
+[Login] --> [auth.ts]
+[Recuperar] --> [auth.ts]
+[Reset] --> [auth.ts]
+[Estudiante Dashboard] --> [api.ts]
+[DocenteCursos] --> [api.ts]
+[DocenteCalificar] --> [api.ts]
+[CoordinadorMaterias] --> [coordinador.ts]
+[Profile] --> [auth.ts]
+
+' Components a Services
+[GradeSummary] --> [api.ts]
+
+' State Management
+[SessionContext] <-- [Login]
+[SessionContext] <-- [Estudiante Dashboard]
+[SessionContext] <-- [DocenteCursos]
+[SessionContext] <-- [CoordinadorDashboard]
+
+' Backend interno
+[views.py] --> [models.py] : ORM
+[views.py] --> [serializers.py] : Serialization
+[settings.py] --> [middleware]
+[urls.py] --> [views.py]
+
+' Backend a Database
+[models.py] -down-> [RA Manager DB] : Django ORM
+
+' Backend a External Services
+[views.py] -down-> [Gmail SMTP] : Email OTP
+[views.py] -down-> [File Storage] : Upload Files
+
+' Middleware
+[error_handler.py] .up.> [views.py] : Logging & Error Handling
+
+' Types
+[TypeScript Types] .up.> [pages]
+[TypeScript Types] .up.> [components]
+
+note right of frontend
+  Arquitectura basada en componentes
+  con React Router para navegación
+  y Context API para estado global
+end note
+
+note right of backend
+  API REST con Django REST Framework
+  Middleware para logging y manejo de errores
+  Sistema OTP para recuperación de contraseña
+end note
+
+note bottom of db
+  Base de datos relacional con
+  constraints y validaciones
+end note
+
+@enduml

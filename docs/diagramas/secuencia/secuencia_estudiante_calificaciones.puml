@@ -1,0 +1,270 @@
+@startuml Diagrama de Secuencia - Estudiante Consulta Calificaciones
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Estudiante" as estudiante
+participant "Estudiante\nDashboard" as ui
+participant "api.ts" as api
+participant "HTTP Client" as http
+participant "views.py" as views
+participant "models.py" as models
+database "PostgreSQL" as db
+
+== Carga Inicial del Dashboard ==
+
+estudiante -> ui : Accede a /estudiante
+activate ui
+
+ui -> api : getCourses()
+activate api
+api -> http : GET /api/asignaturas/
+activate http
+http -> views : asignaturas_list_view()
+activate views
+views -> models : Asignatura.objects.filter()
+activate models
+models -> db : SELECT asignaturas del estudiante
+activate db
+db --> models : Datos asignaturas
+deactivate db
+models --> views : QuerySet
+deactivate models
+views --> http : Response(cursos)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : Course[]
+deactivate api
+
+ui -> api : getFullProfile()
+activate api
+api -> http : GET /api/auth/profile/
+activate http
+http -> views : profile_view()
+activate views
+views -> models : Buscar usuario y cursos
+activate models
+models -> db : SELECT estudiante, matriculas
+activate db
+db --> models : Datos perfil completo
+deactivate db
+models --> views : ProfileDetails
+deactivate models
+views --> http : Response(profile)
+deactivate views
+http --> api : {user, details, cursos_por_periodo}
+deactivate http
+api --> ui : ProfileDetails
+deactivate api
+
+ui --> estudiante : Muestra dashboard con lista de cursos
+deactivate ui
+
+== Consulta de Actividades y Notas ==
+
+estudiante -> ui : Selecciona un curso
+activate ui
+
+ui -> api : getMyMatricula(courseId)
+activate api
+api -> http : GET /api/asignaturas/:codigo/mi-matricula/
+activate http
+http -> views : asignatura_mi_matricula_view()
+activate views
+views -> views : Obtener estudiante desde token
+views -> models : Matricula.objects.filter()
+activate models
+models -> db : SELECT id_matricula
+activate db
+db --> models : ID de matrícula
+deactivate db
+models --> views : matricula_id
+deactivate models
+views --> http : Response({id_matricula})
+deactivate views
+http --> api : {id_matricula}
+deactivate http
+api --> ui : matriculaId
+deactivate api
+
+ui -> api : getCourseActivitiesGrouped(courseId, matriculaId)
+activate api
+api -> http : GET /api/cursos/:codigo/actividades-agrupadas/
+activate http
+note right
+  Query params:
+  ?matricula_id=123
+end note
+
+http -> views : course_activities_grouped_view()
+activate views
+views -> models : Query complejo: RaActividad + NotasActividad
+activate models
+note right of models
+  Agrupa actividades por:
+  - id_actividad
+  - nombre_actividad
+  - tipo_actividad
+  - fecha_cierre
+  
+  Incluye para cada una:
+  - RAs asociados
+  - Notas por RA
+  - Indicadores calificados
+  - Retroalimentación
+end note
+
+models -> db : SELECT con JOINs múltiples
+activate db
+db --> models : Actividades agrupadas con notas
+deactivate db
+models --> views : Lista de actividades agrupadas
+deactivate models
+views --> http : Response(actividades_agrupadas)
+deactivate views
+http --> api : {data: GroupedActivity[]}
+deactivate http
+api --> ui : GroupedActivity[]
+deactivate api
+
+ui --> estudiante : Muestra tabla de actividades con notas
+deactivate ui
+
+== Consulta de Resumen de Calificaciones ==
+
+estudiante -> ui : Click en "Ver Resumen"
+activate ui
+
+ui -> api : getCourseGradeSummary(courseId, studentId)
+activate api
+api -> http : GET /api/cursos/:codigo/estudiantes/:id/resumen/
+activate http
+http -> views : course_grade_view()
+activate views
+
+views -> views : Validar acceso (estudiante solo ve su resumen)
+
+views -> models : Calcular resumen completo
+activate models
+note right of models
+  Algoritmo de cálculo:
+  
+  1. Obtener todos los RAs del curso
+  2. Para cada RA:
+     a. Obtener RaActividades
+     b. Para cada RaActividad:
+        - Obtener nota del estudiante
+        - Calcular peso de la actividad
+     c. Calcular nota progresiva del RA:
+        = Σ(nota × peso) / Σ(pesos calificados)
+     d. Calcular nota estricta del RA:
+        = Σ(nota × peso) / Σ(pesos totales)
+     e. Calcular cobertura:
+        = Σ(pesos calificados) / Σ(pesos totales)
+  
+  3. Calcular promedio del curso:
+     - Nota progresiva total:
+       = Σ(nota_progresiva_ra × peso_ra)
+     - Nota estricta total:
+       = Σ(nota_estricta_ra × peso_ra)
+     - Cobertura total:
+       = Promedio de coberturas de RAs
+end note
+
+models -> db : SELECT notas, ra_actividades, indicadores
+activate db
+db --> models : Datos completos para cálculo
+deactivate db
+models --> views : GradeSummary calculado
+deactivate models
+
+views --> http : Response(summary)
+deactivate views
+http --> api : GradeSummaryResponse
+deactivate http
+api --> ui : GradeSummary
+deactivate api
+
+ui --> estudiante : Muestra componente GradeSummary
+note right of ui
+  Muestra:
+  - Nota progresiva (barra con %)
+  - Nota estricta (barra con %)
+  - Tabla de RAs con:
+    * Nombre del RA
+    * Nota progresiva del RA
+    * Nota estricta del RA
+    * Cobertura (barra sin %)
+    * Actividades calificadas
+end note
+
+deactivate ui
+
+== Consulta de Notificaciones ==
+
+estudiante -> ui : Click en icono de notificaciones
+activate ui
+
+ui -> api : getNotifications()
+activate api
+api -> http : GET /api/estudiantes/:id/notificaciones/
+activate http
+http -> views : estudiante_notifications_view()
+activate views
+
+views -> views : Obtener notificaciones del caché en memoria
+note right of views
+  Sistema de notificaciones:
+  _NOTIFICATIONS_CACHE = {
+    id_estudiante: [
+      {
+        id, kind, text, date,
+        read, link
+      }
+    ]
+  }
+end note
+
+views --> http : Response(notifications)
+deactivate views
+http --> api : {data: [...]}
+deactivate http
+api --> ui : NotificationItem[]
+deactivate api
+
+ui --> estudiante : Muestra lista de notificaciones
+deactivate ui
+
+alt Estudiante marca notificación como leída
+
+  estudiante -> ui : Click en "Marcar como leída"
+  activate ui
+  
+  ui -> api : markNotificationAsRead(notificationId)
+  activate api
+  api -> http : PATCH /api/notificaciones/:id/
+  activate http
+  http -> views : notification_mark_read_view()
+  activate views
+  
+  views -> views : Actualizar en caché
+  note right
+    notif["read"] = True
+  end note
+  
+  views --> http : Response(success)
+  deactivate views
+  http --> api : Success
+  deactivate http
+  api --> ui : Updated
+  deactivate api
+  
+  ui --> estudiante : Actualiza UI
+  deactivate ui
+  
+end
+
+@enduml

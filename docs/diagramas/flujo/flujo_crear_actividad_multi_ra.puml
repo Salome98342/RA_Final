@@ -1,0 +1,227 @@
+@startuml Diagrama de Flujo - Crear Actividad Multi-RA
+
+' Estilos
+skinparam backgroundColor #FEFEFE
+skinparam activityBackgroundColor #E8F4F8
+skinparam activityBorderColor #2C3E50
+skinparam activityDiamondBackgroundColor #FFE5E5
+skinparam activityDiamondBorderColor #C0392B
+skinparam activityStartColor #27AE60
+skinparam activityEndColor #E74C3C
+skinparam activityBarColor #34495E
+
+title Flujo de Creación de Actividad Multi-RA
+
+start
+
+:Docente navega a
+"Crear Actividad";
+
+:Cargar RAs del curso;
+:Cargar tipos de actividad;
+:Cargar indicadores por RA;
+
+partition "Formulario Multi-RA" {
+  :Ingresar nombre de actividad;
+  :Ingresar descripción;
+  :Seleccionar tipo de actividad;
+  :Establecer fecha de cierre;
+  
+  :Seleccionar RAs (múltiples);
+  note right
+    Checkbox para cada RA disponible
+  end note
+  
+  while (¿Más RAs por configurar?) is (Sí)
+    :Seleccionar RA;
+    :Asignar porcentaje
+    para ese RA;
+    :Seleccionar indicadores
+    específicos del RA;
+  endwhile (No)
+}
+
+partition "Validaciones Locales" {
+  if (¿Nombre vacío?) then (Sí)
+    :Mostrar error:
+    "El nombre es obligatorio";
+    stop
+  endif
+  
+  if (¿Fecha de cierre vacía?) then (Sí)
+    :Mostrar error:
+    "La fecha de cierre es obligatoria";
+    stop
+  endif
+  
+  if (¿Al menos 1 RA seleccionado?) then (No)
+    :Mostrar error:
+    "Debe seleccionar al menos un RA";
+    stop
+  endif
+  
+  if (¿Suma de porcentajes = 100%?) then (No)
+    :Mostrar error:
+    "La suma de porcentajes debe ser 100%";
+    note right
+      Validación crítica:
+      Σ(porcentaje_por_RA) = 100
+    end note
+    stop
+  endif
+  
+  :Calcular porcentaje por RA;
+  
+  while (Para cada RA seleccionado)
+    if (¿Porcentaje > 0?) then (No)
+      :Mostrar error:
+      "El porcentaje debe ser mayor a 0";
+      stop
+    endif
+    
+    if (¿Al menos 1 indicador seleccionado?) then (No)
+      :Mostrar error:
+      "Cada RA debe tener al menos
+      un indicador asignado";
+      stop
+    endif
+  endwhile
+}
+
+:Enviar POST a
+/api/actividades-multi/;
+
+partition "Procesamiento Backend" {
+  :Validar token JWT;
+  :Extraer rol y usuario;
+  
+  if (¿Usuario autorizado?) then (No)
+    :Retornar 403 Forbidden;
+    :Mostrar error en UI;
+    stop
+  endif
+  
+  :Validar datos recibidos;
+  
+  if (¿Todos los RAs pertenecen
+  a la asignatura?) then (No)
+    :Retornar 400 Bad Request:
+    "RA no pertenece a la asignatura";
+    :Mostrar error en UI;
+    stop
+  endif
+  
+  if (¿Suma de porcentajes = 100%?) then (No)
+    :Retornar 400 Bad Request:
+    "Suma de porcentajes debe ser 100%";
+    :Mostrar error en UI;
+    stop
+  endif
+  
+  :Iniciar transacción atómica;
+  
+  :INSERT INTO actividad
+  (nombre, descripcion, tipo, fecha_cierre);
+  
+  :Obtener id_actividad generado;
+  
+  while (Para cada RA seleccionado)
+    :INSERT INTO ra_actividad
+    (id_actividad, codigo_ra, porcentaje);
+    
+    :Obtener id_ra_actividad;
+    
+    while (Para cada indicador del RA)
+      :INSERT INTO ra_actividad_indicador
+      (id_ra_actividad, id_indicador);
+    endwhile
+  endwhile
+  
+  :SELECT estudiantes matriculados
+  en la asignatura;
+  
+  while (Para cada estudiante)
+    while (Para cada ra_actividad creado)
+      :INSERT INTO notas_actividad
+      (id_ra_actividad, id_estudiante,
+      nota=NULL, retroalimentacion='');
+      note right
+        Crear registros vacíos
+        para calificación posterior
+      end note
+    endwhile
+  endwhile
+  
+  if (¿Algún error en la transacción?) then (Sí)
+    :ROLLBACK;
+    :Retornar 500 Internal Server Error;
+    :Mostrar error en UI;
+    stop
+  else (No)
+    :COMMIT;
+  endif
+  
+  :Crear notificaciones
+  para estudiantes;
+  note right
+    Tipo: 'nueva_actividad'
+    Mensaje: "Nueva actividad: {nombre}"
+  end note
+}
+
+:Retornar 201 Created con
+datos de la actividad;
+
+:Mostrar mensaje de éxito;
+
+:Redirigir a vista del curso
+o lista de actividades;
+
+partition "Vista de Actividades Agrupadas" {
+  :GET /api/asignaturas/:codigo/
+  actividades-agrupadas/;
+  
+  :Backend agrupa actividades
+  por id_actividad;
+  
+  :Para cada actividad, listar
+  todos sus RAs asociados;
+  
+  :Calcular porcentaje_total
+  (suma de % en todos los RAs);
+  
+  :Incluir indicadores por cada RA;
+  
+  :Retornar lista agrupada;
+  
+  :Mostrar en UI:
+  - Nombre de actividad
+  - Tipo y fecha de cierre
+  - **RAs asociados (múltiples)**
+  - Porcentaje por cada RA
+  - Indicadores por cada RA
+  - Porcentaje total;
+  
+  note right
+    **Ejemplo de vista:**
+    
+    **Taller 1: Álgebra Lineal**
+    Tipo: Taller | Cierre: 15/06/2025
+    
+    • **RA1 - Matrices** (40%)
+      - IND1: Resolver sistemas 2x2
+      - IND2: Calcular determinantes
+    
+    • **RA2 - Espacios Vectoriales** (60%)
+      - IND3: Identificar bases
+      - IND4: Calcular dimensión
+    
+    **Porcentaje total: 100%**
+    
+    [Botón: Calificar]
+  end note
+}
+
+stop
+
+@enduml

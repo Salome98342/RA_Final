@@ -1,0 +1,178 @@
+@startuml Casos de Uso - Estudiante
+
+' Estilos
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+skinparam backgroundColor #FEFEFE
+skinparam actorBackgroundColor #E1F5FE
+skinparam actorBorderColor #0288D1
+skinparam usecaseBackgroundColor #FFF9C4
+skinparam usecaseBorderColor #F57C00
+
+left to right direction
+
+' Actor
+actor "Estudiante" as estudiante #LightBlue
+actor "Sistema de Email" as email #LightGray
+
+' Paquetes de casos de uso
+package "Gestión de Autenticación" {
+  usecase (Iniciar Sesión) as UC1
+  usecase (Recuperar Contraseña) as UC2
+  usecase (Verificar OTP) as UC3
+  usecase (Restablecer Contraseña) as UC4
+  usecase (Cerrar Sesión) as UC5
+  usecase (Cambiar Contraseña) as UC6
+}
+
+package "Gestión de Perfil" {
+  usecase (Ver Perfil) as UC7
+  usecase (Editar Perfil) as UC8
+  usecase (Actualizar Correo) as UC8A
+  usecase (Actualizar Teléfono) as UC8B
+  usecase (Actualizar Jornada) as UC8C
+  usecase (Subir Avatar) as UC9
+}
+
+package "Consulta de Cursos" {
+  usecase (Ver Mis Cursos) as UC10
+  usecase (Filtrar Cursos por Periodo) as UC10A
+  usecase (Ver Cursos Actuales) as UC10B
+  usecase (Ver Cursos Anteriores) as UC10C
+  usecase (Ver Resultados de Aprendizaje) as UC11
+  usecase (Ver Porcentaje por RA) as UC11A
+}
+
+package "Consulta de Calificaciones" {
+  usecase (Ver Mis Calificaciones) as UC12
+  usecase (Ver Actividades Agrupadas) as UC13
+  usecase (Ver Nota por Actividad) as UC13A
+  usecase (Ver Retroalimentación) as UC13B
+  usecase (Ver Notas por Indicador) as UC13C
+  usecase (Ver Resumen de Notas) as UC14
+  usecase (Ver Nota Progresiva) as UC14A
+  usecase (Ver Nota Estricta) as UC14B
+  usecase (Ver Cobertura) as UC14C
+}
+
+package "Gestión de Recursos" {
+  usecase (Ver Recursos del Curso) as UC15
+  usecase (Descargar Recursos) as UC16
+  usecase (Filtrar Recursos por Fecha) as UC16A
+  usecase (Buscar Recursos) as UC16B
+}
+
+package "Sistema de Notificaciones" {
+  usecase (Ver Notificaciones) as UC17
+  usecase (Ver Notificaciones de Calificaciones) as UC17A
+  usecase (Ver Notificaciones de Actividades) as UC17B
+  usecase (Marcar Notificación como Leída) as UC17C
+}
+
+package "Gestión de Tareas" {
+  usecase (Ver Actividades Pendientes) as UC18
+  usecase (Ver Cronograma de Actividades) as UC18A
+  usecase (Filtrar por Fecha de Vencimiento) as UC18B
+  usecase (Ver Detalles de Actividad) as UC18C
+}
+
+' Relaciones con Estudiante
+estudiante --> UC1
+estudiante --> UC2
+estudiante --> UC5
+estudiante --> UC6
+estudiante --> UC7
+estudiante --> UC8
+estudiante --> UC9
+estudiante --> UC10
+estudiante --> UC11
+estudiante --> UC12
+estudiante --> UC13
+estudiante --> UC14
+estudiante --> UC15
+estudiante --> UC16
+estudiante --> UC17
+estudiante --> UC18
+
+' Relaciones de autenticación
+UC2 ..> UC3 : <<include>>
+UC3 --> email : envía OTP
+UC3 ..> UC4 : <<include>>
+
+' Relaciones de perfil
+UC8 ..> UC8A : <<extend>>
+UC8 ..> UC8B : <<extend>>
+UC8 ..> UC8C : <<extend>>
+
+' Relaciones de cursos
+UC10 ..> UC10A : <<extend>>
+UC10 ..> UC10B : <<include>>
+UC10 ..> UC10C : <<extend>>
+UC11 ..> UC11A : <<include>>
+
+' Relaciones de calificaciones
+UC12 ..> UC14 : <<include>>
+UC13 ..> UC11 : <<include>>
+UC13 ..> UC13A : <<include>>
+UC13 ..> UC13B : <<extend>>
+UC13 ..> UC13C : <<extend>>
+UC14 ..> UC14A : <<include>>
+UC14 ..> UC14B : <<include>>
+UC14 ..> UC14C : <<include>>
+
+' Relaciones de recursos
+UC16 ..> UC16A : <<extend>>
+UC16 ..> UC16B : <<extend>>
+
+' Relaciones de notificaciones
+UC17 ..> UC17A : <<include>>
+UC17 ..> UC17B : <<include>>
+UC17 ..> UC17C : <<extend>>
+
+' Relaciones de tareas
+UC18 ..> UC18A : <<include>>
+UC18 ..> UC18B : <<extend>>
+UC18 ..> UC18C : <<extend>>
+
+' Notas explicativas
+note right of UC13
+  Agrupa actividades por RA
+  mostrando notas y retroalimentación
+  por cada indicador de logro
+end note
+
+note right of UC14
+  Muestra:
+  - Nota progresiva (avance actual)
+  - Nota estricta (sobre el total)
+  - Cobertura (% calificado)
+  Calculado por RA y total del curso
+end note
+
+note bottom of UC14A
+  Promedio ponderado de las
+  actividades ya calificadas
+  (refleja el avance real)
+end note
+
+note bottom of UC14B
+  Nota calculada sobre el
+  100% del curso (incluye
+  actividades sin calificar)
+end note
+
+note right of UC17
+  Sistema de notificaciones
+  en tiempo real que alerta sobre:
+  - Nuevas calificaciones
+  - Actividades próximas a vencer
+  - Recursos nuevos disponibles
+end note
+
+note bottom of UC18
+  Vista de cronograma que muestra
+  todas las actividades pendientes
+  ordenadas por fecha de cierre
+end note
+
+@enduml
