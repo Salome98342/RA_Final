@@ -29,8 +29,6 @@ package "Gestión de Perfil" {
   usecase (Ver Perfil) as UC7
   usecase (Editar Perfil) as UC8
   usecase (Actualizar Correo) as UC8A
-  usecase (Actualizar Teléfono) as UC8B
-  usecase (Actualizar Jornada) as UC8C
   usecase (Subir Avatar) as UC9
 }
 
@@ -66,7 +64,6 @@ package "Sistema de Notificaciones" {
   usecase (Ver Notificaciones) as UC17
   usecase (Ver Notificaciones de Calificaciones) as UC17A
   usecase (Ver Notificaciones de Actividades) as UC17B
-  usecase (Marcar Notificación como Leída) as UC17C
 }
 
 package "Gestión de Tareas" {

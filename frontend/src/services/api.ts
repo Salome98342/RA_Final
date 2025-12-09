@@ -130,12 +130,20 @@ export async function upsertGrade(input: {
   retroalimentacion?: string
   indicadorId?: string
 }) {
+  // Normalizar indicadorId: solo enviar si es un valor válido (no vacío, no 'null', no 'undefined')
+  const normalizedIndicadorId = input.indicadorId && 
+    input.indicadorId !== '' && 
+    input.indicadorId !== 'null' && 
+    input.indicadorId !== 'undefined' 
+    ? input.indicadorId 
+    : null
+  
   const { data } = await api.post(endpoints.notas, {
     id_matricula: input.matriculaId,
     id_ra_actividad: input.raActividadId,
     nota: input.nota,
     retroalimentacion: input.retroalimentacion,
-    id_ind: input.indicadorId,
+    id_ind: normalizedIndicadorId,
   })
   return data
 }
@@ -196,6 +204,8 @@ export async function getActivitiesByRA(raId: string, opts?: { matriculaId?: str
   return rows.map((it) => {
     const o = it as Record<string, unknown>
     const inds = Array.isArray(o.indicadores) ? (o.indicadores as unknown[]) : undefined
+    const notasPorInd = Array.isArray(o.notas_por_indicador) ? (o.notas_por_indicador as unknown[]) : undefined
+    
     return {
       id: String(o.id_actividad ?? o.id ?? ''),
       nombre: String((o.nombre_actividad ?? o.nombre ?? '') as string),
@@ -214,6 +224,15 @@ export async function getActivitiesByRA(raId: string, opts?: { matriculaId?: str
           id: String(ri.id_ind ?? ri.id ?? ''),
           descripcion: String(ri.descripcion ?? ''),
           porcentaje: Number((ri.porcentaje_ind ?? ri.porcentaje ?? 0) as number),
+        }
+      }),
+      // 🆕 Mapear notas por indicador
+      notasPorIndicador: notasPorInd?.map((n) => {
+        const nota = n as Record<string, unknown>
+        return {
+          nota: nota.nota != null ? Number(nota.nota) : null,
+          retroalimentacion: (nota.retroalimentacion ?? null) as string | null,
+          id_ind: nota.id_ind != null ? String(nota.id_ind) : null,
         }
       }),
     }

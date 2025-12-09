@@ -14,6 +14,12 @@ export type Activity = {
   tipoActividad?: string
   fechaCierre?: string | null
   indicadores?: { id: string; descripcion: string; porcentaje: number }[]
+  // 🆕 Notas por indicador (múltiples notas posibles)
+  notasPorIndicador?: Array<{
+    nota: number | null
+    retroalimentacion: string | null
+    id_ind: string | null
+  }>
 }
 export type Grade = { estudiante: string; actividad: string; nota: number | null }
 

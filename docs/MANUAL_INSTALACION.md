@@ -52,7 +52,7 @@ Este manual describe el proceso de instalación y configuración de RA-Manager e
 ### 3.1 Clonar el Repositorio
 
 ```bash
-git clone https://github.com/tu-org/RA-Manager.git
+git clone https://github.com/Salome98342/RA_Final.git
 cd RA-Manager
 ```
 

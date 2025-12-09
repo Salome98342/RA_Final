@@ -1425,23 +1425,24 @@ def ra_actividades_view(request, ra_id: int):
                 "indicadores": inds,
             }
             if id_matricula:
-                # Si hay múltiples indicadores, pueden existir múltiples notas
-                # Devolver la nota con indicador coincidente si existe, sino la primera
+                # 🔴 CRÍTICO: Devolver TODAS las notas por indicador para que el frontend pueda seleccionar
                 notas = list(NotasActividad.objects
                         .filter(matricula_id=id_matricula, ra_actividad_id=rel.id_ra_actividad)
-                        .order_by('-indicador_id'))  # Priorizamos las que tienen indicador
+                        .order_by('indicador_id'))
                 
-                # Si solo hay un indicador asignado, buscar su nota específica
-                if len(inds) == 1 and notas:
-                    nota_especifica = next((n for n in notas if n.indicador_id == inds[0]["id_ind"]), None)
-                    nota = nota_especifica or notas[0]
-                elif notas:
-                    # Si hay múltiples indicadores o ninguno, tomar la primera nota
+                # Devolver array de notas con sus indicadores
+                row["notas_por_indicador"] = [
+                    {
+                        "nota": float(n.nota_ra_actividad) if n.nota_ra_actividad is not None else None,
+                        "retroalimentacion": n.retroalimentacion,
+                        "id_ind": n.indicador_id,
+                    }
+                    for n in notas
+                ]
+                
+                # Por compatibilidad, seguir devolviendo la primera nota en los campos legacy
+                if notas:
                     nota = notas[0]
-                else:
-                    nota = None
-                    
-                if nota:
                     row["nota"] = float(nota.nota_ra_actividad) if nota.nota_ra_actividad is not None else None
                     row["retroalimentacion"] = nota.retroalimentacion
                     row["id_ind"] = nota.indicador_id
@@ -1686,6 +1687,10 @@ def notas_view(request):
     if not (id_matricula and id_ra_actividad and nota is not None):
         return Response({"detail": "Campos requeridos"}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Normalizar id_ind: convertir valores vacíos, 'null', 'undefined' a None
+    if id_ind in (None, '', 'null', 'undefined'):
+        id_ind = None
+    
     # Incluir indicador en la búsqueda para permitir múltiples notas por indicador
     obj, created = NotasActividad.objects.get_or_create(
         matricula_id=id_matricula,
@@ -1916,18 +1921,95 @@ def profile_view(request):
         u = Docente.objects.filter(pk=uid).select_related("tipo_documento").first()
         if not u:
             return Response({"detail": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        cursos_qs = Asignatura.objects.filter(docente=u).select_related("programa")
-        cursos = [{"codigo": a.codigo_asignatura, "nombre": a.nombre, "grupo": a.grupo, "programa": getattr(a.programa, "nombre", None)} for a in cursos_qs]
-        # Programas únicos dictados por el docente
+        
+        # Obtener asignaturas del docente
+        asignaturas_qs = Asignatura.objects.filter(docente=u).select_related("programa")
+        
+        # Obtener matrículas de esas asignaturas para agrupar por período
+        # Usar un conjunto para trackear combinaciones (asignatura, periodo) y evitar duplicados
+        matriculas = (Matricula.objects
+            .filter(asignatura__docente=u)
+            .select_related("asignatura__programa", "periodo")
+            .order_by("periodo__fecha_inicio"))
+        
+        cursos = []
+        grupos = {}
         programas_set = set()
         programas = []
-        for a in cursos_qs:
+        asignaturas_procesadas = set()
+        combinaciones_vistas = set()  # Para evitar duplicados (asignatura_id, periodo_id)
+        
+        for mat in matriculas:
+            a = mat.asignatura
+            p = mat.periodo
+            
+            # Evitar procesar la misma combinación (asignatura, periodo) más de una vez
+            combo_key = (a.id_asignatura, p.id_periodo)
+            if combo_key in combinaciones_vistas:
+                continue
+            combinaciones_vistas.add(combo_key)
+            
+            # Construir datos del curso
+            curso_data = {
+                "codigo": a.codigo_asignatura, 
+                "nombre": a.nombre, 
+                "grupo": a.grupo, 
+                "programa": getattr(a.programa, "nombre", None)
+            }
+            
+            # Agregar a la lista general de cursos (sin duplicados)
+            if a.codigo_asignatura not in asignaturas_procesadas:
+                cursos.append(curso_data)
+                asignaturas_procesadas.add(a.codigo_asignatura)
+            
+            # Agrupar por período
+            key = str(p.id_periodo)
+            if key not in grupos:
+                grupos[key] = {
+                    "periodo": {"id": p.id_periodo, "descripcion": p.descripcion}, 
+                    "cursos": []
+                }
+            
+            # Agregar curso al período
+            grupos[key]["cursos"].append(curso_data)
+            
+            # Recopilar programas únicos
             prog = getattr(a, "programa", None)
             if prog:
-                key = (getattr(prog, "codigo_programa", None), getattr(prog, "nombre", None))
-                if key not in programas_set:
-                    programas_set.add(key)
-                    programas.append({"codigo": key[0], "nombre": key[1]})
+                prog_key = (getattr(prog, "codigo_programa", None), getattr(prog, "nombre", None))
+                if prog_key not in programas_set:
+                    programas_set.add(prog_key)
+                    programas.append({"codigo": prog_key[0], "nombre": prog_key[1]})
+        
+        # Si no se encontraron matrículas, cargar todas las asignaturas del docente sin agrupar por período
+        if not grupos:
+            for a in asignaturas_qs:
+                if a.codigo_asignatura not in asignaturas_procesadas:
+                    curso_data = {
+                        "codigo": a.codigo_asignatura, 
+                        "nombre": a.nombre, 
+                        "grupo": a.grupo, 
+                        "programa": getattr(a.programa, "nombre", None)
+                    }
+                    cursos.append(curso_data)
+                    asignaturas_procesadas.add(a.codigo_asignatura)
+                    
+                    # Recopilar programas únicos
+                    prog = getattr(a, "programa", None)
+                    if prog:
+                        prog_key = (getattr(prog, "codigo_programa", None), getattr(prog, "nombre", None))
+                        if prog_key not in programas_set:
+                            programas_set.add(prog_key)
+                            programas.append({"codigo": prog_key[0], "nombre": prog_key[1]})
+        
+        # Determinar período actual (último por fecha de inicio)
+        periodo_actual = None
+        total_cursos_periodo_actual = None
+        if grupos:
+            last_key = list(grupos.keys())[-1]
+            periodo_actual = grupos[last_key]["periodo"]
+            total_cursos_periodo_actual = len(grupos[last_key]["cursos"])
+        
         details = {
             "correo": u.correo,
             "codigo": u.codigo_docente,
@@ -1935,11 +2017,18 @@ def profile_view(request):
             "telefono": u.num_telefono,
             "zona_horaria": settings.TIME_ZONE,
             "programas": programas,
-            "total_cursos": cursos_qs.count(),
+            "total_cursos": asignaturas_qs.count(),
+            "periodo_actual": periodo_actual,
+            "total_cursos_periodo_actual": total_cursos_periodo_actual,
         }
         # Adjunta URL del avatar si existe
         details["avatar_url"] = _avatar_url_for(rol, uid)
-        return Response({"user": _serialize_user(u, "docente"), "details": details, "cursos": cursos, "cursos_por_periodo": []})
+        return Response({
+            "user": _serialize_user(u, "docente"), 
+            "details": details, 
+            "cursos": cursos, 
+            "cursos_por_periodo": list(grupos.values())
+        })
 
     u = Estudiante.objects.filter(pk=uid).select_related("tipo_documento").first()
     if not u:

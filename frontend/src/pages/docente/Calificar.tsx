@@ -206,10 +206,34 @@ const DocenteCalificar: React.FC = () => {
   // Helpers por fila
   const getEff = (a: Activity) => {
     const e = edits[a.raActividadId || ''] || {}
+    
+    // 🆕 Determinar el indicador efectivo (seleccionado en el dropdown o el del backend)
+    const effectiveIndicadorId = e.indicadorId ?? (a.indicadorId ?? '')
+    
+    // 🆕 Si hay notas por indicador, buscar la nota correspondiente al indicador seleccionado
+    let backendNota: number | null = null
+    let backendRetro: string | null = null
+    
+    if (a.notasPorIndicador && a.notasPorIndicador.length > 0) {
+      // Buscar la nota del indicador seleccionado
+      const notaParaIndicador = a.notasPorIndicador.find(
+        n => String(n.id_ind ?? '') === String(effectiveIndicadorId)
+      )
+      
+      if (notaParaIndicador) {
+        backendNota = notaParaIndicador.nota
+        backendRetro = notaParaIndicador.retroalimentacion
+      }
+    } else {
+      // Fallback: usar los campos legacy si no hay notas por indicador
+      backendNota = a.nota ?? null
+      backendRetro = a.retroalimentacion ?? null
+    }
+    
     return {
-      indicadorId: e.indicadorId ?? (a.indicadorId ?? ''),
-      nota: e.nota ?? (a.nota != null ? String(a.nota) : ''),
-      retro: e.retro ?? (a.retroalimentacion ?? ''),
+      indicadorId: effectiveIndicadorId,
+      nota: e.nota ?? (backendNota != null ? String(backendNota) : ''),
+      retro: e.retro ?? (backendRetro ?? ''),
       dirty: !!e.dirty,
       saving: !!e.saving,
       savedAt: e.savedAt,
@@ -221,10 +245,49 @@ const DocenteCalificar: React.FC = () => {
   const isIndicatorRequired = (a: Activity) => Array.isArray(a.indicadores) && a.indicadores.length > 0
 
   const setEdit = (id: string, patch: Partial<{ nota: string; indicadorId: string; retro: string }>) => {
-    setEdits(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), ...patch, dirty: true },
-    }))
+    setEdits(prev => {
+      const current = prev[id] || {}
+      
+      // 🆕 Si se está cambiando el indicador, cargar la nota correspondiente del backend
+      if (patch.indicadorId !== undefined && patch.indicadorId !== current.indicadorId) {
+        const activity = activities.find(a => a.raActividadId === id)
+        if (activity?.notasPorIndicador) {
+          const notaParaIndicador = activity.notasPorIndicador.find(
+            n => String(n.id_ind ?? '') === String(patch.indicadorId)
+          )
+          
+          if (notaParaIndicador) {
+            // Cargar nota y retroalimentación del backend, sin marcar como dirty
+            return {
+              ...prev,
+              [id]: {
+                indicadorId: patch.indicadorId,
+                nota: notaParaIndicador.nota != null ? String(notaParaIndicador.nota) : '',
+                retro: notaParaIndicador.retroalimentacion ?? '',
+                dirty: false, // No está modificado, solo se cambió de indicador
+              },
+            }
+          } else {
+            // No hay nota para este indicador, limpiar campos
+            return {
+              ...prev,
+              [id]: {
+                indicadorId: patch.indicadorId,
+                nota: '',
+                retro: '',
+                dirty: false,
+              },
+            }
+          }
+        }
+      }
+      
+      // Comportamiento normal para otros cambios
+      return {
+        ...prev,
+        [id]: { ...current, ...patch, dirty: true },
+      }
+    })
   }
 
   // Auto-seleccionar indicador si la actividad tiene exactamente uno y no hay uno escogido aún
@@ -237,7 +300,25 @@ const DocenteCalificar: React.FC = () => {
         const e = next[key]
         const effIndic = (e?.indicadorId ?? a.indicadorId ?? '').toString()
         if ((!effIndic || effIndic === 'null' || effIndic === 'undefined') && Array.isArray(a.indicadores) && a.indicadores.length === 1) {
-          next[key] = { ...(e || {}), indicadorId: String(a.indicadores[0].id), dirty: true }
+          const indicadorId = String(a.indicadores[0].id)
+          
+          // 🆕 Buscar la nota correspondiente al indicador auto-seleccionado
+          let nota = ''
+          let retro = ''
+          if (a.notasPorIndicador) {
+            const notaParaIndicador = a.notasPorIndicador.find(n => String(n.id_ind ?? '') === indicadorId)
+            if (notaParaIndicador) {
+              nota = notaParaIndicador.nota != null ? String(notaParaIndicador.nota) : ''
+              retro = notaParaIndicador.retroalimentacion ?? ''
+            }
+          }
+          
+          next[key] = { 
+            indicadorId, 
+            nota, 
+            retro, 
+            dirty: false // No marcar como dirty porque viene del backend
+          }
         }
       }
       return next
@@ -293,6 +374,14 @@ const DocenteCalificar: React.FC = () => {
     })
 
     try {
+      // Normalizar indicadorId: solo enviar si es válido
+      const normalizedIndicadorId = eff.indicadorId && 
+        eff.indicadorId !== '' && 
+        eff.indicadorId !== 'null' && 
+        eff.indicadorId !== 'undefined' 
+        ? eff.indicadorId 
+        : undefined
+      
       // Guardar la nota en TODAS las relaciones ra_actividad de esta actividad
       const savePromises = keysToUpdate.map(async (raActId) => {
         try {
@@ -301,7 +390,7 @@ const DocenteCalificar: React.FC = () => {
             raActividadId: raActId,
             nota: notaNum,
             retroalimentacion: eff.retro || undefined,
-            indicadorId: eff.indicadorId || undefined,
+            indicadorId: normalizedIndicadorId,
           })
         } catch (error) {
           // Capturar error específico de esta relación
@@ -351,11 +440,54 @@ const DocenteCalificar: React.FC = () => {
       })
       
       // Actualizar TODAS las actividades relacionadas con la nueva nota
-      setActivities(prev => prev.map(x => 
-        keysToUpdate.includes(x.raActividadId || '') 
-          ? { ...x, nota: notaNum, retroalimentacion: eff.retro || null, indicadorId: eff.indicadorId || null } 
-          : x
-      ))
+      setActivities(prev => prev.map(x => {
+        if (!keysToUpdate.includes(x.raActividadId || '')) return x
+        
+        // Actualizar campos legacy
+        const updated = { 
+          ...x, 
+          nota: notaNum, 
+          retroalimentacion: eff.retro || null, 
+          indicadorId: normalizedIndicadorId || null 
+        }
+        
+        // 🆕 Actualizar también notasPorIndicador
+        if (updated.notasPorIndicador) {
+          // Buscar si ya existe una nota para este indicador
+          const existingIdx = updated.notasPorIndicador.findIndex(
+            n => String(n.id_ind ?? '') === String(normalizedIndicadorId ?? '')
+          )
+          
+          if (existingIdx >= 0) {
+            // Actualizar nota existente
+            updated.notasPorIndicador = [...updated.notasPorIndicador]
+            updated.notasPorIndicador[existingIdx] = {
+              nota: notaNum,
+              retroalimentacion: eff.retro || null,
+              id_ind: normalizedIndicadorId || null,
+            }
+          } else {
+            // Agregar nueva nota
+            updated.notasPorIndicador = [
+              ...updated.notasPorIndicador,
+              {
+                nota: notaNum,
+                retroalimentacion: eff.retro || null,
+                id_ind: normalizedIndicadorId || null,
+              }
+            ]
+          }
+        } else {
+          // Crear array de notas por indicador
+          updated.notasPorIndicador = [{
+            nota: notaNum,
+            retroalimentacion: eff.retro || null,
+            id_ind: normalizedIndicadorId || null,
+          }]
+        }
+        
+        return updated
+      }))
       
       const multiMsg = keysToUpdate.length > 1 ? ` (replicada en ${keysToUpdate.length} RAs)` : ''
       setToast({ text: `Guardado correctamente${multiMsg}.` })
@@ -371,7 +503,14 @@ const DocenteCalificar: React.FC = () => {
             if (updated) {
               setActivities(prev => prev.map(x => 
                 x.raActividadId === k 
-                  ? { ...x, nota: updated.nota ?? notaNum, retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), indicadorId: updated.indicadorId ?? (eff.indicadorId || null) } 
+                  ? { 
+                      ...x, 
+                      nota: updated.nota ?? notaNum, 
+                      retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), 
+                      indicadorId: updated.indicadorId ?? (normalizedIndicadorId || null),
+                      // 🆕 Sincronizar notas por indicador desde el backend
+                      notasPorIndicador: updated.notasPorIndicador ?? x.notasPorIndicador
+                    } 
                   : x
               ))
             }
