@@ -4,13 +4,15 @@ import Sidebar from '@/components/Sidebar'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
+import { useNavigate } from 'react-router-dom'
 import type { Course, GroupedActivity, ProfilePeriodo, ProfileDetails } from '@/types'
-import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeSummary } from '@/services/api'
+import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeSummary, type Anuncio } from '@/services/api'
 import GradeSummary from '@/components/GradeSummary'
 import { getProfile, getFullProfile } from '@/services/auth'
 import { SkeletonCard } from '@/components/Skeleton'
 
 const Estudiante: React.FC = () => {
+  const navigate = useNavigate()
   const [courses, setCourses] = useState<Course[]>([])
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Course | null>(null)
@@ -18,7 +20,6 @@ const Estudiante: React.FC = () => {
   const [err, setErr] = useState<string | null>(null)
   const [groups, setGroups] = useState<ProfilePeriodo[] | null>(null)
   const [currentPeriodId, setCurrentPeriodId] = useState<number | null>(null)
-  const [matriculaId, setMatriculaId] = useState<string | null>(null)
   const [groupedActivities, setGroupedActivities] = useState<GroupedActivity[]>([])
   const [selectedGroupedActivity, setSelectedGroupedActivity] = useState<GroupedActivity | null>(null)
   const [notifications, setNotifications] = useState<{ id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[]>([])
@@ -26,6 +27,7 @@ const Estudiante: React.FC = () => {
   type TaskItem = { id: string; courseId: string; courseName: string; raId: string; actId: string; nombre: string; fechaCierre?: string | null; tipo?: string }
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [rawResources, setRawResources] = useState<Array<{ curso: string; items: Array<{ id: string; titulo: string; url: string; fecha: string }> }>>([])
+  const [rawAnuncios, setRawAnuncios] = useState<Array<{ curso: string; items: Anuncio[] }>>([])
   // Nota ponderada por curso (0-5) y porcentaje (0-100)
   const [courseStats, setCourseStats] = useState<Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }>>({})
   const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, import('@/types').GradeSummaryResponse>>({})
@@ -37,6 +39,13 @@ const Estudiante: React.FC = () => {
   const [actFilter, setActFilter] = useState<'todas'|'pendientes'|'calificadas'|'vencidas'>('todas')
   // 'peso' option removed (visual only)
   const [sortBy, setSortBy] = useState<'fecha'|'nombre'>('fecha')
+
+  const [studentId, setStudentId] = useState<string | null>(null)
+
+  // Función para navegar al detalle de curso
+  const openCourseDetail = (course: Course) => {
+    navigate(`/estudiante/materias/${course.codigo || course.id}/detalle`)
+  }
 
   // ESC para volver atrás
   useEffect(() => {
@@ -88,7 +97,15 @@ const Estudiante: React.FC = () => {
 
         // Obtener perfil para tener id de estudiante (necesario para summary)
         let studentId: string | null = null
-        try { const prof = await getProfile(); studentId = prof.id } catch (e) { if (import.meta.env.DEV) console.debug('profile load failed', e) }
+        try { 
+          const prof = await getProfile()
+          studentId = prof.id
+          if (mounted) {
+            setStudentId(studentId)
+            // Guardar en sessionStorage para la página de detalle
+            sessionStorage.setItem('studentId', studentId)
+          }
+        } catch (e) { if (import.meta.env.DEV) console.debug('profile load failed', e) }
 
         for (const c of list) {
           let mid: string | null = null
@@ -176,7 +193,7 @@ const Estudiante: React.FC = () => {
         })
 
         // Cargar recursos de todos los cursos
-        const { getRecursosByCourse } = await import('@/services/api')
+        const { getRecursosByCourse, getAnunciosByCourse } = await import('@/services/api')
         const resourcesPromises = list.map(async (c) => {
           try {
             const items = await getRecursosByCourse(c.id)
@@ -187,6 +204,18 @@ const Estudiante: React.FC = () => {
         })
         const resourcesData = await Promise.all(resourcesPromises)
         if (mounted) setRawResources(resourcesData)
+
+        // Cargar anuncios de todos los cursos
+        const anunciosPromises = list.map(async (c) => {
+          try {
+            const items = await getAnunciosByCourse(c.id)
+            return { curso: c.id, items }
+          } catch {
+            return { curso: c.id, items: [] }
+          }
+        })
+        const anunciosData = await Promise.all(anunciosPromises)
+        if (mounted) setRawAnuncios(anunciosData)
 
         if (mounted) { setNotifications(notes); setTasks(todos); setCourseStats(stats); setGradeSummaryByCourse({...gradeSummaryByCourse}) }
       })
@@ -200,7 +229,6 @@ const Estudiante: React.FC = () => {
     setGroupedActivities([])
     try {
       const mid = await getMyMatricula(c.id)
-      setMatriculaId(mid)
       
       // Cargar actividades agrupadas directamente a nivel de curso
       if (mid) {
@@ -216,7 +244,6 @@ const Estudiante: React.FC = () => {
       setView('cursos')
     } catch (e) {
   if (import.meta.env.DEV) console.debug('openCourse failed', e)
-      setMatriculaId(null)
     }
   }
 
@@ -361,7 +388,8 @@ const Estudiante: React.FC = () => {
                                 headTone={idx===0?'dark':'light'} 
                                 title={c.nombre} 
                                 subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
-                                onClick={() => openCourse(c)} 
+                                onClick={() => openCourse(c)}
+                                onDoubleClick={() => openCourseDetail(c)}
                               />
                             )
                           })
@@ -406,7 +434,8 @@ const Estudiante: React.FC = () => {
                                         headTone={'light'} 
                                         title={c.nombre} 
                                         subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
-                                        onClick={() => openCourse(c)} 
+                                        onClick={() => openCourse(c)}
+                                        onDoubleClick={() => openCourseDetail(c)}
                                       />
                                     )
                                   })
@@ -435,7 +464,8 @@ const Estudiante: React.FC = () => {
                                 headTone={idx===0?'dark':'light'} 
                                 title={c.nombre} 
                                 subtitle={`${c.codigo ?? c.id} · ${c.carrera}${noteText}`} 
-                                onClick={() => openCourse(c)} 
+                                onClick={() => openCourse(c)}
+                                onDoubleClick={() => openCourseDetail(c)}
                               />
                             )
                           })}
@@ -851,7 +881,6 @@ const Estudiante: React.FC = () => {
                             <div className="card-body">
                               {(() => {
                                 const nota = Number(selectedGroupedActivity.nota)
-                                const pesoTotal = selectedGroupedActivity.porcentaje_total
                                 
                                 // La fórmula correcta del sistema es:
                                 // Cada RA tiene un peso (porcentaje_ra) en la asignatura
@@ -1024,6 +1053,78 @@ const Estudiante: React.FC = () => {
                 Recursos y Documentos
               </div>
 
+              {/* Anuncios de los docentes */}
+              {(() => {
+                const allAnuncios = rawAnuncios.flatMap(rc =>
+                  rc.items.map(item => ({
+                    ...item,
+                    cursoId: rc.curso,
+                    cursoNombre: courses.find(c => c.id === rc.curso)?.nombre || 'Curso desconocido'
+                  }))
+                )
+
+                if (allAnuncios.length > 0) {
+                  return (
+                    <div className="mb-4">
+                      <div className="d-flex align-items-center gap-2 mb-3">
+                        <i className="bi bi-megaphone-fill text-primary fs-4"></i>
+                        <h4 className="mb-0">Anuncios de tus docentes</h4>
+                        <span className="badge bg-primary rounded-pill">{allAnuncios.length}</span>
+                      </div>
+
+                      <div className="row g-3">
+                        {allAnuncios.map((anuncio) => (
+                          <div key={anuncio.id} className="col-12">
+                            <div className={`card shadow-sm h-100 ${
+                              anuncio.es_importante ? 'border-warning border-2' : ''
+                            }`}>
+                              <div className="card-body">
+                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                  <div className="flex-grow-1">
+                                    <div className="d-flex align-items-center gap-2 mb-2">
+                                      {anuncio.es_importante && (
+                                        <span className="badge bg-warning text-dark">
+                                          <i className="bi bi-exclamation-triangle-fill me-1"></i>
+                                          Importante
+                                        </span>
+                                      )}
+                                      <h5 className="card-title mb-0 fw-bold">{anuncio.titulo}</h5>
+                                    </div>
+                                    <p className="card-text text-break mb-2">{anuncio.contenido}</p>
+                                  </div>
+                                </div>
+                                <div className="d-flex justify-content-between align-items-center">
+                                  <small className="text-muted d-flex align-items-center gap-2">
+                                    <i className="bi bi-book text-danger"></i>
+                                    <strong>{anuncio.cursoNombre}</strong>
+                                  </small>
+                                  <small className="text-muted d-flex align-items-center gap-2">
+                                    <i className="bi bi-person-fill text-info"></i>
+                                    {anuncio.docente_nombre}
+                                    <span className="mx-1">·</span>
+                                    <i className="bi bi-calendar3 me-1"></i>
+                                    {new Date(anuncio.fecha_publicacion).toLocaleString('es-ES', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </small>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <hr className="my-4" />
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
               {/* Mostrar todos los recursos de todos los cursos directamente */}
               {(() => {
                 // Agrupar recursos por curso
@@ -1105,6 +1206,7 @@ const Estudiante: React.FC = () => {
           )}
         </main>
       </div>
+
     </div>
   )
 }

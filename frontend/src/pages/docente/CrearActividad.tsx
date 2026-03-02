@@ -4,7 +4,7 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import { createActivityForRA, createActivityMulti, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse } from '@/services/api'
 import { useSession } from '@/state/SessionContext'
-import Toast from '@/components/Toast'  // <- nuevo
+import { Alert } from '@/utils/alert'
 
 const DocenteCrearActividad: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId: string}>()
@@ -13,7 +13,6 @@ const DocenteCrearActividad: React.FC = () => {
   const [form, setForm] = useState({ nombre: '', tipo: '1', pctRA: '', desc: '', cierre: '' })
   const [saving, setSaving] = useState(false)
   const [tipos, setTipos] = useState<{id:string; descripcion:string}[]>([])
-  const [toast, setToast] = useState<{ text: string; type?: 'ok'|'error' } | null>(null)  // <- nuevo
   const [allIndicators, setAllIndicators] = useState<{ id: string; descripcion: string; porcentaje: number }[]>([])
   const [selIndicators, setSelIndicators] = useState<string[]>([])
   const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
@@ -100,15 +99,15 @@ const DocenteCrearActividad: React.FC = () => {
   const submit = async () => {
     if (!raId || saving) return
     // Validaciones hard antes de chequear acumulados
-  if (!hasName) { setToast({ text: 'Debes ingresar el nombre de la actividad.', type: 'error' }); return }
-  if (!hasDate) { setToast({ text: 'Debes definir la fecha límite de entrega.', type: 'error' }); return }
-  if (allIndicators.length === 0) { setToast({ text: 'Este RA no tiene indicadores definidos. No puedes crear la actividad sin indicadores.', type: 'error' }); return }
-  if (!hasIndicators) { setToast({ text: 'Debes seleccionar al menos un indicador del RA.', type: 'error' }); return }
-    if (!allAportesPositive) { setToast({ text: 'El aporte al RA (%) debe ser mayor que 0 para cada RA seleccionado.', type: 'error' }); return }
+  if (!hasName) { Alert.toast.error('Debes ingresar el nombre de la actividad.'); return }
+  if (!hasDate) { Alert.toast.error('Debes definir la fecha límite de entrega.'); return }
+  if (allIndicators.length === 0) { Alert.toast.error('Este RA no tiene indicadores definidos. No puedes crear la actividad sin indicadores.'); return }
+  if (!hasIndicators) { Alert.toast.error('Debes seleccionar al menos un indicador del RA.'); return }
+    if (!allAportesPositive) { Alert.toast.error('El aporte al RA (%) debe ser mayor que 0 para cada RA seleccionado.'); return }
     // Validación rápida de fecha: no permitir fecha de cierre en el pasado
     const todayStr = new Date().toISOString().slice(0,10)
     if (form.cierre < todayStr) {
-      setToast({ text: `La fecha límite no puede ser anterior a hoy (${todayStr}).`, type: 'error' })
+      Alert.toast.error(`La fecha límite no puede ser anterior a hoy (${todayStr}).`)
       return
     }
     // Pre-chequeo: cada RA seleccionado no debe EXCEDER 100% en el aporte total al RA (usa porcentaje_ra_actividad)
@@ -130,10 +129,7 @@ const DocenteCrearActividad: React.FC = () => {
       if (failing) {
         const aporte = Number(raPct[failing.rid] ?? form.pctRA) || 0
         const nuevo = failing.suma + aporte
-        setToast({
-          text: `El RA ${failing.rid} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`,
-          type: 'error',
-        })
+        Alert.toast.error(`El RA ${failing.rid} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`)
         return
       }
     } catch {
@@ -167,7 +163,7 @@ const DocenteCrearActividad: React.FC = () => {
           ras: rasPayload,
         })
       }
-      setToast({ text: 'Actividad creada (indicadores asignados)', type: 'ok' })
+      Alert.toast.success('Actividad creada (indicadores asignados)')
       setTimeout(() => navigate(`/docente/${curso}/ras`), 1200)
     } catch (err: unknown) {
       // Extraer mejor el mensaje de error de forma segura
@@ -183,7 +179,7 @@ const DocenteCrearActividad: React.FC = () => {
         const eMsg = (err as Record<string, unknown>).message
         if (typeof eMsg === 'string') msg = eMsg
       }
-      setToast({ text: msg, type: 'error' })
+      Alert.toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -195,7 +191,6 @@ const DocenteCrearActividad: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente') }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
         <main className="dash-content">
-          {toast ? <Toast text={toast.text} type={toast.type} /> : null}
           <div className="d-flex align-items-center justify-content-between mb-4">
             <div className="content-title">
               <i className="bi bi-plus-circle-fill text-success me-2"></i>

@@ -9,8 +9,8 @@ import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, get
 import type { Course, RA, Indicator, Activity, Student } from '@/types'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '@/state/SessionContext'
+import { Alert } from '@/utils/alert'
 import Chart from 'chart.js/auto'
-import Toast from '@/components/Toast'
 
 type View = 'cursos' | 'ra' | 'estudiantes'
 
@@ -37,7 +37,6 @@ const Docente: React.FC = () => {
   const chartRef = useRef<HTMLCanvasElement | null>(null)
   const chartInstance = useRef<Chart | null>(null)
   const [chartEmpty, setChartEmpty] = useState(false)
-  const [toast, setToast] = useState<{ text: string; type?: 'ok' | 'error' } | null>(null)
   const [savingGrade, setSavingGrade] = useState(false)
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [params, setParams] = useSearchParams()
@@ -195,16 +194,16 @@ const Docente: React.FC = () => {
 
 
   const submitGrade = async () => {
-    if (!selectedStudent) { setToast({ text: 'Selecciona un estudiante primero.', type: 'error' }); return }
-    if (!selectedActivity) { setToast({ text: 'Selecciona una actividad.', type: 'error' }); return }
-    if (!grade.nota) { setToast({ text: 'Ingresa una nota entre 0 y 5.', type: 'error' }); return }
+    if (!selectedStudent) { Alert.toast.error('Selecciona un estudiante primero.'); return }
+    if (!selectedActivity) { Alert.toast.error('Selecciona una actividad.'); return }
+    if (!grade.nota) { Alert.toast.error('Ingresa una nota entre 0 y 5.'); return }
     const act = activities.find(a => String(a.raActividadId) === String(selectedActivity))
     if (act && Array.isArray(act.indicadores) && act.indicadores.length > 0 && !grade.indicadorId) {
-      setToast({ text: 'Selecciona un indicador para esta actividad.', type: 'error' })
+      Alert.toast.error('Selecciona un indicador para esta actividad.')
       return
     }
     const n = Number(grade.nota)
-    if (Number.isNaN(n) || n < 0 || n > 5) { setToast({ text: 'La nota debe estar entre 0 y 5.', type: 'error' }); return }
+    if (Number.isNaN(n) || n < 0 || n > 5) { Alert.toast.error('La nota debe estar entre 0 y 5.'); return }
     try {
       setSavingGrade(true)
       await upsertGrade({
@@ -214,7 +213,7 @@ const Docente: React.FC = () => {
         retroalimentacion: grade.retro || undefined,
         indicadorId: grade.indicadorId || undefined,
       })
-      setToast({ text: 'Guardado correctamente.' })
+      Alert.toast.success('Guardado correctamente.')
       setGrade({ nota: '', retro: '', indicadorId: '' })
       setSelectedActivity('')
       await renderChart(selectedStudent)
@@ -230,7 +229,7 @@ const Docente: React.FC = () => {
         const eMsg = (err as Record<string, unknown>).message
         if (typeof eMsg === 'string') msg = eMsg
       }
-      setToast({ text: msg, type: 'error' })
+      Alert.toast.error(msg)
     } finally {
       setSavingGrade(false)
     }
@@ -266,12 +265,6 @@ const Docente: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar active={view === 'cursos' ? 'cursos' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
         <main className="dash-content">
-          {!!toast && (
-            <div className="mb-3" role="status" aria-live="polite">
-              <Toast text={toast.text} type={toast.type} />
-            </div>
-          )}
-
           {errorMsg && (
             <div className="alert alert-danger d-flex justify-content-between align-items-center mb-3" role="alert">
               <span>{errorMsg}</span>

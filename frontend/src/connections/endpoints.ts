@@ -24,6 +24,7 @@ export const endpoints = {
     calificaciones: (codigo: string, estudianteId: string | number) => `/asignaturas/${codigo}/calificaciones/${estudianteId}/`,
     periodos: (id: string) => `/asignaturas/${id}/periodos/`,
     recursos: (id: string) => `/asignaturas/${id}/recursos/`, // <- nuevo
+    anuncios: (id: string) => `/asignaturas/${id}/anuncios/`,
   },
   ras: {
     indicadores: (id: string) => `/ras/${id}/indicadores/`,
@@ -40,15 +41,21 @@ export const endpoints = {
   },
   notas: '/notas',
   notificaciones: '/notificaciones',
+  anuncios: {
+    delete: (id: string | number) => `/anuncios/${id}/`,
+  },
   coordinador: {
+    estudiantes: '/coordinador/estudiantes',  // GET: listar, POST: crear individual
     asignaturas: '/coordinador/asignaturas',
     asignaturaEstudiantes: '/coordinador/asignaturas/estudiantes',
     asignaturaRAs: '/coordinador/asignaturas/ras',
     asignaturaAvance: '/coordinador/asignaturas/avance',
+    importEstudiantes: '/coordinador/import/estudiantes',
     importMatriculados: '/coordinador/import/matriculados',
     importDocentes: '/coordinador/import/docentes',
     importAsignaturasRAs: '/coordinador/import/asignaturas-ras',
   },
+  tiposDocumento: '/tipos-documento/',
 }
 
 export type UserProfile = {

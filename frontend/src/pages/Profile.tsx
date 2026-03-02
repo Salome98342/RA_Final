@@ -15,6 +15,7 @@ const Profile: React.FC = () => {
   const [pwd, setPwd] = useState({ current: '', next: '', confirm: '' })
   const [pwdBusy, setPwdBusy] = useState(false)
   const [pwdAlert, setPwdAlert] = useState<string | null>(null)
+  const [showRequirements, setShowRequirements] = useState(false)
 
   // Avatar
   const [file, setFile] = useState<File | null>(null)
@@ -42,20 +43,67 @@ const Profile: React.FC = () => {
 
   // Sin edición de datos personales; sólo visualización y cambio de avatar
 
+  // Validaciones individuales para mostrar en tiempo real
+  const requirements = useMemo(() => ({
+    minLength: pwd.next.length >= 8,
+    hasUpperCase: /[A-Z]/.test(pwd.next),
+    hasLowerCase: /[a-z]/.test(pwd.next),
+    hasNumber: /[0-9]/.test(pwd.next),
+    hasSpecial: /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(pwd.next),
+    passwordsMatch: pwd.next === pwd.confirm && pwd.confirm.length > 0,
+    isDifferent: pwd.next !== pwd.current && pwd.next.length > 0
+  }), [pwd])
+
   const pwdValid = useMemo(() => {
-    return !!pwd.current && !!pwd.next && pwd.next.length >= 8 && pwd.next === pwd.confirm && pwd.current !== pwd.next
-  }, [pwd])
+    if (!pwd.current || !pwd.next || !pwd.confirm) return false
+    return Object.values(requirements).every(Boolean)
+  }, [pwd, requirements])
 
   const onChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setPwdAlert(null)
+    
+    // Validar fortaleza de contraseña (debe coincidir con backend)
+    if (pwd.next.length < 8) {
+      setPwdAlert('La contraseña debe tener al menos 8 caracteres')
+      return
+    }
+    if (!/[A-Z]/.test(pwd.next)) {
+      setPwdAlert('La contraseña debe contener al menos una mayúscula')
+      return
+    }
+    if (!/[a-z]/.test(pwd.next)) {
+      setPwdAlert('La contraseña debe contener al menos una minúscula')
+      return
+    }
+    if (!/[0-9]/.test(pwd.next)) {
+      setPwdAlert('La contraseña debe contener al menos un número')
+      return
+    }
+    if (!/[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(pwd.next)) {
+      setPwdAlert('La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)')
+      return
+    }
+    if (pwd.next !== pwd.confirm) {
+      setPwdAlert('Las contraseñas no coinciden')
+      return
+    }
+    if (pwd.current === pwd.next) {
+      setPwdAlert('La nueva contraseña debe ser diferente a la actual')
+      return
+    }
+    
     try {
       setPwdBusy(true)
       await changePassword(pwd.current, pwd.next)
       setPwd({ current: '', next: '', confirm: '' })
       setPwdAlert('Contraseña actualizada correctamente')
-    } catch {
-      setPwdAlert('No se pudo cambiar la contraseña')
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: unknown } })?.response?.data
+      const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
+        ? String((data as Record<string, unknown>).message)
+        : 'No se pudo cambiar la contraseña'
+      setPwdAlert(msg)
     } finally { setPwdBusy(false) }
   }
 
@@ -252,12 +300,49 @@ const Profile: React.FC = () => {
                         </div>
                         <div>
                           <label className="ra-small d-block mb-1" htmlFor="pwd-2">Nueva contraseña</label>
-                          <input id="pwd-2" className="form-control" type="password" value={pwd.next} onChange={(e)=>setPwd({...pwd, next: e.target.value})} required aria-describedby="pwd-help" />
-                          <div id="pwd-help" className="form-text">Mínimo 8 caracteres.</div>
+                          <input 
+                            id="pwd-2" 
+                            className="form-control" 
+                            type="password" 
+                            value={pwd.next} 
+                            onChange={(e)=>setPwd({...pwd, next: e.target.value})}
+                            onFocus={() => setShowRequirements(true)}
+                            required 
+                          />
+                          {showRequirements && pwd.next.length > 0 && (
+                            <div className="mt-2 p-2 border rounded bg-light">
+                              <div className="ra-small fw-bold mb-1">Requisitos de contraseña:</div>
+                              <div className="d-flex flex-column gap-1">
+                                <span className={requirements.minLength ? 'text-success' : 'text-danger'}>
+                                  {requirements.minLength ? '✓' : '✗'} Mínimo 8 caracteres
+                                </span>
+                                <span className={requirements.hasUpperCase ? 'text-success' : 'text-danger'}>
+                                  {requirements.hasUpperCase ? '✓' : '✗'} Una mayúscula (A-Z)
+                                </span>
+                                <span className={requirements.hasLowerCase ? 'text-success' : 'text-danger'}>
+                                  {requirements.hasLowerCase ? '✓' : '✗'} Una minúscula (a-z)
+                                </span>
+                                <span className={requirements.hasNumber ? 'text-success' : 'text-danger'}>
+                                  {requirements.hasNumber ? '✓' : '✗'} Un número (0-9)
+                                </span>
+                                <span className={requirements.hasSpecial ? 'text-success' : 'text-danger'}>
+                                  {requirements.hasSpecial ? '✓' : '✗'} Un carácter especial (!@#$%...)
+                                </span>
+                                <span className={requirements.isDifferent ? 'text-success' : 'text-danger'}>
+                                  {requirements.isDifferent ? '✓' : '✗'} Diferente a la actual
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div>
                           <label className="ra-small d-block mb-1" htmlFor="pwd-3">Confirmar nueva contraseña</label>
                           <input id="pwd-3" className="form-control" type="password" value={pwd.confirm} onChange={(e)=>setPwd({...pwd, confirm: e.target.value})} required />
+                          {pwd.confirm.length > 0 && (
+                            <small className={requirements.passwordsMatch ? 'text-success' : 'text-danger'}>
+                              {requirements.passwordsMatch ? '✓ Las contraseñas coinciden' : '✗ Las contraseñas no coinciden'}
+                            </small>
+                          )}
                         </div>
                         <button className="btn btn-danger mt-2" disabled={!pwdValid || pwdBusy}>{pwdBusy ? 'Actualizando…' : 'Actualizar contraseña'}</button>
                       </form>

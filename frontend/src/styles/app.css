@@ -280,6 +280,7 @@ body {
 .ra-card:hover { transform: translateY(-4px); box-shadow: 0 18px 34px rgba(0,0,0,.08), var(--uv-glow); border-color: rgba(200,16,46,.22); }
 .ra-card .ra-card-head {
   height: 68px; background: linear-gradient(135deg, #f3f4f7, #e7e9ef);
+  position: relative;
 }
 .ra-card .ra-card-body { padding: 12px 14px; color: #333; font-weight: 600; }
 .ra-card .ra-small { font-size: 12px; color: var(--uv-muted); font-weight: normal; }

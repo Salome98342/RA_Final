@@ -1,0 +1,572 @@
+
+-- ============================================================
+-- SCRIPT DE INICIALIZACION DE BASE DE DATOS - RA-Manager
+-- Proyecto: Sistema de Gestion de Resultados de Aprendizaje
+-- Fecha: 2025-01
+-- Descripcion: Carga inicial de datos de prueba
+-- ============================================================
+
+-- Limpiar datos existentes (solo en entorno de desarrollo)
+TRUNCATE notas_actividad, ra_actividad_indicador, ra_actividad, actividad, 
+         tipo_actividad, indicadores_de_logro, resultado_de_aprendizaje, 
+         asignatura, matricula, periodo_academico, programa, 
+         estudiante, docente, tipo_documento, coordinador
+RESTART IDENTITY CASCADE;
+
+-- Iniciar transaccion
+BEGIN;
+
+-- ============================================================
+-- 1. TIPOS DE DOCUMENTO
+-- ============================================================
+INSERT INTO tipo_documento (descripcion) VALUES
+('Cédula de Ciudadanía'),
+('Tarjeta de Identidad');
+
+-- ============================================================
+-- 2. DOCENTES (3)
+-- ============================================================
+INSERT INTO docente (nombre, apellido, codigo_docente, contrasenia_docente, correo, id_tipo_documento, num_documento, num_telefono)
+VALUES
+('Cristhian', 'Rodriguez', '66962415', '12345', 'cristian.rodriguez@univalle.edu.co', 1, '66962415', '3217894561'),
+('Josefina', 'Rivera',  '94257854', '12345', 'josefina.rivera@univalle.edu.co', 1, '94257854', '3206549870'),
+('Julio', 'Ernesto', '55847621', '12345', 'julio.ernesto@univalle.edu.co', 1, '55847621', '3158742369');
+
+-- ============================================================
+-- 3. ESTUDIANTES (8 estudiantes de prueba)
+-- ============================================================
+INSERT INTO estudiante (nombre, apellido, codigo_estudiante, contrasena_estudiante, id_tipo_documento, num_documento, correo, jornada)
+VALUES
+('David', 'Escobar', '2360529', 'Escobar1234', 1, '1115183887', 'david.escobar@correounivalle.edu.co', 'NOC'),
+('Sergio', 'Rincón', '2552295', 'Sergio12345', 1, '1039475920', 'sergio.rincon@correounivalle.edu.co', 'NOC'),
+('Salome', 'Rodriguez', '2360792', 'Salome12345', 1, '1115194073', 'salome.rodriguez@correounivalle.edu.co', 'NOC'),
+('Kevin', 'Trejos', '2360557', 'Kevin12345', 1, '1115184352', 'trejos.kevin@correounivalle.edu.co', 'NOC'),
+('Manuel', 'Londoño', '2360535', 'Manuel12345', 1, '1115567845', 'manuel.londono@correounivalle.edu.co', 'NOC'),
+('Laura', 'Bueno', '2360559', 'Laura12345', 1, '1092457006', 'laura.bueno@correounivalle.edu.co', 'NOC'),
+('Harold', 'Vergara', '2360531', 'Harold12345', 1, '1115184275', 'harold.vergara@correounivalle.edu.co', 'NOC'),
+('Sergio', 'Lamos', '2360503', 'Sergio12345', 1, '1115195045', 'sergio.lamos@correounivalle.edu.co', 'NOC');
+
+-- ============================================================
+-- 4. PROGRAMA ACADEMICO
+-- ============================================================
+INSERT INTO programa (nombre, codigo_programa)
+VALUES ('Tecnología en Desarrollo de Software', '2724');
+
+-- ============================================================
+-- 5. PERIODO ACADÉMICO
+-- ============================================================
+INSERT INTO periodo_academico (descripcion, fecha_inicio, fecha_finalizacion)
+VALUES ('2025-1', '2025-02-01', '2025-06-30');
+
+-- ============================================================
+-- 6. ASIGNATURAS (3)
+-- ============================================================
+INSERT INTO asignatura (nombre, codigo_asignatura, id_docente, grupo, id_programa)
+VALUES
+('BASES DE DATOS', '750006C', 1, '50', 1),
+('SEMINARIO EN CONSTITUCION, LEGISLACION Y ETICA DE LA PROFESION', '730026C', 2, '50', 1),
+('ALGEBRA LINEAL', '111063M', 3, '50', 1);
+
+-- ============================================================
+-- 7. RESULTADOS DE APRENDIZAJE
+-- ============================================================
+-- RA para BASES DE DATOS (id_asignatura = 1)
+INSERT INTO resultado_de_aprendizaje (id_asignatura, porcentaje_ra, descripcion)
+VALUES
+(1, 50, 'Comprende los fundamentos de bases de datos relacionales.'),
+(1, 50, 'Aplica técnicas de modelado y consultas SQL.');
+
+-- RA para SEMINARIO EN ETICA (id_asignatura = 2)
+INSERT INTO resultado_de_aprendizaje (id_asignatura, porcentaje_ra, descripcion)
+VALUES
+(2, 50, 'Analiza principios constitucionales.'),
+(2, 50, 'Evalua situaciones eticas en la profesion.');
+
+-- RA para ALGEBRA LINEAL (id_asignatura = 3)
+INSERT INTO resultado_de_aprendizaje (id_asignatura, porcentaje_ra, descripcion)
+VALUES
+(3, 50, 'Resuelve sistemas de ecuaciones lineales mediante metodos matriciales.'),
+(3, 50, 'Aplica transformaciones lineales y espacios vectoriales.');
+
+-- ============================================================
+-- 8. INDICADORES DE LOGRO
+-- ============================================================
+-- RA 1 (50% BD)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(1, 50, 'Identifica conceptos clave.'),
+(1, 50, 'Explica modelos de datos.');
+
+-- RA 2 (50% BD)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(2, 50, 'Escribe consultas SQL básicas.'),
+(2, 50, 'Aplica normalización.');
+
+-- RA 3 (Ética)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(3, 50, 'Comprende principios constitucionales.'),
+(3, 50, 'Identifica derechos fundamentales.');
+
+-- RA 4 (Etica)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(4, 50, 'Analiza casos eticos.'),
+(4, 50, 'Propone soluciones eticas.');
+
+-- RA 5 (Algebra Lineal)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(5, 50, 'Resuelve sistemas usando metodo de Gauss.'),
+(5, 50, 'Aplica operaciones con matrices.');
+
+-- RA 6 (Algebra Lineal)
+INSERT INTO indicadores_de_logro (id_ra, porcentaje_ind, descripcion)
+VALUES
+(6, 50, 'Calcula transformaciones lineales.'),
+(6, 50, 'Determina bases y dimensiones de espacios vectoriales.');
+
+-- ============================================================
+-- 9. TIPOS DE ACTIVIDAD
+-- ============================================================
+INSERT INTO tipo_actividad (descripcion)
+VALUES
+('Taller'),
+('Evaluación'),
+('Parcial'),
+('Quiz'),
+('Laboratorio'),
+('Trabajo Final'),
+('Proyecto');
+
+-- ============================================================
+-- 10. ACTIVIDADES
+-- ============================================================
+-- Actividades para BASES DE DATOS
+INSERT INTO actividad (id_tipo_actividad, nombre_actividad, descripcion, fecha_creacion, fecha_cierre)
+VALUES
+(1, 'Taller Modelo ER', 'Desarrollo de modelo entidad-relacion', '2025-02-01', '2025-02-10'),
+(2, 'Parcial SQL', 'Evaluacion de consultas SQL', '2025-03-01', '2025-03-05');
+
+-- Actividades para ETICA
+INSERT INTO actividad (id_tipo_actividad, nombre_actividad, descripcion, fecha_creacion, fecha_cierre)
+VALUES
+(1, 'Ensayo Constitucional', 'Ensayo sobre principios constitucionales', '2025-02-02', '2025-02-12'),
+(2, 'Analisis Etico', 'Evaluacion de caso etico', '2025-03-02', '2025-03-07');
+
+-- Actividad para ALGEBRA LINEAL (solo una actividad de ejemplo)
+INSERT INTO actividad (id_tipo_actividad, nombre_actividad, descripcion, fecha_creacion, fecha_cierre)
+VALUES
+(1, 'Taller Sistemas Lineales', 'Resolucion de sistemas de ecuaciones lineales', '2025-02-05', '2025-02-15');
+
+-- ============================================================
+-- 11. RA_ACTIVIDAD (Relacion RA-Actividad)
+-- ============================================================
+-- BASES DE DATOS
+INSERT INTO ra_actividad (id_actividad, id_ra, porcentaje_ra_actividad)
+VALUES
+(1, 1, 50),
+(2, 1, 50),
+(1, 2, 50),
+(2, 2, 50);
+
+-- ETICA
+INSERT INTO ra_actividad (id_actividad, id_ra, porcentaje_ra_actividad)
+VALUES
+(3, 3, 50),
+(4, 3, 50),
+(3, 4, 50),
+(4, 4, 50);
+
+-- ALGEBRA LINEAL
+-- Solo una actividad vinculada al primer RA con 100% del peso
+INSERT INTO ra_actividad (id_actividad, id_ra, porcentaje_ra_actividad)
+VALUES
+(5, 5, 100);
+
+-- ============================================================
+-- 11.5 RA_ACTIVIDAD_INDICADOR (Asociacion Actividad-Indicadores)
+-- Esta tabla intermedia vincula cada relacion RA-Actividad con sus indicadores
+-- Permite que una actividad evalúe multiples indicadores de un mismo RA
+-- ============================================================
+-- BASES DE DATOS
+-- Actividad 1 (Taller Modelo ER) asociada al RA 1 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(1, 1),  -- ra_actividad 1 (Act 1 - RA 1) -> Indicador 1: Identifica conceptos clave
+(1, 2);  -- ra_actividad 1 (Act 1 - RA 1) -> Indicador 2: Explica modelos de datos
+
+-- Actividad 2 (Parcial SQL) asociada al RA 1 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(2, 1),  -- ra_actividad 2 (Act 2 - RA 1) -> Indicador 1
+(2, 2);  -- ra_actividad 2 (Act 2 - RA 1) -> Indicador 2
+
+-- Actividad 1 (Taller Modelo ER) asociada al RA 2 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(3, 3),  -- ra_actividad 3 (Act 1 - RA 2) -> Indicador 3: Escribe consultas SQL basicas
+(3, 4);  -- ra_actividad 3 (Act 1 - RA 2) -> Indicador 4: Aplica normalizacion
+
+-- Actividad 2 (Parcial SQL) asociada al RA 2 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(4, 3),  -- ra_actividad 4 (Act 2 - RA 2) -> Indicador 3
+(4, 4);  -- ra_actividad 4 (Act 2 - RA 2) -> Indicador 4
+
+-- ETICA
+-- Actividad 3 (Ensayo Constitucional) asociada al RA 3 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(5, 5),  -- ra_actividad 5 (Act 3 - RA 3) -> Indicador 5: Comprende principios constitucionales
+(5, 6);  -- ra_actividad 5 (Act 3 - RA 3) -> Indicador 6: Identifica derechos fundamentales
+
+-- Actividad 4 (Analisis Etico) asociada al RA 3 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(6, 5),  -- ra_actividad 6 (Act 4 - RA 3) -> Indicador 5
+(6, 6);  -- ra_actividad 6 (Act 4 - RA 3) -> Indicador 6
+
+-- Actividad 3 (Ensayo Constitucional) asociada al RA 4 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(7, 7),  -- ra_actividad 7 (Act 3 - RA 4) -> Indicador 7: Analiza casos eticos
+(7, 8);  -- ra_actividad 7 (Act 3 - RA 4) -> Indicador 8: Propone soluciones eticas
+
+-- Actividad 4 (Analisis Etico) asociada al RA 4 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(8, 7),  -- ra_actividad 8 (Act 4 - RA 4) -> Indicador 7
+(8, 8);  -- ra_actividad 8 (Act 4 - RA 4) -> Indicador 8
+
+-- ALGEBRA LINEAL
+-- Actividad 5 (Taller Sistemas Lineales) asociada al RA 5 con sus 2 indicadores
+INSERT INTO ra_actividad_indicador (id_ra_actividad, id_ind)
+VALUES
+(9, 9),  -- ra_actividad 9 (Act 5 - RA 5) -> Indicador 9: Resuelve sistemas usando metodo de Gauss
+(9, 10); -- ra_actividad 9 (Act 5 - RA 5) -> Indicador 10: Aplica operaciones con matrices
+
+-- ============================================================
+-- 12. MATRICULA
+-- ============================================================
+INSERT INTO matricula (id_estudiante, id_periodo, id_asignatura, nota_final)
+VALUES
+-- Asignatura 1: BASES DE DATOS
+(1, 1, 1, NULL),
+(2, 1, 1, NULL),
+(3, 1, 1, NULL),
+(4, 1, 1, NULL),
+(5, 1, 1, NULL),
+(6, 1, 1, NULL),
+(7, 1, 1, NULL),
+(8, 1, 1, NULL),
+-- Asignatura 2: ETICA
+(1, 1, 2, NULL),
+(2, 1, 2, NULL),
+(3, 1, 2, NULL),
+(4, 1, 2, NULL),
+(5, 1, 2, NULL),
+(6, 1, 2, NULL),
+(7, 1, 2, NULL),
+(8, 1, 2, NULL),
+-- Asignatura 3: ALGEBRA LINEAL
+(1, 1, 3, NULL),
+(2, 1, 3, NULL),
+(3, 1, 3, NULL),
+(4, 1, 3, NULL),
+(5, 1, 3, NULL),
+(6, 1, 3, NULL),
+(7, 1, 3, NULL),
+(8, 1, 3, NULL);
+
+-- ============================================================
+-- 13. NOTAS_ACTIVIDAD
+-- Cada nota esta vinculada a:
+-- - Una matricula especifica (estudiante-periodo-asignatura)
+-- - Una relacion RA-Actividad
+-- - Un indicador de logro especifico
+-- IMPORTANTE: Un estudiante tiene multiples notas por actividad
+-- (una nota por cada indicador asociado a esa actividad)
+-- ============================================================
+INSERT INTO notas_actividad 
+(id_matricula, id_ra_actividad, id_ind, nota_ra_actividad, retroalimentacion)
+VALUES
+-- BASES DE DATOS - Estudiante 1 (David Escobar) - Matricula 1
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(1, 1, 1, 4.5, 'Excelente identificacion de conceptos clave en el modelo ER'),
+(1, 1, 2, 4.3, 'Buena explicacion de modelos de datos, puede profundizar mas'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(1, 2, 1, 4.4, 'Parcial: Identifica muy bien los conceptos en consultas'),
+(1, 2, 2, 4.2, 'Parcial: Explica correctamente los modelos aplicados'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(1, 3, 3, 4.2, 'Escribe consultas SQL basicas correctamente'),
+(1, 3, 4, 4.0, 'Aplica normalizacion adecuadamente'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(1, 4, 3, 4.3, 'Parcial: Consultas SQL complejas bien resueltas'),
+(1, 4, 4, 4.1, 'Parcial: Normalizacion aplicada correctamente'),
+
+-- BASES DE DATOS - Estudiante 2 (Sergio Rincon) - Matricula 2
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(2, 1, 1, 3.8, 'Identifica conceptos pero necesita reforzar teoria'),
+(2, 1, 2, 3.5, 'Debe mejorar la explicacion de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(2, 2, 1, 3.7, 'Parcial: Identifica conceptos basicos'),
+(2, 2, 2, 3.6, 'Parcial: Necesita mejorar explicaciones'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(2, 3, 3, 3.9, 'Consultas SQL basicas con algunos errores menores'),
+(2, 3, 4, 4.1, 'Buen dominio de normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(2, 4, 3, 4.0, 'Parcial: Mejora en consultas SQL'),
+(2, 4, 4, 4.2, 'Parcial: Buen dominio de normalizacion'),
+
+-- BASES DE DATOS - Estudiante 3 (Salome Rodriguez) - Matricula 3
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(3, 1, 1, 4.8, 'Excelente trabajo, identifica todos los conceptos clave'),
+(3, 1, 2, 4.7, 'Explicacion muy completa de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(3, 2, 1, 4.9, 'Parcial: Identificacion excepcional de conceptos'),
+(3, 2, 2, 4.8, 'Parcial: Explicacion sobresaliente de modelos'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(3, 3, 3, 4.6, 'Dominio sobresaliente de consultas SQL'),
+(3, 3, 4, 4.5, 'Aplicacion perfecta de normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(3, 4, 3, 4.7, 'Parcial: Consultas SQL perfectas'),
+(3, 4, 4, 4.6, 'Parcial: Normalizacion impecable'),
+
+-- BASES DE DATOS - Estudiante 4 (Kevin Trejos) - Matricula 4
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(4, 1, 1, 1.8, 'No identifica conceptos fundamentales'),
+(4, 1, 2, 2.0, 'Explicacion muy deficiente de modelos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(4, 2, 1, 1.6, 'Parcial: No logra identificar conceptos'),
+(4, 2, 2, 1.9, 'Parcial: Explicaciones incorrectas'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(4, 3, 3, 1.7, 'Consultas SQL completamente erroneas'),
+(4, 3, 4, 2.1, 'No comprende la normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(4, 4, 3, 1.5, 'Parcial: Consultas con errores graves'),
+(4, 4, 4, 1.8, 'Parcial: Normalizacion incorrecta'),
+
+-- BASES DE DATOS - Estudiante 5 (Manuel Londono) - Matricula 5
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(5, 1, 1, 4.1, 'Buen trabajo identificando conceptos clave'),
+(5, 1, 2, 4.0, 'Explicacion clara de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(5, 2, 1, 4.2, 'Parcial: Buena identificacion de conceptos'),
+(5, 2, 2, 4.1, 'Parcial: Explicacion clara y concisa'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(5, 3, 3, 4.2, 'Consultas SQL bien estructuradas'),
+(5, 3, 4, 4.3, 'Excelente aplicacion de normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(5, 4, 3, 4.4, 'Parcial: Consultas SQL muy bien estructuradas'),
+(5, 4, 4, 4.5, 'Parcial: Aplicacion excelente de normalizacion'),
+
+-- BASES DE DATOS - Estudiante 6 (Laura Bueno) - Matricula 6
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(6, 1, 1, 1.5, 'No identifica los conceptos clave, trabajo incompleto'),
+(6, 1, 2, 1.2, 'Explicacion incorrecta de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(6, 2, 1, 1.0, 'Parcial: No logra identificar conceptos fundamentales'),
+(6, 2, 2, 1.3, 'Parcial: Explicaciones muy deficientes'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(6, 3, 3, 1.4, 'Consultas SQL incorrectas, sintaxis erronea'),
+(6, 3, 4, 1.6, 'No comprende la normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(6, 4, 3, 1.1, 'Parcial: Consultas completamente erradas'),
+(6, 4, 4, 1.5, 'Parcial: Normalizacion aplicada incorrectamente'),
+
+-- BASES DE DATOS - Estudiante 7 (Harold Vergara) - Matricula 7
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(7, 1, 1, 4.9, 'Sobresaliente identificacion de conceptos clave'),
+(7, 1, 2, 4.8, 'Explicacion excepcional de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(7, 2, 1, 5.0, 'Parcial: Identificacion perfecta de todos los conceptos'),
+(7, 2, 2, 4.9, 'Parcial: Explicacion excepcional y detallada'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(7, 3, 3, 4.7, 'Consultas SQL complejas resueltas perfectamente'),
+(7, 3, 4, 4.6, 'Dominio completo de normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(7, 4, 3, 4.8, 'Parcial: Consultas SQL complejas perfectas'),
+(7, 4, 4, 4.7, 'Parcial: Dominio excepcional de normalizacion'),
+
+-- BASES DE DATOS - Estudiante 8 (Sergio Lamos) - Matricula 8
+-- RA 1 - Actividad 1 (Taller Modelo ER)
+(8, 1, 1, 2.0, 'No identifica conceptos, trabajo muy deficiente'),
+(8, 1, 2, 1.9, 'Explicacion incorrecta de modelos de datos'),
+-- RA 1 - Actividad 2 (Parcial SQL)
+(8, 2, 1, 1.7, 'Parcial: No comprende conceptos basicos'),
+(8, 2, 2, 2.0, 'Parcial: Explicaciones sin fundamento'),
+-- RA 2 - Actividad 1 (Taller Modelo ER)
+(8, 3, 3, 1.8, 'Consultas SQL con sintaxis erronea'),
+(8, 3, 4, 2.1, 'No entiende normalizacion'),
+-- RA 2 - Actividad 2 (Parcial SQL)
+(8, 4, 3, 1.6, 'Parcial: Consultas completamente incorrectas'),
+(8, 4, 4, 1.9, 'Parcial: Normalizacion aplicada mal'),
+
+-- ETICA - Estudiante 1 (David Escobar) - Matricula 9
+(9, 5, 5, 4.0, 'Comprende bien los principios constitucionales'),
+(9, 5, 6, 4.1, 'Identifica correctamente derechos fundamentales'),
+
+-- ETICA - Estudiante 2 (Sergio Rincon) - Matricula 10
+(10, 5, 5, 4.2, 'Buen analisis de principios constitucionales'),
+(10, 5, 6, 4.0, 'Identifica adecuadamente derechos fundamentales'),
+
+-- ETICA - Estudiante 3 (Salome Rodriguez) - Matricula 11
+(11, 5, 5, 4.5, 'Excelente comprension de principios constitucionales'),
+(11, 5, 6, 4.4, 'Identificacion sobresaliente de derechos'),
+
+-- ETICA - Estudiante 4 (Kevin Trejos) - Matricula 12
+(12, 5, 5, 3.9, 'Comprension aceptable de principios'),
+(12, 5, 6, 3.8, 'Identifica la mayoria de derechos fundamentales'),
+
+-- ETICA - Estudiante 5 (Manuel Londono) - Matricula 13
+-- NOTA: Docente Josefina Rivera no ha completado las calificaciones
+-- Solo tiene notas parciales de la Actividad 3 (Ensayo Constitucional) - RA 3
+(13, 5, 5, 4.3, 'Muy buena comprension de principios'),
+-- Falta la nota del indicador 6 para este estudiante en esta actividad
+
+-- ETICA - Estudiante 6 (Laura Bueno) - Matricula 14
+-- Actividad 3 (Ensayo Constitucional) - RA 3
+(14, 5, 5, 1.8, 'No comprende los principios constitucionales'),
+(14, 5, 6, 1.5, 'No identifica derechos fundamentales'),
+-- Actividad 4 (Analisis Etico) - RA 3
+(14, 6, 5, 1.7, 'Analisis muy superficial e incorrecto'),
+(14, 6, 6, 1.6, 'No relaciona principios con casos practicos'),
+-- Actividad 3 (Ensayo) - RA 4
+(14, 7, 7, 1.9, 'Analisis etico deficiente'),
+(14, 7, 8, 1.4, 'Propone soluciones sin fundamento etico'),
+-- Actividad 4 (Analisis) - RA 4
+(14, 8, 7, 1.3, 'No logra analizar casos complejos'),
+(14, 8, 8, 1.7, 'Soluciones eticas completamente inadecuadas'),
+
+-- ETICA - Estudiante 7 (Harold Vergara) - Matricula 15
+-- Solo tiene notas de la Actividad 3 (Ensayo) - RA 3, pero no de Actividad 4 (Analisis)
+(15, 5, 5, 4.6, 'Excelente analisis de principios constitucionales'),
+(15, 5, 6, 4.7, 'Identificacion perfecta de derechos fundamentales'),
+-- Faltan las notas de la Actividad 4 (Analisis Etico) - RA 3
+
+-- ETICA - Estudiante 8 (Sergio Lamos) - Matricula 16
+-- No tiene ninguna nota registrada aun
+-- El docente no ha calificado ninguna actividad para este estudiante
+
+-- NOTAS COMPLETAS PARA OTROS ESTUDIANTES DE ETICA (RA 3 y RA 4)
+-- Estudiante 1 (David) - Matricula 9 - Actividad 4 (Analisis Etico) - RA 3
+(9, 6, 5, 4.2, 'Buen analisis en casos eticos'),
+(9, 6, 6, 4.0, 'Identifica correctamente los derechos en casos practicos'),
+
+-- Estudiante 1 (David) - Matricula 9 - Actividad 3 (Ensayo) - RA 4
+(9, 7, 7, 4.1, 'Analiza casos eticos con criterio'),
+(9, 7, 8, 4.3, 'Propone soluciones eticas viables'),
+
+-- Estudiante 1 (David) - Matricula 9 - Actividad 4 (Analisis) - RA 4
+(9, 8, 7, 4.2, 'Buen analisis de casos complejos'),
+(9, 8, 8, 4.0, 'Soluciones eticas bien fundamentadas'),
+
+-- Estudiante 2 (Sergio Rincon) - Matricula 10 - Actividad 4 (Analisis Etico) - RA 3
+(10, 6, 5, 4.0, 'Analisis apropiado de principios'),
+(10, 6, 6, 4.1, 'Buena identificacion de derechos'),
+
+-- Estudiante 2 (Sergio Rincon) - Matricula 10 - Actividad 3 (Ensayo) - RA 4
+(10, 7, 7, 4.2, 'Analiza casos con buenos argumentos'),
+(10, 7, 8, 4.0, 'Propone soluciones coherentes'),
+
+-- Estudiante 2 (Sergio Rincon) - Matricula 10 - Actividad 4 (Analisis) - RA 4
+(10, 8, 7, 4.1, 'Analisis detallado de casos'),
+(10, 8, 8, 4.3, 'Soluciones eticas bien estructuradas'),
+
+-- Estudiante 3 (Salome) - Matricula 11 - Actividad 4 (Analisis Etico) - RA 3
+(11, 6, 5, 4.6, 'Excelente analisis de principios'),
+(11, 6, 6, 4.5, 'Identificacion sobresaliente de derechos'),
+
+-- Estudiante 3 (Salome) - Matricula 11 - Actividad 3 (Ensayo) - RA 4
+(11, 7, 7, 4.7, 'Analisis excepcional de casos eticos'),
+(11, 7, 8, 4.8, 'Propone soluciones innovadoras y eticas'),
+
+-- Estudiante 3 (Salome) - Matricula 11 - Actividad 4 (Analisis) - RA 4
+(11, 8, 7, 4.6, 'Analisis profundo y reflexivo'),
+(11, 8, 8, 4.5, 'Soluciones eticas muy bien argumentadas'),
+
+-- Estudiante 4 (Kevin) - Matricula 12 - Actividad 4 (Analisis Etico) - RA 3
+(12, 6, 5, 1.9, 'Analisis muy deficiente de principios'),
+(12, 6, 6, 2.0, 'No identifica derechos fundamentales'),
+
+-- Estudiante 4 (Kevin) - Matricula 12 - Actividad 3 (Ensayo) - RA 4
+(12, 7, 7, 1.6, 'No analiza casos eticos adecuadamente'),
+(12, 7, 8, 1.8, 'Propone soluciones sin fundamento'),
+
+-- Estudiante 4 (Kevin) - Matricula 12 - Actividad 4 (Analisis) - RA 4
+(12, 8, 7, 1.7, 'Analisis sin argumentos validos'),
+(12, 8, 8, 2.0, 'Soluciones eticas inapropiadas');
+
+-- ============================================================
+-- RESUMEN DE NOTAS INCOMPLETAS (Docente Josefina Rivera - ETICA)
+-- ============================================================
+-- Estudiante 5 (Manuel) - Matricula 13: Solo 1 de 2 indicadores en Act 3-RA3, Faltan Act 4-RA3, Act 3-RA4, Act 4-RA4
+-- Estudiante 6 (Laura) - Matricula 14: Solo 1 de 2 indicadores en Act 3-RA3, Faltan Act 4-RA3, Act 3-RA4, Act 4-RA4
+-- Estudiante 7 (Harold) - Matricula 15: Completa Act 3-RA3, Faltan Act 4-RA3, Act 3-RA4, Act 4-RA4
+-- Estudiante 8 (Sergio Lamos) - Matricula 16: No tiene ninguna nota registrada
+
+-- ============================================================
+-- 14. COORDINADOR
+-- ============================================================
+INSERT INTO coordinador (nombre, codigo_coordinador, contrasenia_coord, correo)
+VALUES
+('Tecnología en Desarrollo de Software', '02-2724-Caice', 'Tedesoft1234', 'tecnologia.software.caicedonia@correounivalle.edu.co');
+
+-- ============================================================
+-- CONFIRMAR TRANSACCION
+-- ============================================================
+COMMIT;
+
+-- ============================================================
+-- VERIFICACIONES FINALES
+-- ============================================================
+SELECT 'Tipos de documento: ' || COUNT(*) FROM tipo_documento;
+SELECT 'Docentes: ' || COUNT(*) FROM docente;
+SELECT 'Estudiantes: ' || COUNT(*) FROM estudiante;
+SELECT 'Programas: ' || COUNT(*) FROM programa;
+SELECT 'Periodos: ' || COUNT(*) FROM periodo_academico;
+SELECT 'Asignaturas: ' || COUNT(*) FROM asignatura;
+SELECT 'RAs: ' || COUNT(*) FROM resultado_de_aprendizaje;
+SELECT 'Indicadores: ' || COUNT(*) FROM indicadores_de_logro;
+SELECT 'Tipos de Actividad: ' || COUNT(*) FROM tipo_actividad;
+SELECT 'Actividades: ' || COUNT(*) FROM actividad;
+SELECT 'RA-Actividad: ' || COUNT(*) FROM ra_actividad;
+SELECT 'RA-Actividad-Indicador: ' || COUNT(*) FROM ra_actividad_indicador;
+SELECT 'Matriculas: ' || COUNT(*) FROM matricula;
+SELECT 'Notas: ' || COUNT(*) FROM notas_actividad;
+SELECT 'Coordinadores: ' || COUNT(*) FROM coordinador;
+
+-- ============================================================
+-- RESUMEN ESTADISTICO
+-- ============================================================
+SELECT 
+    'Bases de Datos' AS asignatura,
+    COUNT(DISTINCT m.id_estudiante) AS estudiantes_matriculados,
+    COUNT(na.id) AS notas_registradas,
+    ROUND(AVG(na.nota_ra_actividad), 2) AS promedio_general
+FROM asignatura a
+LEFT JOIN matricula m ON a.id_asignatura = m.id_asignatura
+LEFT JOIN notas_actividad na ON m.id_matricula = na.id_matricula
+WHERE a.id_asignatura = 1
+GROUP BY a.nombre;
+
+SELECT 
+    'Etica' AS asignatura,
+    COUNT(DISTINCT m.id_estudiante) AS estudiantes_matriculados,
+    COUNT(na.id) AS notas_registradas,
+    ROUND(AVG(na.nota_ra_actividad), 2) AS promedio_general
+FROM asignatura a
+LEFT JOIN matricula m ON a.id_asignatura = m.id_asignatura
+LEFT JOIN notas_actividad na ON m.id_matricula = na.id_matricula
+WHERE a.id_asignatura = 2
+GROUP BY a.nombre;
+
+-- ============================================================
+-- FIN DEL SCRIPT
+-- ============================================================
+-- NOTA: Script ejecutado exitosamente
+-- Datos de prueba cargados correctamente
+-- Listo para iniciar pruebas del sistema
+-- ============================================================

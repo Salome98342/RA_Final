@@ -15,8 +15,24 @@ export type NotificationItem = {
 
 // Cursos
 export async function getCourses(): Promise<Course[]> {
-  const { data } = await api.get<unknown[]>(endpoints.asignaturas.list)
-  const rows = Array.isArray(data) ? data : []
+  const { data } = await api.get<unknown>(endpoints.asignaturas.list)
+  
+  // El backend puede devolver:
+  // 1. Objeto paginado: {count, next, previous, results: [...]}
+  // 2. Array directo: [...]
+  let rows: unknown[] = []
+  
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    // Es un objeto (probablemente paginado)
+    const responseData = data as Record<string, unknown>
+    if (Array.isArray(responseData.results)) {
+      rows = responseData.results
+    }
+  } else if (Array.isArray(data)) {
+    // Es un array directo
+    rows = data
+  }
+  
   return rows.map((it) => {
     const o = it as Record<string, unknown>
     const prog = (o.programa as Record<string, unknown> | undefined)
@@ -169,6 +185,34 @@ export async function getCourseGradeSummary(courseCode: string, studentId: strin
   }
 }
 
+// Detalle completo de asignatura para estudiante (analítica)
+export async function getCourseDetail(courseCode: string, studentId: string): Promise<import('@/types').CourseDetailResponse | null> {
+  try {
+    const { data } = await api.get(`/asignaturas/${courseCode}/detalle/${studentId}/`)
+    if (data && typeof data === 'object' && data.asignatura) {
+      return data as import('@/types').CourseDetailResponse
+    }
+    return null
+  } catch (e) {
+    if (import.meta.env.DEV) console.debug('getCourseDetail failed', e)
+    return null
+  }
+}
+
+// Análisis general de asignatura para coordinador
+export async function getCourseAnalytics(courseCode: string): Promise<import('@/types').CourseAnalyticsResponse | null> {
+  try {
+    const { data } = await api.get(`/asignaturas/${courseCode}/analitica/`)
+    if (data && typeof data === 'object' && data.asignatura) {
+      return data as import('@/types').CourseAnalyticsResponse
+    }
+    return null
+  } catch (e) {
+    if (import.meta.env.DEV) console.debug('getCourseAnalytics failed', e)
+    return null
+  }
+}
+
 // Mi matrícula
 export async function getMyMatricula(courseId: string): Promise<string | null> {
   const { data } = await api.get<{ id_matricula: number | null }>(endpoints.asignaturas.miMatricula(courseId))
@@ -305,6 +349,74 @@ export async function uploadRecurso(courseId: string, file: File, titulo?: strin
   const { data } = await api.post(endpoints.asignaturas.recursos(courseId), fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+  return data
+}
+
+// Anuncios
+export type Anuncio = {
+  id: number
+  titulo: string
+  contenido: string
+  fecha_publicacion: string
+  es_importante: boolean
+  docente_nombre?: string
+}
+
+export async function getAnunciosByCourse(courseId: string): Promise<Anuncio[]> {
+  const { data } = await api.get<Anuncio[]>(endpoints.asignaturas.anuncios(courseId))
+  return Array.isArray(data) ? data : []
+}
+
+export async function createAnuncio(courseId: string, payload: { titulo: string; contenido: string; es_importante: boolean }): Promise<Anuncio> {
+  const { data } = await api.post<Anuncio>(endpoints.asignaturas.anuncios(courseId), payload)
+  return data
+}
+
+export async function deleteAnuncio(id: number): Promise<void> {
+  await api.delete(endpoints.anuncios.delete(id))
+}
+
+// Estudiantes - Buscar por código
+export type BuscarEstudianteResponse = {
+  ok: boolean
+  estudiante: {
+    id: number
+    codigo: string
+    codigo_programa?: string
+    nombre: string
+    apellido: string
+    correo: string
+    documento: string
+    tipo_documento: string
+  }
+}
+
+export async function buscarEstudiantePorCodigo(codigoEstudiante: string): Promise<BuscarEstudianteResponse> {
+  const { data } = await api.get<BuscarEstudianteResponse>(
+    `/docente/buscar-estudiante?codigo_estudiante=${encodeURIComponent(codigoEstudiante)}`
+  )
+  return data
+}
+
+// Estudiantes - Agregar individual por código
+export type AgregarEstudianteResponse = {
+  ok: boolean
+  id_matricula: number
+  estudiante: {
+    id: number
+    codigo: string
+    nombre: string
+    apellido: string
+    correo: string
+  }
+  message: string
+}
+
+export async function agregarEstudiantePorCodigo(courseId: string, codigoEstudiante: string): Promise<AgregarEstudianteResponse> {
+  const { data } = await api.post<AgregarEstudianteResponse>(
+    `/docente/asignaturas/${courseId}/estudiantes`,
+    { codigo_estudiante: codigoEstudiante }
+  )
   return data
 }
 

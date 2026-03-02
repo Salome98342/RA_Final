@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
-import Toast from '@/components/Toast'
+import { Alert } from '@/utils/alert'
 import { useSession } from '@/state/SessionContext'
 import { createActivityMulti, getRAsByCourse, getRAValidation, getTiposActividad, getIndicatorsByRA } from '@/services/api'
 import type { Indicator } from '@/types'
@@ -19,7 +19,6 @@ const NuevaActividadCurso: React.FC = () => {
   const [aporteRA, setAporteRA] = useState<Record<string, string>>({})
   const [totals, setTotals] = useState<Record<string, number>>({})
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState<{ text: string; type?: 'ok' | 'error' } | null>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [raIndMap, setRaIndMap] = useState<Record<string, Indicator[]>>({})
   const [raIndSel, setRaIndSel] = useState<Record<string, (string | number)[]>>({})
@@ -101,7 +100,7 @@ const NuevaActividadCurso: React.FC = () => {
       const today = new Date()
       const cierreDate = new Date(form.cierre)
       if (cierreDate < today) {
-        setToast({ text: `La fecha límite no puede ser anterior a hoy (${today.toISOString().slice(0, 10)}).`, type: 'error' })
+        Alert.toast.error(`La fecha límite no puede ser anterior a hoy (${today.toISOString().slice(0, 10)}).`)
         return
       }
     }
@@ -111,7 +110,7 @@ const NuevaActividadCurso: React.FC = () => {
       const failing = selectedIds.find((rid) => (Number(totals[rid] ?? 0) + Number(aporteRA[rid] || 0)) > 100 + 1e-6)
       if (failing) {
         const nuevo = Number(totals[failing] ?? 0) + Number(aporteRA[failing] || 0)
-        setToast({ text: `El RA ${failing} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`, type: 'error' })
+        Alert.toast.error(`El RA ${failing} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`)
         return
       }
     } catch { /* ignore precheck errors */ }
@@ -130,7 +129,7 @@ const NuevaActividadCurso: React.FC = () => {
         fecha_cierre: form.cierre || undefined,
         ras: rasPayload,
       })
-      setToast({ text: 'Actividad creada con éxito', type: 'ok' })
+      Alert.toast.success('Actividad creada con éxito')
       setTimeout(() => navigate(`/docente/${curso}/ras`), 1200)
     } catch (err: unknown) {
       let msg: string = 'No se pudo crear la actividad'
@@ -140,7 +139,7 @@ const NuevaActividadCurso: React.FC = () => {
         const obj = data as Record<string, unknown>
         msg = String(obj.message ?? obj.detail ?? msg)
       } else if ((err as Error)?.message) msg = String((err as Error).message)
-      setToast({ text: msg, type: 'error' })
+      Alert.toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -159,7 +158,6 @@ const NuevaActividadCurso: React.FC = () => {
           ]}
         />
         <main className="dash-content">
-          {toast ? <Toast text={toast.text} type={toast.type} /> : null}
           <div className="d-flex align-items-center justify-content-between mb-4">
             <div className="content-title">
               <i className="bi bi-file-earmark-plus-fill text-success me-2"></i>

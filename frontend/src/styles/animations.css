@@ -96,8 +96,8 @@
   z-index: 10000;
   min-width: 320px;
   max-width: 500px;
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   pointer-events: auto;
 }
@@ -129,6 +129,7 @@
   justify-content: center;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   animation: iconPulse 2s ease-in-out infinite;
 }
@@ -161,6 +162,7 @@
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -275,6 +277,7 @@
   justify-content: center;
   background: rgba(255, 255, 255, 0.7);
   border-radius: 50%;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -393,6 +396,7 @@
   transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   z-index: 9999;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 

@@ -1,0 +1,501 @@
+nombre;apellido;codigo_estudiante;contrasena_estudiante;tipo_documento_id;num_documento;correo;jornada
+Ana;Castro;EST0001;Pass6701;1;100000001;ana.castro1@correo.com;NOC
+Juan;Castro;EST0002;Pass2281;1;100000002;juan.castro2@correo.com;DIU
+Daniela;Ram¡rez;EST0003;Pass7365;1;100000003;daniela.ram¡rez3@correo.com;NOC
+Andr‚s;L¢pez;EST0004;Pass9128;1;100000004;andr‚s.l¢pez4@correo.com;DIU
+Daniela;L¢pez;EST0005;Pass5056;1;100000005;daniela.l¢pez5@correo.com;NOC
+Camilo;P‚rez;EST0006;Pass1688;1;100000006;camilo.p‚rez6@correo.com;DIU
+Sof¡a;Mart¡nez;EST0007;Pass2575;1;100000007;sof¡a.mart¡nez7@correo.com;NOC
+Andr‚s;Castro;EST0008;Pass6748;1;100000008;andr‚s.castro8@correo.com;DIU
+Sof¡a;L¢pez;EST0009;Pass1555;1;100000009;sof¡a.l¢pez9@correo.com;NOC
+Daniela;G¢mez;EST0010;Pass0236;1;100000010;daniela.g¢mez10@correo.com;DIU
+Juan;Mart¡nez;EST0011;Pass7325;1;100000011;juan.mart¡nez11@correo.com;NOC
+Valentina;Rodr¡guez;EST0012;Pass5776;1;100000012;valentina.rodr¡guez12@correo.com;DIU
+Valentina;Mart¡nez;EST0013;Pass4649;1;100000013;valentina.mart¡nez13@correo.com;NOC
+Sof¡a;Rodr¡guez;EST0014;Pass1614;1;100000014;sof¡a.rodr¡guez14@correo.com;DIU
+Valentina;G¢mez;EST0015;Pass4046;1;100000015;valentina.g¢mez15@correo.com;NOC
+Sof¡a;L¢pez;EST0016;Pass5959;1;100000016;sof¡a.l¢pez16@correo.com;DIU
+Andr‚s;G¢mez;EST0017;Pass8008;1;100000017;andr‚s.g¢mez17@correo.com;NOC
+Mar¡a;Ram¡rez;EST0018;Pass1398;1;100000018;mar¡a.ram¡rez18@correo.com;NOC
+Mar¡a;P‚rez;EST0019;Pass0557;1;100000019;mar¡a.p‚rez19@correo.com;DIU
+Sof¡a;Torres;EST0020;Pass7218;1;100000020;sof¡a.torres20@correo.com;NOC
+Mar¡a;Mart¡nez;EST0021;Pass8673;1;100000021;mar¡a.mart¡nez21@correo.com;DIU
+Juan;Rodr¡guez;EST0022;Pass7738;1;100000022;juan.rodr¡guez22@correo.com;NOC
+Valentina;P‚rez;EST0023;Pass7657;1;100000023;valentina.p‚rez23@correo.com;DIU
+Daniela;S nchez;EST0024;Pass5724;1;100000024;daniela.s nchez24@correo.com;NOC
+Ana;Castro;EST0025;Pass8094;1;100000025;ana.castro25@correo.com;DIU
+Carlos;Castro;EST0026;Pass4570;1;100000026;carlos.castro26@correo.com;NOC
+Camilo;P‚rez;EST0027;Pass2578;1;100000027;camilo.p‚rez27@correo.com;DIU
+Andr‚s;Castro;EST0028;Pass3767;1;100000028;andr‚s.castro28@correo.com;NOC
+Sof¡a;Mart¡nez;EST0029;Pass7072;1;100000029;sof¡a.mart¡nez29@correo.com;DIU
+Juan;Mart¡nez;EST0030;Pass5558;1;100000030;juan.mart¡nez30@correo.com;NOC
+Daniela;S nchez;EST0031;Pass7281;1;100000031;daniela.s nchez31@correo.com;DIU
+Valentina;Hern ndez;EST0032;Pass8069;1;100000032;valentina.hern ndez32@correo.com;NOC
+Juan;Ram¡rez;EST0033;Pass0513;1;100000033;juan.ram¡rez33@correo.com;DIU
+Valentina;Castro;EST0034;Pass7028;1;100000034;valentina.castro34@correo.com;NOC
+Carlos;Rodr¡guez;EST0035;Pass5234;1;100000035;carlos.rodr¡guez35@correo.com;NOC
+Andr‚s;S nchez;EST0036;Pass5221;1;100000036;andr‚s.s nchez36@correo.com;DIU
+Daniela;Hern ndez;EST0037;Pass1986;1;100000037;daniela.hern ndez37@correo.com;NOC
+Camilo;P‚rez;EST0038;Pass4380;1;100000038;camilo.p‚rez38@correo.com;DIU
+Daniela;Torres;EST0039;Pass0991;1;100000039;daniela.torres39@correo.com;NOC
+Valentina;Rodr¡guez;EST0040;Pass0550;1;100000040;valentina.rodr¡guez40@correo.com;DIU
+Carlos;Mart¡nez;EST0041;Pass9556;1;100000041;carlos.mart¡nez41@correo.com;NOC
+Daniela;Castro;EST0042;Pass9468;1;100000042;daniela.castro42@correo.com;DIU
+Luis;Torres;EST0043;Pass4827;1;100000043;luis.torres43@correo.com;NOC
+Valentina;P‚rez;EST0044;Pass4235;1;100000044;valentina.p‚rez44@correo.com;DIU
+Ana;Mart¡nez;EST0045;Pass0489;1;100000045;ana.mart¡nez45@correo.com;NOC
+Mar¡a;Hern ndez;EST0046;Pass1330;1;100000046;mar¡a.hern ndez46@correo.com;DIU
+Carlos;L¢pez;EST0047;Pass4713;1;100000047;carlos.l¢pez47@correo.com;NOC
+Daniela;Hern ndez;EST0048;Pass9433;1;100000048;daniela.hern ndez48@correo.com;DIU
+Andr‚s;Castro;EST0049;Pass6691;1;100000049;andr‚s.castro49@correo.com;NOC
+Sof¡a;Torres;EST0050;Pass4817;1;100000050;sof¡a.torres50@correo.com;DIU
+Camilo;Mart¡nez;EST0051;Pass5785;1;100000051;camilo.mart¡nez51@correo.com;NOC
+Ana;Castro;EST0052;Pass9870;1;100000052;ana.castro52@correo.com;NOC
+Juan;S nchez;EST0053;Pass0328;1;100000053;juan.s nchez53@correo.com;DIU
+Mar¡a;S nchez;EST0054;Pass4410;1;100000054;mar¡a.s nchez54@correo.com;NOC
+Ana;Mart¡nez;EST0055;Pass9317;1;100000055;ana.mart¡nez55@correo.com;DIU
+Luis;Rodr¡guez;EST0056;Pass1543;1;100000056;luis.rodr¡guez56@correo.com;NOC
+Valentina;Hern ndez;EST0057;Pass5646;1;100000057;valentina.hern ndez57@correo.com;DIU
+Andr‚s;S nchez;EST0058;Pass9548;1;100000058;andr‚s.s nchez58@correo.com;NOC
+Luis;G¢mez;EST0059;Pass0448;1;100000059;luis.g¢mez59@correo.com;DIU
+Ana;G¢mez;EST0060;Pass5301;1;100000060;ana.g¢mez60@correo.com;NOC
+Sof¡a;Ram¡rez;EST0061;Pass0243;1;100000061;sof¡a.ram¡rez61@correo.com;DIU
+Sof¡a;Castro;EST0062;Pass3094;1;100000062;sof¡a.castro62@correo.com;NOC
+Daniela;Castro;EST0063;Pass2187;1;100000063;daniela.castro63@correo.com;DIU
+Mar¡a;L¢pez;EST0064;Pass7180;1;100000064;mar¡a.l¢pez64@correo.com;NOC
+Ana;Torres;EST0065;Pass1542;1;100000065;ana.torres65@correo.com;DIU
+Valentina;Hern ndez;EST0066;Pass4045;1;100000066;valentina.hern ndez66@correo.com;NOC
+Andr‚s;Castro;EST0067;Pass9291;1;100000067;andr‚s.castro67@correo.com;DIU
+Luis;Ram¡rez;EST0068;Pass3982;1;100000068;luis.ram¡rez68@correo.com;NOC
+Carlos;Mart¡nez;EST0069;Pass3589;1;100000069;carlos.mart¡nez69@correo.com;NOC
+Ana;Ram¡rez;EST0070;Pass6999;1;100000070;ana.ram¡rez70@correo.com;DIU
+Andr‚s;Torres;EST0071;Pass0555;1;100000071;andr‚s.torres71@correo.com;NOC
+Andr‚s;L¢pez;EST0072;Pass4628;1;100000072;andr‚s.l¢pez72@correo.com;DIU
+Mar¡a;Castro;EST0073;Pass0077;1;100000073;mar¡a.castro73@correo.com;NOC
+Valentina;Castro;EST0074;Pass7436;1;100000074;valentina.castro74@correo.com;DIU
+Valentina;Rodr¡guez;EST0075;Pass7290;1;100000075;valentina.rodr¡guez75@correo.com;NOC
+Luis;Hern ndez;EST0076;Pass2480;1;100000076;luis.hern ndez76@correo.com;DIU
+Camilo;Rodr¡guez;EST0077;Pass2159;1;100000077;camilo.rodr¡guez77@correo.com;NOC
+Valentina;Ram¡rez;EST0078;Pass9773;1;100000078;valentina.ram¡rez78@correo.com;DIU
+Daniela;Castro;EST0079;Pass8310;1;100000079;daniela.castro79@correo.com;NOC
+Juan;Ram¡rez;EST0080;Pass3352;1;100000080;juan.ram¡rez80@correo.com;DIU
+Valentina;Ram¡rez;EST0081;Pass7078;1;100000081;valentina.ram¡rez81@correo.com;NOC
+Andr‚s;G¢mez;EST0082;Pass4636;1;100000082;andr‚s.g¢mez82@correo.com;DIU
+Andr‚s;P‚rez;EST0083;Pass8253;1;100000083;andr‚s.p‚rez83@correo.com;NOC
+Valentina;S nchez;EST0084;Pass9145;1;100000084;valentina.s nchez84@correo.com;DIU
+Juan;L¢pez;EST0085;Pass1833;1;100000085;juan.l¢pez85@correo.com;NOC
+Camilo;Mart¡nez;EST0086;Pass9478;1;100000086;camilo.mart¡nez86@correo.com;NOC
+Daniela;P‚rez;EST0087;Pass8979;1;100000087;daniela.p‚rez87@correo.com;DIU
+Daniela;Hern ndez;EST0088;Pass1007;1;100000088;daniela.hern ndez88@correo.com;NOC
+Mar¡a;Castro;EST0089;Pass4542;1;100000089;mar¡a.castro89@correo.com;DIU
+Sof¡a;G¢mez;EST0090;Pass5497;1;100000090;sof¡a.g¢mez90@correo.com;NOC
+Mar¡a;Castro;EST0091;Pass1288;1;100000091;mar¡a.castro91@correo.com;DIU
+Luis;S nchez;EST0092;Pass3902;1;100000092;luis.s nchez92@correo.com;NOC
+Luis;S nchez;EST0093;Pass1229;1;100000093;luis.s nchez93@correo.com;DIU
+Andr‚s;Castro;EST0094;Pass9047;1;100000094;andr‚s.castro94@correo.com;NOC
+Daniela;Rodr¡guez;EST0095;Pass8603;1;100000095;daniela.rodr¡guez95@correo.com;DIU
+Valentina;Rodr¡guez;EST0096;Pass4515;1;100000096;valentina.rodr¡guez96@correo.com;NOC
+Daniela;P‚rez;EST0097;Pass4762;1;100000097;daniela.p‚rez97@correo.com;DIU
+Daniela;Castro;EST0098;Pass8262;1;100000098;daniela.castro98@correo.com;NOC
+Mar¡a;Ram¡rez;EST0099;Pass8883;1;100000099;mar¡a.ram¡rez99@correo.com;DIU
+Andr‚s;S nchez;EST0100;Pass1329;1;100000100;andr‚s.s nchez100@correo.com;NOC
+Sof¡a;Rodr¡guez;EST0101;Pass1009;1;100000101;sof¡a.rodr¡guez101@correo.com;DIU
+Juan;Torres;EST0102;Pass8849;1;100000102;juan.torres102@correo.com;NOC
+Valentina;P‚rez;EST0103;Pass1867;1;100000103;valentina.p‚rez103@correo.com;NOC
+Juan;Torres;EST0104;Pass6756;1;100000104;juan.torres104@correo.com;DIU
+Daniela;Ram¡rez;EST0105;Pass8802;1;100000105;daniela.ram¡rez105@correo.com;NOC
+Luis;Torres;EST0106;Pass2533;1;100000106;luis.torres106@correo.com;DIU
+Mar¡a;G¢mez;EST0107;Pass0952;1;100000107;mar¡a.g¢mez107@correo.com;NOC
+Sof¡a;Torres;EST0108;Pass2279;1;100000108;sof¡a.torres108@correo.com;DIU
+Daniela;G¢mez;EST0109;Pass6196;1;100000109;daniela.g¢mez109@correo.com;NOC
+Ana;Mart¡nez;EST0110;Pass8583;1;100000110;ana.mart¡nez110@correo.com;DIU
+Juan;Rodr¡guez;EST0111;Pass0172;1;100000111;juan.rodr¡guez111@correo.com;NOC
+Valentina;G¢mez;EST0112;Pass0962;1;100000112;valentina.g¢mez112@correo.com;DIU
+Andr‚s;G¢mez;EST0113;Pass8513;1;100000113;andr‚s.g¢mez113@correo.com;NOC
+Ana;Hern ndez;EST0114;Pass4058;1;100000114;ana.hern ndez114@correo.com;DIU
+Camilo;Castro;EST0115;Pass9308;1;100000115;camilo.castro115@correo.com;NOC
+Sof¡a;Mart¡nez;EST0116;Pass8970;1;100000116;sof¡a.mart¡nez116@correo.com;DIU
+Mar¡a;Torres;EST0117;Pass1385;1;100000117;mar¡a.torres117@correo.com;NOC
+Juan;Hern ndez;EST0118;Pass2424;1;100000118;juan.hern ndez118@correo.com;DIU
+Luis;Castro;EST0119;Pass5495;1;100000119;luis.castro119@correo.com;NOC
+Juan;Hern ndez;EST0120;Pass6225;1;100000120;juan.hern ndez120@correo.com;NOC
+Juan;Hern ndez;EST0121;Pass5277;1;100000121;juan.hern ndez121@correo.com;DIU
+Luis;G¢mez;EST0122;Pass2106;1;100000122;luis.g¢mez122@correo.com;NOC
+Camilo;S nchez;EST0123;Pass0661;1;100000123;camilo.s nchez123@correo.com;DIU
+Ana;Ram¡rez;EST0124;Pass9047;1;100000124;ana.ram¡rez124@correo.com;NOC
+Carlos;Rodr¡guez;EST0125;Pass0007;1;100000125;carlos.rodr¡guez125@correo.com;DIU
+Daniela;Mart¡nez;EST0126;Pass2735;1;100000126;daniela.mart¡nez126@correo.com;NOC
+Juan;Torres;EST0127;Pass4703;1;100000127;juan.torres127@correo.com;DIU
+Ana;G¢mez;EST0128;Pass5791;1;100000128;ana.g¢mez128@correo.com;NOC
+Luis;Rodr¡guez;EST0129;Pass0450;1;100000129;luis.rodr¡guez129@correo.com;DIU
+Mar¡a;Hern ndez;EST0130;Pass1710;1;100000130;mar¡a.hern ndez130@correo.com;NOC
+Luis;Rodr¡guez;EST0131;Pass8792;1;100000131;luis.rodr¡guez131@correo.com;DIU
+Sof¡a;Rodr¡guez;EST0132;Pass5077;1;100000132;sof¡a.rodr¡guez132@correo.com;NOC
+Juan;Hern ndez;EST0133;Pass2059;1;100000133;juan.hern ndez133@correo.com;DIU
+Sof¡a;Rodr¡guez;EST0134;Pass0116;1;100000134;sof¡a.rodr¡guez134@correo.com;NOC
+Camilo;P‚rez;EST0135;Pass1391;1;100000135;camilo.p‚rez135@correo.com;DIU
+Camilo;L¢pez;EST0136;Pass5649;1;100000136;camilo.l¢pez136@correo.com;NOC
+Ana;L¢pez;EST0137;Pass2419;1;100000137;ana.l¢pez137@correo.com;NOC
+Sof¡a;Torres;EST0138;Pass3539;1;100000138;sof¡a.torres138@correo.com;DIU
+Luis;G¢mez;EST0139;Pass3594;1;100000139;luis.g¢mez139@correo.com;NOC
+Sof¡a;Mart¡nez;EST0140;Pass8714;1;100000140;sof¡a.mart¡nez140@correo.com;DIU
+Camilo;Rodr¡guez;EST0141;Pass2133;1;100000141;camilo.rodr¡guez141@correo.com;NOC
+Mar¡a;L¢pez;EST0142;Pass8232;1;100000142;mar¡a.l¢pez142@correo.com;DIU
+Daniela;S nchez;EST0143;Pass2310;1;100000143;daniela.s nchez143@correo.com;NOC
+Luis;Hern ndez;EST0144;Pass9840;1;100000144;luis.hern ndez144@correo.com;DIU
+Juan;Hern ndez;EST0145;Pass9273;1;100000145;juan.hern ndez145@correo.com;NOC
+Camilo;P‚rez;EST0146;Pass2436;1;100000146;camilo.p‚rez146@correo.com;DIU
+Ana;Mart¡nez;EST0147;Pass3554;1;100000147;ana.mart¡nez147@correo.com;NOC
+Ana;Rodr¡guez;EST0148;Pass3506;1;100000148;ana.rodr¡guez148@correo.com;DIU
+Valentina;Torres;EST0149;Pass0216;1;100000149;valentina.torres149@correo.com;NOC
+Carlos;G¢mez;EST0150;Pass8634;1;100000150;carlos.g¢mez150@correo.com;DIU
+Daniela;L¢pez;EST0151;Pass7336;1;100000151;daniela.l¢pez151@correo.com;NOC
+Daniela;G¢mez;EST0152;Pass1833;1;100000152;daniela.g¢mez152@correo.com;DIU
+Camilo;Hern ndez;EST0153;Pass7267;1;100000153;camilo.hern ndez153@correo.com;NOC
+Carlos;Ram¡rez;EST0154;Pass7248;1;100000154;carlos.ram¡rez154@correo.com;NOC
+Luis;Castro;EST0155;Pass7063;1;100000155;luis.castro155@correo.com;DIU
+Valentina;Hern ndez;EST0156;Pass4887;1;100000156;valentina.hern ndez156@correo.com;NOC
+Valentina;S nchez;EST0157;Pass8294;1;100000157;valentina.s nchez157@correo.com;DIU
+Sof¡a;S nchez;EST0158;Pass8129;1;100000158;sof¡a.s nchez158@correo.com;NOC
+Daniela;S nchez;EST0159;Pass4013;1;100000159;daniela.s nchez159@correo.com;DIU
+Mar¡a;G¢mez;EST0160;Pass4896;1;100000160;mar¡a.g¢mez160@correo.com;NOC
+Ana;Castro;EST0161;Pass5912;1;100000161;ana.castro161@correo.com;DIU
+Carlos;L¢pez;EST0162;Pass0664;1;100000162;carlos.l¢pez162@correo.com;NOC
+Juan;Castro;EST0163;Pass9444;1;100000163;juan.castro163@correo.com;DIU
+Daniela;Hern ndez;EST0164;Pass7729;1;100000164;daniela.hern ndez164@correo.com;NOC
+Valentina;Torres;EST0165;Pass6534;1;100000165;valentina.torres165@correo.com;DIU
+Carlos;S nchez;EST0166;Pass5309;1;100000166;carlos.s nchez166@correo.com;NOC
+Camilo;S nchez;EST0167;Pass6113;1;100000167;camilo.s nchez167@correo.com;DIU
+Valentina;P‚rez;EST0168;Pass9500;1;100000168;valentina.p‚rez168@correo.com;NOC
+Mar¡a;Rodr¡guez;EST0169;Pass5224;1;100000169;mar¡a.rodr¡guez169@correo.com;DIU
+Luis;G¢mez;EST0170;Pass5172;1;100000170;luis.g¢mez170@correo.com;NOC
+Mar¡a;Torres;EST0171;Pass3519;1;100000171;mar¡a.torres171@correo.com;NOC
+Ana;L¢pez;EST0172;Pass6454;1;100000172;ana.l¢pez172@correo.com;DIU
+Daniela;G¢mez;EST0173;Pass9603;1;100000173;daniela.g¢mez173@correo.com;NOC
+Mar¡a;Hern ndez;EST0174;Pass1076;1;100000174;mar¡a.hern ndez174@correo.com;DIU
+Andr‚s;Rodr¡guez;EST0175;Pass4938;1;100000175;andr‚s.rodr¡guez175@correo.com;NOC
+Valentina;Ram¡rez;EST0176;Pass4753;1;100000176;valentina.ram¡rez176@correo.com;DIU
+Sof¡a;Ram¡rez;EST0177;Pass6518;1;100000177;sof¡a.ram¡rez177@correo.com;NOC
+Ana;L¢pez;EST0178;Pass5973;1;100000178;ana.l¢pez178@correo.com;DIU
+Sof¡a;Castro;EST0179;Pass6744;1;100000179;sof¡a.castro179@correo.com;NOC
+Luis;Rodr¡guez;EST0180;Pass1431;1;100000180;luis.rodr¡guez180@correo.com;DIU
+Valentina;Rodr¡guez;EST0181;Pass6408;1;100000181;valentina.rodr¡guez181@correo.com;NOC
+Mar¡a;Mart¡nez;EST0182;Pass2841;1;100000182;mar¡a.mart¡nez182@correo.com;DIU
+Daniela;Hern ndez;EST0183;Pass8712;1;100000183;daniela.hern ndez183@correo.com;NOC
+Camilo;Castro;EST0184;Pass4005;1;100000184;camilo.castro184@correo.com;DIU
+Carlos;Ram¡rez;EST0185;Pass4762;1;100000185;carlos.ram¡rez185@correo.com;NOC
+Mar¡a;Torres;EST0186;Pass4998;1;100000186;mar¡a.torres186@correo.com;DIU
+Andr‚s;Castro;EST0187;Pass2396;1;100000187;andr‚s.castro187@correo.com;NOC
+Camilo;L¢pez;EST0188;Pass5032;1;100000188;camilo.l¢pez188@correo.com;NOC
+Camilo;Ram¡rez;EST0189;Pass2112;1;100000189;camilo.ram¡rez189@correo.com;DIU
+Carlos;P‚rez;EST0190;Pass7725;1;100000190;carlos.p‚rez190@correo.com;NOC
+Sof¡a;S nchez;EST0191;Pass5635;1;100000191;sof¡a.s nchez191@correo.com;DIU
+Luis;Torres;EST0192;Pass7668;1;100000192;luis.torres192@correo.com;NOC
+Sof¡a;Hern ndez;EST0193;Pass6468;1;100000193;sof¡a.hern ndez193@correo.com;DIU
+Andr‚s;Hern ndez;EST0194;Pass2338;1;100000194;andr‚s.hern ndez194@correo.com;NOC
+Ana;Castro;EST0195;Pass4841;1;100000195;ana.castro195@correo.com;DIU
+Ana;Castro;EST0196;Pass5354;1;100000196;ana.castro196@correo.com;NOC
+Juan;G¢mez;EST0197;Pass8173;1;100000197;juan.g¢mez197@correo.com;DIU
+Juan;P‚rez;EST0198;Pass3343;1;100000198;juan.p‚rez198@correo.com;NOC
+Ana;G¢mez;EST0199;Pass3184;1;100000199;ana.g¢mez199@correo.com;DIU
+Daniela;Torres;EST0200;Pass3754;1;100000200;daniela.torres200@correo.com;NOC
+Daniela;Rodr¡guez;EST0201;Pass4854;1;100000201;daniela.rodr¡guez201@correo.com;DIU
+Juan;Castro;EST0202;Pass7937;1;100000202;juan.castro202@correo.com;NOC
+Camilo;Rodr¡guez;EST0203;Pass2994;1;100000203;camilo.rodr¡guez203@correo.com;DIU
+Daniela;Ram¡rez;EST0204;Pass4730;1;100000204;daniela.ram¡rez204@correo.com;NOC
+Luis;Ram¡rez;EST0205;Pass9134;1;100000205;luis.ram¡rez205@correo.com;NOC
+Luis;Hern ndez;EST0206;Pass3301;1;100000206;luis.hern ndez206@correo.com;DIU
+Sof¡a;G¢mez;EST0207;Pass8432;1;100000207;sof¡a.g¢mez207@correo.com;NOC
+Luis;G¢mez;EST0208;Pass4265;1;100000208;luis.g¢mez208@correo.com;DIU
+Carlos;Rodr¡guez;EST0209;Pass5355;1;100000209;carlos.rodr¡guez209@correo.com;NOC
+Valentina;P‚rez;EST0210;Pass6671;1;100000210;valentina.p‚rez210@correo.com;DIU
+Ana;G¢mez;EST0211;Pass9513;1;100000211;ana.g¢mez211@correo.com;NOC
+Carlos;Rodr¡guez;EST0212;Pass3689;1;100000212;carlos.rodr¡guez212@correo.com;DIU
+Sof¡a;G¢mez;EST0213;Pass3700;1;100000213;sof¡a.g¢mez213@correo.com;NOC
+Juan;Mart¡nez;EST0214;Pass2130;1;100000214;juan.mart¡nez214@correo.com;DIU
+Daniela;Mart¡nez;EST0215;Pass7382;1;100000215;daniela.mart¡nez215@correo.com;NOC
+Ana;G¢mez;EST0216;Pass2057;1;100000216;ana.g¢mez216@correo.com;DIU
+Luis;Castro;EST0217;Pass3256;1;100000217;luis.castro217@correo.com;NOC
+Carlos;P‚rez;EST0218;Pass5749;1;100000218;carlos.p‚rez218@correo.com;DIU
+Sof¡a;Torres;EST0219;Pass9741;1;100000219;sof¡a.torres219@correo.com;NOC
+Carlos;Mart¡nez;EST0220;Pass7023;1;100000220;carlos.mart¡nez220@correo.com;DIU
+Sof¡a;Torres;EST0221;Pass9661;1;100000221;sof¡a.torres221@correo.com;NOC
+Juan;P‚rez;EST0222;Pass1594;1;100000222;juan.p‚rez222@correo.com;NOC
+Carlos;Hern ndez;EST0223;Pass4388;1;100000223;carlos.hern ndez223@correo.com;DIU
+Juan;Torres;EST0224;Pass8739;1;100000224;juan.torres224@correo.com;NOC
+Sof¡a;Torres;EST0225;Pass3512;1;100000225;sof¡a.torres225@correo.com;DIU
+Camilo;Mart¡nez;EST0226;Pass2305;1;100000226;camilo.mart¡nez226@correo.com;NOC
+Sof¡a;L¢pez;EST0227;Pass1478;1;100000227;sof¡a.l¢pez227@correo.com;DIU
+Sof¡a;S nchez;EST0228;Pass8638;1;100000228;sof¡a.s nchez228@correo.com;NOC
+Ana;Mart¡nez;EST0229;Pass8086;1;100000229;ana.mart¡nez229@correo.com;DIU
+Juan;G¢mez;EST0230;Pass4055;1;100000230;juan.g¢mez230@correo.com;NOC
+Carlos;Torres;EST0231;Pass5152;1;100000231;carlos.torres231@correo.com;DIU
+Ana;Ram¡rez;EST0232;Pass6329;1;100000232;ana.ram¡rez232@correo.com;NOC
+Juan;Castro;EST0233;Pass9124;1;100000233;juan.castro233@correo.com;DIU
+Valentina;P‚rez;EST0234;Pass9157;1;100000234;valentina.p‚rez234@correo.com;NOC
+Valentina;Torres;EST0235;Pass3151;1;100000235;valentina.torres235@correo.com;DIU
+Mar¡a;Mart¡nez;EST0236;Pass3324;1;100000236;mar¡a.mart¡nez236@correo.com;NOC
+Valentina;L¢pez;EST0237;Pass4927;1;100000237;valentina.l¢pez237@correo.com;DIU
+Sof¡a;Rodr¡guez;EST0238;Pass4553;1;100000238;sof¡a.rodr¡guez238@correo.com;NOC
+Andr‚s;Rodr¡guez;EST0239;Pass7869;1;100000239;andr‚s.rodr¡guez239@correo.com;NOC
+Sof¡a;Hern ndez;EST0240;Pass8286;1;100000240;sof¡a.hern ndez240@correo.com;DIU
+Ana;Hern ndez;EST0241;Pass4681;1;100000241;ana.hern ndez241@correo.com;NOC
+Daniela;Hern ndez;EST0242;Pass0484;1;100000242;daniela.hern ndez242@correo.com;DIU
+Mar¡a;P‚rez;EST0243;Pass9216;1;100000243;mar¡a.p‚rez243@correo.com;NOC
+Daniela;Ram¡rez;EST0244;Pass4664;1;100000244;daniela.ram¡rez244@correo.com;DIU
+Sof¡a;Mart¡nez;EST0245;Pass2183;1;100000245;sof¡a.mart¡nez245@correo.com;NOC
+Carlos;G¢mez;EST0246;Pass3387;1;100000246;carlos.g¢mez246@correo.com;DIU
+Carlos;G¢mez;EST0247;Pass2406;1;100000247;carlos.g¢mez247@correo.com;NOC
+Luis;Ram¡rez;EST0248;Pass2277;1;100000248;luis.ram¡rez248@correo.com;DIU
+Sof¡a;L¢pez;EST0249;Pass7863;1;100000249;sof¡a.l¢pez249@correo.com;NOC
+Andr‚s;P‚rez;EST0250;Pass0975;1;100000250;andr‚s.p‚rez250@correo.com;DIU
+Sof¡a;Hern ndez;EST0251;Pass1279;1;100000251;sof¡a.hern ndez251@correo.com;NOC
+Valentina;Hern ndez;EST0252;Pass8566;1;100000252;valentina.hern ndez252@correo.com;DIU
+Juan;Ram¡rez;EST0253;Pass4136;1;100000253;juan.ram¡rez253@correo.com;NOC
+Juan;Mart¡nez;EST0254;Pass4054;1;100000254;juan.mart¡nez254@correo.com;DIU
+Mar¡a;L¢pez;EST0255;Pass6175;1;100000255;mar¡a.l¢pez255@correo.com;NOC
+Carlos;G¢mez;EST0256;Pass7415;1;100000256;carlos.g¢mez256@correo.com;NOC
+Juan;L¢pez;EST0257;Pass7893;1;100000257;juan.l¢pez257@correo.com;DIU
+Daniela;Rodr¡guez;EST0258;Pass7604;1;100000258;daniela.rodr¡guez258@correo.com;NOC
+Daniela;Rodr¡guez;EST0259;Pass6205;1;100000259;daniela.rodr¡guez259@correo.com;DIU
+Sof¡a;Mart¡nez;EST0260;Pass1549;1;100000260;sof¡a.mart¡nez260@correo.com;NOC
+Luis;G¢mez;EST0261;Pass6883;1;100000261;luis.g¢mez261@correo.com;DIU
+Daniela;Hern ndez;EST0262;Pass4909;1;100000262;daniela.hern ndez262@correo.com;NOC
+Valentina;Ram¡rez;EST0263;Pass7337;1;100000263;valentina.ram¡rez263@correo.com;DIU
+Luis;Hern ndez;EST0264;Pass4303;1;100000264;luis.hern ndez264@correo.com;NOC
+Carlos;Torres;EST0265;Pass7357;1;100000265;carlos.torres265@correo.com;DIU
+Camilo;Torres;EST0266;Pass1955;1;100000266;camilo.torres266@correo.com;NOC
+Andr‚s;P‚rez;EST0267;Pass0116;1;100000267;andr‚s.p‚rez267@correo.com;DIU
+Carlos;Castro;EST0268;Pass5673;1;100000268;carlos.castro268@correo.com;NOC
+Camilo;L¢pez;EST0269;Pass1500;1;100000269;camilo.l¢pez269@correo.com;DIU
+Luis;Torres;EST0270;Pass8888;1;100000270;luis.torres270@correo.com;NOC
+Luis;Castro;EST0271;Pass9687;1;100000271;luis.castro271@correo.com;DIU
+Andr‚s;P‚rez;EST0272;Pass8098;1;100000272;andr‚s.p‚rez272@correo.com;NOC
+Luis;S nchez;EST0273;Pass8975;1;100000273;luis.s nchez273@correo.com;NOC
+Luis;Castro;EST0274;Pass9239;1;100000274;luis.castro274@correo.com;DIU
+Daniela;Castro;EST0275;Pass4411;1;100000275;daniela.castro275@correo.com;NOC
+Mar¡a;L¢pez;EST0276;Pass5992;1;100000276;mar¡a.l¢pez276@correo.com;DIU
+Mar¡a;P‚rez;EST0277;Pass7940;1;100000277;mar¡a.p‚rez277@correo.com;NOC
+Mar¡a;Mart¡nez;EST0278;Pass7538;1;100000278;mar¡a.mart¡nez278@correo.com;DIU
+Valentina;P‚rez;EST0279;Pass0836;1;100000279;valentina.p‚rez279@correo.com;NOC
+Valentina;Hern ndez;EST0280;Pass4343;1;100000280;valentina.hern ndez280@correo.com;DIU
+Andr‚s;L¢pez;EST0281;Pass4172;1;100000281;andr‚s.l¢pez281@correo.com;NOC
+Juan;Ram¡rez;EST0282;Pass1493;1;100000282;juan.ram¡rez282@correo.com;DIU
+Daniela;Mart¡nez;EST0283;Pass2704;1;100000283;daniela.mart¡nez283@correo.com;NOC
+Luis;L¢pez;EST0284;Pass9874;1;100000284;luis.l¢pez284@correo.com;DIU
+Sof¡a;Castro;EST0285;Pass4579;1;100000285;sof¡a.castro285@correo.com;NOC
+Carlos;G¢mez;EST0286;Pass3718;1;100000286;carlos.g¢mez286@correo.com;DIU
+Carlos;Torres;EST0287;Pass1347;1;100000287;carlos.torres287@correo.com;NOC
+Camilo;L¢pez;EST0288;Pass4064;1;100000288;camilo.l¢pez288@correo.com;DIU
+Camilo;Torres;EST0289;Pass8041;1;100000289;camilo.torres289@correo.com;NOC
+Valentina;Castro;EST0290;Pass7953;1;100000290;valentina.castro290@correo.com;NOC
+Camilo;Rodr¡guez;EST0291;Pass4270;1;100000291;camilo.rodr¡guez291@correo.com;DIU
+Juan;Rodr¡guez;EST0292;Pass0480;1;100000292;juan.rodr¡guez292@correo.com;NOC
+Ana;Castro;EST0293;Pass8479;1;100000293;ana.castro293@correo.com;DIU
+Andr‚s;S nchez;EST0294;Pass9385;1;100000294;andr‚s.s nchez294@correo.com;NOC
+Andr‚s;Rodr¡guez;EST0295;Pass6509;1;100000295;andr‚s.rodr¡guez295@correo.com;DIU
+Andr‚s;Castro;EST0296;Pass7903;1;100000296;andr‚s.castro296@correo.com;NOC
+Daniela;Hern ndez;EST0297;Pass0370;1;100000297;daniela.hern ndez297@correo.com;DIU
+Valentina;Ram¡rez;EST0298;Pass7129;1;100000298;valentina.ram¡rez298@correo.com;NOC
+Camilo;Ram¡rez;EST0299;Pass6802;1;100000299;camilo.ram¡rez299@correo.com;DIU
+Luis;G¢mez;EST0300;Pass6610;1;100000300;luis.g¢mez300@correo.com;NOC
+Daniela;Hern ndez;EST0301;Pass8484;1;100000301;daniela.hern ndez301@correo.com;DIU
+Ana;Torres;EST0302;Pass9065;1;100000302;ana.torres302@correo.com;NOC
+Daniela;Ram¡rez;EST0303;Pass8427;1;100000303;daniela.ram¡rez303@correo.com;DIU
+Valentina;S nchez;EST0304;Pass3870;1;100000304;valentina.s nchez304@correo.com;NOC
+Ana;Mart¡nez;EST0305;Pass5502;1;100000305;ana.mart¡nez305@correo.com;DIU
+Sof¡a;Hern ndez;EST0306;Pass1854;1;100000306;sof¡a.hern ndez306@correo.com;NOC
+Daniela;Hern ndez;EST0307;Pass9599;1;100000307;daniela.hern ndez307@correo.com;NOC
+Valentina;Ram¡rez;EST0308;Pass5694;1;100000308;valentina.ram¡rez308@correo.com;DIU
+Andr‚s;Rodr¡guez;EST0309;Pass0175;1;100000309;andr‚s.rodr¡guez309@correo.com;NOC
+Carlos;Hern ndez;EST0310;Pass3893;1;100000310;carlos.hern ndez310@correo.com;DIU
+Ana;Castro;EST0311;Pass8349;1;100000311;ana.castro311@correo.com;NOC
+Sof¡a;P‚rez;EST0312;Pass3757;1;100000312;sof¡a.p‚rez312@correo.com;DIU
+Juan;G¢mez;EST0313;Pass2105;1;100000313;juan.g¢mez313@correo.com;NOC
+Carlos;Mart¡nez;EST0314;Pass1085;1;100000314;carlos.mart¡nez314@correo.com;DIU
+Luis;G¢mez;EST0315;Pass2173;1;100000315;luis.g¢mez315@correo.com;NOC
+Carlos;L¢pez;EST0316;Pass3168;1;100000316;carlos.l¢pez316@correo.com;DIU
+Camilo;Hern ndez;EST0317;Pass9677;1;100000317;camilo.hern ndez317@correo.com;NOC
+Ana;Hern ndez;EST0318;Pass8003;1;100000318;ana.hern ndez318@correo.com;DIU
+Carlos;Mart¡nez;EST0319;Pass3380;1;100000319;carlos.mart¡nez319@correo.com;NOC
+Mar¡a;Hern ndez;EST0320;Pass0299;1;100000320;mar¡a.hern ndez320@correo.com;DIU
+Sof¡a;Torres;EST0321;Pass7811;1;100000321;sof¡a.torres321@correo.com;NOC
+Sof¡a;Mart¡nez;EST0322;Pass8288;1;100000322;sof¡a.mart¡nez322@correo.com;DIU
+Juan;S nchez;EST0323;Pass7318;1;100000323;juan.s nchez323@correo.com;NOC
+Ana;S nchez;EST0324;Pass0499;1;100000324;ana.s nchez324@correo.com;NOC
+Daniela;Rodr¡guez;EST0325;Pass9655;1;100000325;daniela.rodr¡guez325@correo.com;DIU
+Sof¡a;Ram¡rez;EST0326;Pass4917;1;100000326;sof¡a.ram¡rez326@correo.com;NOC
+Valentina;Torres;EST0327;Pass6880;1;100000327;valentina.torres327@correo.com;DIU
+Luis;Hern ndez;EST0328;Pass9116;1;100000328;luis.hern ndez328@correo.com;NOC
+Camilo;Castro;EST0329;Pass7517;1;100000329;camilo.castro329@correo.com;DIU
+Ana;P‚rez;EST0330;Pass1353;1;100000330;ana.p‚rez330@correo.com;NOC
+Juan;P‚rez;EST0331;Pass0824;1;100000331;juan.p‚rez331@correo.com;DIU
+Sof¡a;L¢pez;EST0332;Pass4403;1;100000332;sof¡a.l¢pez332@correo.com;NOC
+Camilo;Hern ndez;EST0333;Pass3611;1;100000333;camilo.hern ndez333@correo.com;DIU
+Daniela;S nchez;EST0334;Pass0349;1;100000334;daniela.s nchez334@correo.com;NOC
+Daniela;Ram¡rez;EST0335;Pass3224;1;100000335;daniela.ram¡rez335@correo.com;DIU
+Mar¡a;Rodr¡guez;EST0336;Pass4938;1;100000336;mar¡a.rodr¡guez336@correo.com;NOC
+Daniela;G¢mez;EST0337;Pass3076;1;100000337;daniela.g¢mez337@correo.com;DIU
+Mar¡a;Torres;EST0338;Pass0128;1;100000338;mar¡a.torres338@correo.com;NOC
+Camilo;P‚rez;EST0339;Pass0637;1;100000339;camilo.p‚rez339@correo.com;DIU
+Juan;P‚rez;EST0340;Pass8607;1;100000340;juan.p‚rez340@correo.com;NOC
+Daniela;L¢pez;EST0341;Pass3878;1;100000341;daniela.l¢pez341@correo.com;NOC
+Juan;Torres;EST0342;Pass3296;1;100000342;juan.torres342@correo.com;DIU
+Andr‚s;S nchez;EST0343;Pass7909;1;100000343;andr‚s.s nchez343@correo.com;NOC
+Juan;Ram¡rez;EST0344;Pass6177;1;100000344;juan.ram¡rez344@correo.com;DIU
+Carlos;Rodr¡guez;EST0345;Pass2119;1;100000345;carlos.rodr¡guez345@correo.com;NOC
+Luis;G¢mez;EST0346;Pass7603;1;100000346;luis.g¢mez346@correo.com;DIU
+Ana;Mart¡nez;EST0347;Pass2621;1;100000347;ana.mart¡nez347@correo.com;NOC
+Ana;P‚rez;EST0348;Pass1349;1;100000348;ana.p‚rez348@correo.com;DIU
+Mar¡a;Rodr¡guez;EST0349;Pass8609;1;100000349;mar¡a.rodr¡guez349@correo.com;NOC
+Sof¡a;G¢mez;EST0350;Pass7919;1;100000350;sof¡a.g¢mez350@correo.com;DIU
+Andr‚s;Torres;EST0351;Pass9770;1;100000351;andr‚s.torres351@correo.com;NOC
+Andr‚s;L¢pez;EST0352;Pass9245;1;100000352;andr‚s.l¢pez352@correo.com;DIU
+Valentina;Ram¡rez;EST0353;Pass6332;1;100000353;valentina.ram¡rez353@correo.com;NOC
+Mar¡a;Hern ndez;EST0354;Pass8155;1;100000354;mar¡a.hern ndez354@correo.com;DIU
+Sof¡a;G¢mez;EST0355;Pass3456;1;100000355;sof¡a.g¢mez355@correo.com;NOC
+Camilo;Rodr¡guez;EST0356;Pass8479;1;100000356;camilo.rodr¡guez356@correo.com;DIU
+Carlos;Ram¡rez;EST0357;Pass4201;1;100000357;carlos.ram¡rez357@correo.com;NOC
+Carlos;Ram¡rez;EST0358;Pass8937;1;100000358;carlos.ram¡rez358@correo.com;NOC
+Juan;S nchez;EST0359;Pass7042;1;100000359;juan.s nchez359@correo.com;DIU
+Luis;Hern ndez;EST0360;Pass7895;1;100000360;luis.hern ndez360@correo.com;NOC
+Daniela;S nchez;EST0361;Pass0496;1;100000361;daniela.s nchez361@correo.com;DIU
+Luis;L¢pez;EST0362;Pass1455;1;100000362;luis.l¢pez362@correo.com;NOC
+Luis;P‚rez;EST0363;Pass0740;1;100000363;luis.p‚rez363@correo.com;DIU
+Mar¡a;P‚rez;EST0364;Pass7576;1;100000364;mar¡a.p‚rez364@correo.com;NOC
+Camilo;L¢pez;EST0365;Pass4743;1;100000365;camilo.l¢pez365@correo.com;DIU
+Mar¡a;G¢mez;EST0366;Pass9860;1;100000366;mar¡a.g¢mez366@correo.com;NOC
+Camilo;Hern ndez;EST0367;Pass5320;1;100000367;camilo.hern ndez367@correo.com;DIU
+Mar¡a;P‚rez;EST0368;Pass0149;1;100000368;mar¡a.p‚rez368@correo.com;NOC
+Juan;Mart¡nez;EST0369;Pass7150;1;100000369;juan.mart¡nez369@correo.com;DIU
+Daniela;Rodr¡guez;EST0370;Pass4682;1;100000370;daniela.rodr¡guez370@correo.com;NOC
+Daniela;Rodr¡guez;EST0371;Pass4950;1;100000371;daniela.rodr¡guez371@correo.com;DIU
+Daniela;G¢mez;EST0372;Pass9094;1;100000372;daniela.g¢mez372@correo.com;NOC
+Sof¡a;Rodr¡guez;EST0373;Pass0776;1;100000373;sof¡a.rodr¡guez373@correo.com;DIU
+Carlos;S nchez;EST0374;Pass7402;1;100000374;carlos.s nchez374@correo.com;NOC
+Camilo;S nchez;EST0375;Pass9508;1;100000375;camilo.s nchez375@correo.com;NOC
+Andr‚s;Ram¡rez;EST0376;Pass8731;1;100000376;andr‚s.ram¡rez376@correo.com;DIU
+Daniela;Torres;EST0377;Pass6920;1;100000377;daniela.torres377@correo.com;NOC
+Carlos;G¢mez;EST0378;Pass9152;1;100000378;carlos.g¢mez378@correo.com;DIU
+Mar¡a;G¢mez;EST0379;Pass6126;1;100000379;mar¡a.g¢mez379@correo.com;NOC
+Camilo;L¢pez;EST0380;Pass1976;1;100000380;camilo.l¢pez380@correo.com;DIU
+Juan;P‚rez;EST0381;Pass1140;1;100000381;juan.p‚rez381@correo.com;NOC
+Sof¡a;Ram¡rez;EST0382;Pass4399;1;100000382;sof¡a.ram¡rez382@correo.com;DIU
+Luis;Castro;EST0383;Pass4156;1;100000383;luis.castro383@correo.com;NOC
+Andr‚s;Torres;EST0384;Pass2612;1;100000384;andr‚s.torres384@correo.com;DIU
+Valentina;Ram¡rez;EST0385;Pass2259;1;100000385;valentina.ram¡rez385@correo.com;NOC
+Carlos;L¢pez;EST0386;Pass0568;1;100000386;carlos.l¢pez386@correo.com;DIU
+Luis;L¢pez;EST0387;Pass5338;1;100000387;luis.l¢pez387@correo.com;NOC
+Daniela;G¢mez;EST0388;Pass4882;1;100000388;daniela.g¢mez388@correo.com;DIU
+Daniela;Hern ndez;EST0389;Pass4428;1;100000389;daniela.hern ndez389@correo.com;NOC
+Juan;Torres;EST0390;Pass8866;1;100000390;juan.torres390@correo.com;DIU
+Sof¡a;Castro;EST0391;Pass0610;1;100000391;sof¡a.castro391@correo.com;NOC
+Luis;Torres;EST0392;Pass6578;1;100000392;luis.torres392@correo.com;NOC
+Andr‚s;Torres;EST0393;Pass0570;1;100000393;andr‚s.torres393@correo.com;DIU
+Juan;P‚rez;EST0394;Pass3321;1;100000394;juan.p‚rez394@correo.com;NOC
+Ana;Ram¡rez;EST0395;Pass2550;1;100000395;ana.ram¡rez395@correo.com;DIU
+Juan;Castro;EST0396;Pass6183;1;100000396;juan.castro396@correo.com;NOC
+Daniela;Rodr¡guez;EST0397;Pass5477;1;100000397;daniela.rodr¡guez397@correo.com;DIU
+Carlos;Castro;EST0398;Pass3573;1;100000398;carlos.castro398@correo.com;NOC
+Luis;G¢mez;EST0399;Pass4525;1;100000399;luis.g¢mez399@correo.com;DIU
+Andr‚s;L¢pez;EST0400;Pass0190;1;100000400;andr‚s.l¢pez400@correo.com;NOC
+Valentina;Castro;EST0401;Pass4326;1;100000401;valentina.castro401@correo.com;DIU
+Andr‚s;G¢mez;EST0402;Pass3553;1;100000402;andr‚s.g¢mez402@correo.com;NOC
+Mar¡a;Castro;EST0403;Pass1471;1;100000403;mar¡a.castro403@correo.com;DIU
+Mar¡a;Hern ndez;EST0404;Pass3053;1;100000404;mar¡a.hern ndez404@correo.com;NOC
+Valentina;Torres;EST0405;Pass2446;1;100000405;valentina.torres405@correo.com;DIU
+Valentina;P‚rez;EST0406;Pass1133;1;100000406;valentina.p‚rez406@correo.com;NOC
+Daniela;P‚rez;EST0407;Pass9841;1;100000407;daniela.p‚rez407@correo.com;DIU
+Andr‚s;P‚rez;EST0408;Pass3006;1;100000408;andr‚s.p‚rez408@correo.com;NOC
+Daniela;Mart¡nez;EST0409;Pass8949;1;100000409;daniela.mart¡nez409@correo.com;NOC
+Luis;Hern ndez;EST0410;Pass4889;1;100000410;luis.hern ndez410@correo.com;DIU
+Juan;Torres;EST0411;Pass8679;1;100000411;juan.torres411@correo.com;NOC
+Mar¡a;Ram¡rez;EST0412;Pass4792;1;100000412;mar¡a.ram¡rez412@correo.com;DIU
+Mar¡a;Hern ndez;EST0413;Pass1911;1;100000413;mar¡a.hern ndez413@correo.com;NOC
+Juan;Torres;EST0414;Pass6560;1;100000414;juan.torres414@correo.com;DIU
+Carlos;P‚rez;EST0415;Pass4043;1;100000415;carlos.p‚rez415@correo.com;NOC
+Sof¡a;S nchez;EST0416;Pass4840;1;100000416;sof¡a.s nchez416@correo.com;DIU
+Daniela;P‚rez;EST0417;Pass5108;1;100000417;daniela.p‚rez417@correo.com;NOC
+Carlos;Mart¡nez;EST0418;Pass3312;1;100000418;carlos.mart¡nez418@correo.com;DIU
+Carlos;P‚rez;EST0419;Pass1256;1;100000419;carlos.p‚rez419@correo.com;NOC
+Camilo;Hern ndez;EST0420;Pass0298;1;100000420;camilo.hern ndez420@correo.com;DIU
+Ana;S nchez;EST0421;Pass2392;1;100000421;ana.s nchez421@correo.com;NOC
+Mar¡a;L¢pez;EST0422;Pass6688;1;100000422;mar¡a.l¢pez422@correo.com;DIU
+Valentina;S nchez;EST0423;Pass2765;1;100000423;valentina.s nchez423@correo.com;NOC
+Ana;Ram¡rez;EST0424;Pass4513;1;100000424;ana.ram¡rez424@correo.com;DIU
+Valentina;Castro;EST0425;Pass6543;1;100000425;valentina.castro425@correo.com;NOC
+Daniela;Hern ndez;EST0426;Pass5148;1;100000426;daniela.hern ndez426@correo.com;NOC
+Daniela;L¢pez;EST0427;Pass5231;1;100000427;daniela.l¢pez427@correo.com;DIU
+Ana;L¢pez;EST0428;Pass7694;1;100000428;ana.l¢pez428@correo.com;NOC
+Daniela;Ram¡rez;EST0429;Pass6413;1;100000429;daniela.ram¡rez429@correo.com;DIU
+Ana;Castro;EST0430;Pass1422;1;100000430;ana.castro430@correo.com;NOC
+Daniela;Castro;EST0431;Pass3618;1;100000431;daniela.castro431@correo.com;DIU
+Luis;Ram¡rez;EST0432;Pass0147;1;100000432;luis.ram¡rez432@correo.com;NOC
+Mar¡a;Castro;EST0433;Pass0820;1;100000433;mar¡a.castro433@correo.com;DIU
+Andr‚s;Mart¡nez;EST0434;Pass0240;1;100000434;andr‚s.mart¡nez434@correo.com;NOC
+Carlos;Ram¡rez;EST0435;Pass4836;1;100000435;carlos.ram¡rez435@correo.com;DIU
+Daniela;Rodr¡guez;EST0436;Pass9729;1;100000436;daniela.rodr¡guez436@correo.com;NOC
+Luis;L¢pez;EST0437;Pass2397;1;100000437;luis.l¢pez437@correo.com;DIU
+Juan;S nchez;EST0438;Pass7597;1;100000438;juan.s nchez438@correo.com;NOC
+Camilo;Hern ndez;EST0439;Pass6029;1;100000439;camilo.hern ndez439@correo.com;DIU
+Valentina;Hern ndez;EST0440;Pass9897;1;100000440;valentina.hern ndez440@correo.com;NOC
+Andr‚s;Rodr¡guez;EST0441;Pass7437;1;100000441;andr‚s.rodr¡guez441@correo.com;DIU
+Ana;Mart¡nez;EST0442;Pass0597;1;100000442;ana.mart¡nez442@correo.com;NOC
+Sof¡a;G¢mez;EST0443;Pass8343;1;100000443;sof¡a.g¢mez443@correo.com;NOC
+Andr‚s;Hern ndez;EST0444;Pass9636;1;100000444;andr‚s.hern ndez444@correo.com;DIU
+Sof¡a;Rodr¡guez;EST0445;Pass0467;1;100000445;sof¡a.rodr¡guez445@correo.com;NOC
+Carlos;Castro;EST0446;Pass5295;1;100000446;carlos.castro446@correo.com;DIU
+Mar¡a;S nchez;EST0447;Pass1659;1;100000447;mar¡a.s nchez447@correo.com;NOC
+Sof¡a;Hern ndez;EST0448;Pass8616;1;100000448;sof¡a.hern ndez448@correo.com;DIU
+Sof¡a;P‚rez;EST0449;Pass2153;1;100000449;sof¡a.p‚rez449@correo.com;NOC
+Daniela;L¢pez;EST0450;Pass0673;1;100000450;daniela.l¢pez450@correo.com;DIU
+Andr‚s;Rodr¡guez;EST0451;Pass9871;1;100000451;andr‚s.rodr¡guez451@correo.com;NOC
+Sof¡a;L¢pez;EST0452;Pass0771;1;100000452;sof¡a.l¢pez452@correo.com;DIU
+Sof¡a;G¢mez;EST0453;Pass9728;1;100000453;sof¡a.g¢mez453@correo.com;NOC
+Sof¡a;Torres;EST0454;Pass2745;1;100000454;sof¡a.torres454@correo.com;DIU
+Valentina;P‚rez;EST0455;Pass5130;1;100000455;valentina.p‚rez455@correo.com;NOC
+Andr‚s;Ram¡rez;EST0456;Pass8233;1;100000456;andr‚s.ram¡rez456@correo.com;DIU
+Carlos;Rodr¡guez;EST0457;Pass4559;1;100000457;carlos.rodr¡guez457@correo.com;NOC
+Carlos;Castro;EST0458;Pass9369;1;100000458;carlos.castro458@correo.com;DIU
+Mar¡a;P‚rez;EST0459;Pass5971;1;100000459;mar¡a.p‚rez459@correo.com;NOC
+Sof¡a;Torres;EST0460;Pass1738;1;100000460;sof¡a.torres460@correo.com;NOC
+Andr‚s;Torres;EST0461;Pass6801;1;100000461;andr‚s.torres461@correo.com;DIU
+Andr‚s;Castro;EST0462;Pass1326;1;100000462;andr‚s.castro462@correo.com;NOC
+Ana;Castro;EST0463;Pass6507;1;100000463;ana.castro463@correo.com;DIU
+Luis;Mart¡nez;EST0464;Pass3548;1;100000464;luis.mart¡nez464@correo.com;NOC
+Carlos;Mart¡nez;EST0465;Pass6673;1;100000465;carlos.mart¡nez465@correo.com;DIU
+Daniela;P‚rez;EST0466;Pass1413;1;100000466;daniela.p‚rez466@correo.com;NOC
+Luis;Ram¡rez;EST0467;Pass2989;1;100000467;luis.ram¡rez467@correo.com;DIU
+Daniela;Hern ndez;EST0468;Pass7349;1;100000468;daniela.hern ndez468@correo.com;NOC
+Juan;Ram¡rez;EST0469;Pass2220;1;100000469;juan.ram¡rez469@correo.com;DIU
+Carlos;Rodr¡guez;EST0470;Pass6714;1;100000470;carlos.rodr¡guez470@correo.com;NOC
+Daniela;P‚rez;EST0471;Pass9589;1;100000471;daniela.p‚rez471@correo.com;DIU
+Carlos;Mart¡nez;EST0472;Pass7171;1;100000472;carlos.mart¡nez472@correo.com;NOC
+Sof¡a;Hern ndez;EST0473;Pass1729;1;100000473;sof¡a.hern ndez473@correo.com;DIU
+Valentina;Ram¡rez;EST0474;Pass2459;1;100000474;valentina.ram¡rez474@correo.com;NOC
+Valentina;Hern ndez;EST0475;Pass1051;1;100000475;valentina.hern ndez475@correo.com;DIU
+Daniela;S nchez;EST0476;Pass1385;1;100000476;daniela.s nchez476@correo.com;NOC
+Valentina;Hern ndez;EST0477;Pass6139;1;100000477;valentina.hern ndez477@correo.com;NOC
+Daniela;S nchez;EST0478;Pass2642;1;100000478;daniela.s nchez478@correo.com;DIU
+Mar¡a;Ram¡rez;EST0479;Pass9389;1;100000479;mar¡a.ram¡rez479@correo.com;NOC
+Daniela;Hern ndez;EST0480;Pass0506;1;100000480;daniela.hern ndez480@correo.com;DIU
+Camilo;Rodr¡guez;EST0481;Pass2224;1;100000481;camilo.rodr¡guez481@correo.com;NOC
+Andr‚s;Hern ndez;EST0482;Pass7601;1;100000482;andr‚s.hern ndez482@correo.com;DIU
+Daniela;Hern ndez;EST0483;Pass0986;1;100000483;daniela.hern ndez483@correo.com;NOC
+Sof¡a;Torres;EST0484;Pass4325;1;100000484;sof¡a.torres484@correo.com;DIU
+Camilo;Mart¡nez;EST0485;Pass0699;1;100000485;camilo.mart¡nez485@correo.com;NOC
+Juan;Castro;EST0486;Pass5099;1;100000486;juan.castro486@correo.com;DIU
+Ana;Ram¡rez;EST0487;Pass3095;1;100000487;ana.ram¡rez487@correo.com;NOC
+Luis;Hern ndez;EST0488;Pass6447;1;100000488;luis.hern ndez488@correo.com;DIU
+Juan;Castro;EST0489;Pass7927;1;100000489;juan.castro489@correo.com;NOC
+Sof¡a;Hern ndez;EST0490;Pass2641;1;100000490;sof¡a.hern ndez490@correo.com;DIU
+Valentina;L¢pez;EST0491;Pass4662;1;100000491;valentina.l¢pez491@correo.com;NOC
+Valentina;S nchez;EST0492;Pass6757;1;100000492;valentina.s nchez492@correo.com;DIU
+Daniela;S nchez;EST0493;Pass5812;1;100000493;daniela.s nchez493@correo.com;NOC
+Juan;S nchez;EST0494;Pass5030;1;100000494;juan.s nchez494@correo.com;NOC
+Daniela;Castro;EST0495;Pass4013;1;100000495;daniela.castro495@correo.com;DIU
+Camilo;P‚rez;EST0496;Pass0427;1;100000496;camilo.p‚rez496@correo.com;NOC
+Sof¡a;Hern ndez;EST0497;Pass4193;1;100000497;sof¡a.hern ndez497@correo.com;DIU
+Ana;Mart¡nez;EST0498;Pass6816;1;100000498;ana.mart¡nez498@correo.com;NOC
+Daniela;Torres;EST0499;Pass1815;1;100000499;daniela.torres499@correo.com;DIU
+Sof¡a;Hern ndez;EST0500;Pass1475;1;100000500;sof¡a.hern ndez500@correo.com;NOC

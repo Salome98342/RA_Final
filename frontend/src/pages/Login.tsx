@@ -3,17 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { login } from '@/services/auth'
 import { useSession } from '@/state/SessionContext'
-import Toast from '@/components/Toast'
-
-
-type ToastKind = "ok" | "error" | "warning" | "info";
+import { Alert } from '@/utils/alert'
 
 export default function Login() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [langOpen, setLangOpen] = useState(false);
   const [lang, setLang] = useState("Español - Internacional (es)");
-  const [toast, setToast] = useState<{ text: string; type: ToastKind } | null>(null);
   const ddRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { setName, setRole, setCode } = useSession()
@@ -29,15 +25,10 @@ export default function Login() {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  // Helper para mostrar toast
-  const showToast = (msg: string, kind: ToastKind = "error") => {
-    setToast({ text: msg, type: kind });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuario || !password) {
-      showToast("⚠️ Por favor complete usuario y contraseña", "warning");
+      Alert.warning("Por favor complete usuario y contraseña");
       return;
     }
     try {
@@ -53,20 +44,43 @@ export default function Login() {
       let msg = 'Error al iniciar sesión'
       
       // Mensaje específico según el código de estado
-      if (statusCode === 401) {
-        msg = '❌ Usuario o contraseña incorrectos. Verifique sus credenciales.'
+      if (statusCode === 423) {
+        // Cuenta bloqueada por múltiples intentos fallidos
+        msg = 'Cuenta bloqueada por seguridad. Revisa tu correo para más información. Se desbloqueará automáticamente en 30 minutos.'
+        Alert.warning(msg)
+      } else if (statusCode === 401) {
+        // Credenciales incorrectas - extraer mensaje del backend que incluye intentos restantes
+        if (data && typeof data === 'object') {
+          const detail = (data as Record<string, unknown>).detail
+          if (detail && String(detail).includes('quedan')) {
+            // El backend envía algo como "Credenciales inválidas. Te quedan 2 intentos."
+            msg = String(detail)
+            if (String(detail).includes('queda 1')) {
+              Alert.warning(msg)
+            } else {
+              Alert.error(msg)
+            }
+          } else {
+            msg = 'Usuario o contraseña incorrectos.'
+            Alert.error(msg)
+          }
+        } else {
+          msg = 'Usuario o contraseña incorrectos.'
+          Alert.error(msg)
+        }
       } else if (statusCode === 400) {
-        msg = '⚠️ Complete todos los campos requeridos.'
+        msg = 'Complete todos los campos requeridos.'
+        Alert.warning(msg)
       } else if (statusCode === 500) {
-        msg = '🔧 Error en el servidor. Intente nuevamente más tarde.'
+        msg = 'Error en el servidor. Intente nuevamente más tarde.'
+        Alert.error(msg)
       } else if (data && typeof data === 'object') {
         const detail = (data as Record<string, unknown>).detail
         const message = (data as Record<string, unknown>).message
         if (detail) msg = String(detail)
         else if (message) msg = String(message)
+        Alert.error(msg)
       }
-      
-      showToast(msg, 'error')
     }
   };
 
@@ -109,13 +123,6 @@ export default function Login() {
               onKeyDown={(e) => { if (e.key === 'Enter') { /* redundante pero explícito */ } }}
             />
             <button type="submit">Entrar</button>
-            <button
-              type="button"
-              className="btn btn-outline-secondary w-100 mt-2"
-              onClick={() => navigate("/docente")}
-            >
-              Entrar como invitado
-            </button>
           </form>
 
           <div className="extra">
@@ -126,6 +133,7 @@ export default function Login() {
 
           <div className="top-bar">
             {/* Custom dropdown */}
+            {/* eslint-disable-next-line jsx-a11y/aria-props */}
             <div
               className="dropdown"
               id="langDropdown"
@@ -159,26 +167,16 @@ export default function Login() {
               id="cookiesBtn"
               role="button"
               onClick={() =>
-                showToast(
-                  "🍪 Este sitio usa cookies para mejorar su experiencia.",
-                  "info"
+                Alert.toast.info(
+                  "Este sitio usa cookies para mejorar su experiencia."
                 )
               }
             >
-              🍪 Aviso de Cookies
+              Aviso de Cookies
             </div>
           </div>
         </section>
       </main>
-
-      {/* Toast moderno con componente profesional */}
-      {toast && (
-        <Toast 
-          text={toast.text} 
-          type={toast.type} 
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }

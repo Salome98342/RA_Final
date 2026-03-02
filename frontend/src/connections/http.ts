@@ -94,7 +94,7 @@ api.interceptors.request.use(
   },
   (error) => {
     loadingEventBus.stop()
-    console.error('❌ Request interceptor error:', error)
+    console.error('Request interceptor error:', error)
     return Promise.reject(error)
   }
 )
@@ -154,9 +154,22 @@ api.interceptors.response.use(
 
     // ========== MANEJO DE 401 (NO AUTORIZADO) ==========
     if (status === 401 && !redirecting) {
+      // No redirigir si ya estamos en la página de login o recuperación
+      const currentPath = window.location.pathname
+      const isAuthPage = currentPath === '/login' || 
+                         currentPath === '/recuperar' || 
+                         currentPath === '/reset' ||
+                         currentPath === '/'
+      
+      if (isAuthPage) {
+        // Si estamos en página de autenticación, solo rechazar sin redirigir
+        // El componente manejará el error (ej: credenciales incorrectas)
+        return Promise.reject(error)
+      }
+      
       redirecting = true
       
-      console.warn('⚠️ 401 Unauthorized - Redirecting to login...')
+      console.warn('401 Unauthorized - Redirecting to login...')
       
       // Usar función centralizada para limpiar tokens
       removeAuthToken()
@@ -176,6 +189,13 @@ api.interceptors.response.use(
         type: 'UNAUTHORIZED',
         status: 401
       })
+    }
+
+    // ========== MANEJO DE 423 (LOCKED - CUENTA BLOQUEADA) ==========
+    if (status === 423) {
+      console.warn('423 Locked - Account locked due to multiple failed attempts')
+      // Simplemente rechazar - el componente Login mostrará el mensaje apropiado
+      return Promise.reject(error)
     }
 
     // ========== MANEJO DE 403 (PROHIBIDO) ==========
@@ -227,7 +247,7 @@ api.interceptors.response.use(
       error.message || 
       'Error desconocido'
 
-    console.error('❌ API Error:', {
+    console.error('API Error:', {
       status,
       url: error.config?.url,
       message: errorMessage,

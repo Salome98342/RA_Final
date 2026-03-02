@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { fetchAsignaturas, fetchAsignaturaAvance, type AsignaturaRow, type AvanceAsignaturaResponse } from '@/services/coordinador'
 import { getPeriodosByCourse, getIndicatorsByRA, getActivitiesByRA } from '@/services/api'
 import type { Indicator, Activity } from '@/types'
@@ -27,11 +27,16 @@ const Materias: React.FC = () => {
   const [loadingRAData, setLoadingRAData] = useState(false)
   const [raDataError, setRaDataError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  
+  // Ref para manejar el timer de doble clic
+  const clickTimer = useRef<NodeJS.Timeout | null>(null)
 
   const navigate = useNavigate()
-  const active = 'materias'
+  const location = useLocation()
+  const active = location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
@@ -128,6 +133,30 @@ const Materias: React.FC = () => {
     return () => { abort = true }
   }, [selected, selectedRAId])
 
+  // Manejar clic simple vs doble clic en materias
+  const handleMateriaClick = (m: AsignaturaRow) => {
+    // Cancelar timer previo si existe
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    // Esperar para distinguir entre clic simple y doble
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      setSelected(m) // Clic simple: seleccionar materia
+    }, 250)
+  }
+
+  const handleMateriaDoubleClick = (m: AsignaturaRow) => {
+    // Cancelar timer del clic simple
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    // Navegar a la página de análisis
+    navigate(`/coordinador/materias/${m.codigo}/analitica`, { state: { returnTo: '/coordinador/materias' } })
+  }
+
   return (
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Coordinador" />
@@ -136,8 +165,9 @@ const Materias: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'imports') navigate('/coordinador/imports')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
+            else if (key === 'imports') navigate('/coordinador/imports')
           }}
         />
         <main className="dash-content">
@@ -174,11 +204,16 @@ const Materias: React.FC = () => {
                         <button
                           key={m.codigo}
                           className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${selected?.codigo===m.codigo?'active':''}`}
-                          onClick={()=>setSelected(m)}
+                          onClick={()=>handleMateriaClick(m)}
+                          onDoubleClick={()=>handleMateriaDoubleClick(m)}
+                          title="Clic para seleccionar, doble clic para análisis detallado"
                           aria-current={selected?.codigo===m.codigo ? 'true' : undefined}
                         >
                           <div>
-                            <div className="fw-semibold">{m.codigo} · {m.nombre}</div>
+                            <div className="fw-semibold">
+                              {m.codigo} · {m.nombre}
+                              <i className="bi bi-bar-chart-line ms-2 text-primary opacity-50" style={{ fontSize: '0.85rem' }}></i>
+                            </div>
                             <div className="ra-small text-muted">{m.docente || 'Sin docente'}</div>
                           </div>
                           <span className="badge bg-light text-dark">{m.total_ras} RAs</span>

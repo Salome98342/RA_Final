@@ -62,18 +62,18 @@ class Command(BaseCommand):
         count = query.count()
 
         if count == 0:
-            self.stdout.write(self.style.SUCCESS('✓ No hay OTPs para eliminar.'))
+            self.stdout.write(self.style.SUCCESS('No hay OTPs para eliminar.'))
             return
 
         # Mostrar información detallada
-        self.stdout.write(f'\n📊 Registros encontrados: {count}')
+        self.stdout.write(f'\nRegistros encontrados: {count}')
         
         # Estadísticas
         total_expired = PasswordResetOTP.objects.filter(expires_at__lt=timezone.now()).count()
         total_used = PasswordResetOTP.objects.filter(is_used=True).count()
         total_all = PasswordResetOTP.objects.count()
 
-        self.stdout.write(f'\n📈 Estadísticas actuales:')
+        self.stdout.write(f'\nEstadísticas actuales:')
         self.stdout.write(f'   - Total OTPs en BD: {total_all}')
         self.stdout.write(f'   - OTPs expirados: {total_expired}')
         self.stdout.write(f'   - OTPs usados: {total_used}')
@@ -83,12 +83,12 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(
                 self.style.WARNING(
-                    f'🔍 Modo DRY-RUN: Se eliminarían {count} registro(s), pero no se borra nada.'
+                    f'Modo DRY-RUN: Se eliminarían {count} registro(s), pero no se borra nada.'
                 )
             )
             # Mostrar algunos ejemplos
             sample = query[:5]
-            self.stdout.write('\n📄 Ejemplos de OTPs que se eliminarían:')
+            self.stdout.write('\nEjemplos de OTPs que se eliminarían:')
             for otp in sample:
                 status = 'USADO' if otp.is_used else 'EXPIRADO'
                 self.stdout.write(
@@ -100,25 +100,25 @@ class Command(BaseCommand):
 
         # Confirmación en producción
         if not options.get('verbosity', 1) == 0:
-            confirm = input(f'\n⚠️  ¿Confirmas eliminar {count} OTP(s)? (s/N): ')
+            confirm = input(f'\n¿Confirmas eliminar {count} OTP(s)? (s/N): ')
             if confirm.lower() not in ['s', 'si', 'sí', 'y', 'yes']:
-                self.stdout.write(self.style.ERROR('❌ Operación cancelada.'))
+                self.stdout.write(self.style.ERROR('Operación cancelada.'))
                 return
 
         # Eliminar registros
         try:
             deleted_count, _ = query.delete()
             self.stdout.write(
-                self.style.SUCCESS(f'✅ Eliminados {deleted_count} OTP(s) exitosamente.')
+                self.style.SUCCESS(f'Eliminados {deleted_count} OTP(s) exitosamente.')
             )
             
             # Estadísticas finales
             remaining = PasswordResetOTP.objects.count()
-            self.stdout.write(f'\n📊 Registros restantes en BD: {remaining}')
+            self.stdout.write(f'\nRegistros restantes en BD: {remaining}')
             
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f'❌ Error al eliminar OTPs: {str(e)}')
+                self.style.ERROR(f'Error al eliminar OTPs: {str(e)}')
             )
 
 

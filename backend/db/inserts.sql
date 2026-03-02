@@ -6,7 +6,6 @@ TRUNCATE notas_actividad
   , matricula
   , ra_actividad
   , actividad
-  , tipo_actividad
   , indicadores_de_logro
   , resultado_de_aprendizaje
   , asignatura

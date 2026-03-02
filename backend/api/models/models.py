@@ -1,13 +1,8 @@
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
-
-class Task(models.Model):
-    title = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    completed = models.BooleanField(default=False)
-    def __str__(self):
-        return self.title
+from datetime import timedelta
+import uuid
 
 
 class PasswordResetOTP(models.Model):
@@ -84,6 +79,7 @@ class ImportAudit(models.Model):
     """
     KIND_CHOICES = (
         ("matriculados", "Matriculados"),
+        ("estudiantes", "Estudiantes"),
         ("docentes", "Docentes"),
         ("asignaturas_ras", "Asignaturas y RAs"),
     )
@@ -327,3 +323,205 @@ class RaActividadIndicador(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["ra_actividad", "indicador"], name="uq_ra_actividad_indicador"),
         ]
+
+
+# ==================== MODELOS DE SEGURIDAD ====================
+
+class LoginAttempt(models.Model):
+    """
+    Registro de intentos de login (exitosos y fallidos) para auditoría y seguridad.
+    Permite rastrear intentos de acceso no autorizados y detectar ataques de fuerza bruta.
+    """
+    id = models.BigAutoField(primary_key=True)
+    usuario_codigo = models.CharField(max_length=100, db_index=True, help_text="Código del usuario que intentó autenticarse")
+    usuario_email = models.EmailField(max_length=255, null=True, blank=True, help_text="Email usado en el intento")
+    rol_intentado = models.CharField(max_length=20, null=True, blank=True, help_text="Rol que intentó usar (docente/estudiante/coordinador)")
+    
+    # Resultado del intento
+    exito = models.BooleanField(default=False, help_text="Si el login fue exitoso")
+    motivo_fallo = models.CharField(max_length=200, null=True, blank=True, help_text="Razón del fallo si aplica")
+    
+    # Datos del intento
+    ip_address = models.GenericIPAddressField(help_text="Dirección IP desde donde se realizó el intento")
+    user_agent = models.TextField(null=True, blank=True, help_text="User-Agent del navegador")
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True, help_text="Fecha y hora del intento")
+    
+    class Meta:
+        db_table = "login_attempt"
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['usuario_codigo', 'timestamp']),
+            models.Index(fields=['ip_address', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        status = "✓ Exitoso" if self.exito else "✗ Fallido"
+        return f"{status} - {self.usuario_codigo} desde {self.ip_address} ({self.timestamp})"
+
+
+class AccountLockout(models.Model):
+    """
+    Bloqueos temporales de cuentas por intentos fallidos consecutivos.
+    Implementa protección contra ataques de fuerza bruta.
+    """
+    id = models.BigAutoField(primary_key=True)
+    usuario_codigo = models.CharField(max_length=100, unique=True, db_index=True, help_text="Código del usuario bloqueado")
+    
+    # Control de bloqueo
+    intentos_fallidos = models.IntegerField(default=0, help_text="Contador de intentos fallidos consecutivos")
+    bloqueado = models.BooleanField(default=False, db_index=True, help_text="Si la cuenta está actualmente bloqueada")
+    fecha_bloqueo = models.DateTimeField(null=True, blank=True, help_text="Fecha y hora del bloqueo")
+    fecha_desbloqueo = models.DateTimeField(null=True, blank=True, help_text="Fecha y hora programada para desbloqueo automático")
+    
+    # Auditoría
+    ultimo_intento_fallido = models.DateTimeField(null=True, blank=True, help_text="Timestamp del último intento fallido")
+    ultimo_intento_ip = models.GenericIPAddressField(null=True, blank=True, help_text="IP del último intento fallido")
+    notificacion_enviada = models.BooleanField(default=False, help_text="Si se envió email de alerta al usuario")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = "account_lockout"
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        estado = "BLOQUEADO" if self.bloqueado else f"{self.intentos_fallidos} intentos"
+        return f"{self.usuario_codigo} - {estado}"
+    
+    def is_locked(self):
+        """Verifica si la cuenta está actualmente bloqueada"""
+        if not self.bloqueado:
+            return False
+        
+        # Si tiene fecha de desbloqueo automático, verificar si ya pasó
+        if self.fecha_desbloqueo and timezone.now() >= self.fecha_desbloqueo:
+            self.desbloquear()
+            return False
+        
+        return True
+    
+    def bloquear(self, duracion_minutos=30):
+        """Bloquea la cuenta por un tiempo determinado"""
+        self.bloqueado = True
+        self.fecha_bloqueo = timezone.now()
+        self.fecha_desbloqueo = timezone.now() + timedelta(minutes=duracion_minutos)
+        self.save()
+    
+    def desbloquear(self):
+        """Desbloquea la cuenta y resetea contadores"""
+        self.bloqueado = False
+        self.intentos_fallidos = 0
+        self.fecha_bloqueo = None
+        self.fecha_desbloqueo = None
+        self.notificacion_enviada = False
+        self.save()
+    
+    def registrar_intento_fallido(self, ip_address):
+        """Incrementa el contador de intentos fallidos"""
+        self.intentos_fallidos += 1
+        self.ultimo_intento_fallido = timezone.now()
+        self.ultimo_intento_ip = ip_address
+        self.save()
+
+
+class SecurityEvent(models.Model):
+    """
+    Bitácora de eventos de seguridad para auditoría y análisis.
+    Registra todos los eventos importantes relacionados con seguridad.
+    """
+    EVENTO_CHOICES = [
+        ('LOGIN_SUCCESS', 'Login exitoso'),
+        ('LOGIN_FAILED', 'Login fallido'),
+        ('ACCOUNT_LOCKED', 'Cuenta bloqueada'),
+        ('ACCOUNT_UNLOCKED', 'Cuenta desbloqueada'),
+        ('PASSWORD_RESET_REQUEST', 'Solicitud de recuperación de contraseña'),
+        ('PASSWORD_RESET_SUCCESS', 'Contraseña restablecida'),
+        ('OTP_GENERATED', 'OTP generado'),
+        ('OTP_VERIFIED', 'OTP verificado'),
+        ('OTP_FAILED', 'OTP inválido'),
+        ('SUSPICIOUS_ACTIVITY', 'Actividad sospechosa'),
+        ('RATE_LIMIT_EXCEEDED', 'Rate limit excedido'),
+    ]
+    
+    id = models.BigAutoField(primary_key=True)
+    evento = models.CharField(max_length=50, choices=EVENTO_CHOICES, db_index=True)
+    usuario_codigo = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    detalles = models.TextField(null=True, blank=True, help_text="Detalles adicionales del evento en formato JSON")
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    
+    class Meta:
+        db_table = "security_event"
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['evento', 'timestamp']),
+            models.Index(fields=['usuario_codigo', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_evento_display()} - {self.usuario_codigo} ({self.timestamp})"
+
+
+class Anuncio(models.Model):
+    """Modelo para anuncios de docentes a estudiantes de una asignatura"""
+    id = models.BigAutoField(primary_key=True)
+    asignatura = models.ForeignKey('Asignatura', on_delete=models.CASCADE, related_name='anuncios')
+    docente = models.ForeignKey('Docente', on_delete=models.CASCADE, related_name='anuncios')
+    titulo = models.CharField(max_length=200)
+    contenido = models.TextField()
+    fecha_publicacion = models.DateTimeField(auto_now_add=True, db_index=True)
+    es_importante = models.BooleanField(default=False, help_text="Marca si el anuncio es urgente/importante")
+    
+    class Meta:
+        db_table = "anuncio"
+        ordering = ['-fecha_publicacion']
+        indexes = [
+            models.Index(fields=['asignatura', '-fecha_publicacion']),
+        ]
+    
+    def __str__(self):
+        return f"{self.titulo} - {self.asignatura.nombre} ({self.fecha_publicacion.strftime('%Y-%m-%d')})"
+
+
+class Notificacion(models.Model):
+    """
+    Modelo para notificaciones persistentes a estudiantes.
+    Reemplaza el sistema de caché en memoria por almacenamiento en BD.
+    """
+    TIPO_CHOICES = [
+        ('grade', 'Calificación'),
+        ('resource', 'Recurso'),
+        ('deadline', 'Fecha límite'),
+        ('message', 'Mensaje'),
+        ('announcement', 'Anuncio'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    estudiante = models.ForeignKey('Estudiante', on_delete=models.CASCADE, related_name='notificaciones')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='message', db_index=True)
+    texto = models.TextField(help_text="Contenido de la notificación")
+    enlace = models.CharField(max_length=500, null=True, blank=True, help_text="URL opcional para redirigir")
+    leida = models.BooleanField(default=False, db_index=True, help_text="Si el estudiante ya leyó esta notificación")
+    fecha_creacion = models.DateTimeField(auto_now_add=True, db_index=True)
+    fecha_lectura = models.DateTimeField(null=True, blank=True, help_text="Fecha en que se marcó como leída")
+    
+    class Meta:
+        db_table = "notificacion"
+        ordering = ['-fecha_creacion']
+        indexes = [
+            models.Index(fields=['estudiante', '-fecha_creacion']),
+            models.Index(fields=['estudiante', 'leida']),
+        ]
+    
+    def __str__(self):
+        estado = "✓ Leída" if self.leida else "✗ No leída"
+        return f"{self.get_tipo_display()} - {self.estudiante.codigo_estudiante} - {estado}"
+    
+    def marcar_leida(self):
+        """Marca la notificación como leída"""
+        if not self.leida:
+            self.leida = True
+            self.fecha_lectura = timezone.now()
+            self.save()

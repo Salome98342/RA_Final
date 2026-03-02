@@ -39,3 +39,20 @@ node_modules/
 # Build outputs
 dist/
 build/
+
+# Temporary and test files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+*.rar
+*.zip
+*.tar.gz
+*test*.html
+*verificar*.py
+*diagnostico*.py
+*debug*.py
+*temp*.py
+*crear_estudiante*.py

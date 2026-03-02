@@ -14,6 +14,9 @@ import CoordinadorDashboard from '@/pages/coordinador/Dashboard'
 import CoordinadorAsignatura from '@/pages/coordinador/Asignatura'
 import CoordinadorImports from '@/pages/coordinador/Imports'
 import CoordinadorMaterias from '@/pages/coordinador/Materias'
+import CoordinadorEstudiantes from '@/pages/coordinador/Estudiantes'
+import CoordinadorAsignaturaAnalisis from '@/pages/coordinador/AsignaturaAnalisis'
+import EstudianteMateriaDetalle from '@/pages/estudiante/MateriaDetalle'
 import { useSession } from '@/state/SessionContext'
 import { getAuthToken } from '@/connections/http'
 
@@ -31,14 +34,14 @@ const ProtectedRoute: React.FC<React.PropsWithChildren<{ allowedRoles: Array<'do
     // Verificar si hay token
     const token = getAuthToken()
     if (!token) {
-      console.warn('⚠️ No hay token de autenticación, redirigiendo a login')
+      console.warn('No hay token de autenticación, redirigiendo a login')
       navigate('/login', { replace: true, state: { from: location.pathname } })
       return
     }
 
     // Verificar si el rol actual está permitido
     if (state.role && !allowedRoles.includes(state.role)) {
-      console.warn(`⚠️ Rol "${state.role}" no autorizado para acceder a esta ruta. Roles permitidos: ${allowedRoles.join(', ')}`)
+      console.warn(`Rol "${state.role}" no autorizado para acceder a esta ruta. Roles permitidos: ${allowedRoles.join(', ')}`)
       // Redirigir al dashboard correcto según el rol
       const redirectPath = state.role === 'docente' ? '/docente' : state.role === 'coordinador' ? '/coordinador/materias' : '/estudiante'
       navigate(redirectPath, { replace: true })
@@ -87,12 +90,15 @@ const App: React.FC = () => {
       
       {/* Ruta de Estudiante - Protegida y basada en token (no en ID) */}
       <Route path="/estudiante" element={<ProtectedRoute allowedRoles={['estudiante']}><Estudiante /></ProtectedRoute>} />
+      <Route path="/estudiante/materias/:codigo/detalle" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteMateriaDetalle /></ProtectedRoute>} />
       
       {/* Perfil - Accesible para todos los roles autenticados */}
       <Route path="/perfil" element={<ProtectedRoute allowedRoles={['docente', 'estudiante', 'coordinador']}><Profile /></ProtectedRoute>} />
   {/* Coordinador */}
   <Route path="/coordinador" element={<CoordinatorRoute><CoordinadorDashboard /></CoordinatorRoute>} />
   <Route path="/coordinador/materias" element={<CoordinatorRoute><CoordinadorMaterias /></CoordinatorRoute>} />
+  <Route path="/coordinador/materias/:codigo/analitica" element={<CoordinatorRoute><CoordinadorAsignaturaAnalisis /></CoordinatorRoute>} />
+  <Route path="/coordinador/estudiantes" element={<CoordinatorRoute><CoordinadorEstudiantes /></CoordinatorRoute>} />
   <Route path="/coordinador/asignatura/:codigo" element={<CoordinatorRoute><CoordinadorAsignatura /></CoordinatorRoute>} />
   <Route path="/coordinador/imports" element={<CoordinatorRoute><CoordinadorImports /></CoordinatorRoute>} />
       {/* Fallback */}

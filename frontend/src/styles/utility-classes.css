@@ -1,0 +1,138 @@
+/**
+ * Utility Classes
+ * Clases CSS para reducir el uso de estilos inline
+ */
+
+/* Login/Auth pages - max width containers */
+.auth-box-narrow {
+  max-width: 460px;
+}
+
+/* Notifications and lists - scrollable containers */
+.notifications-list-scrollable {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.resources-list-scrollable {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Text sizes */
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.text-small-lineheight {
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+/* Notification badge dot */
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  margin-top: 0.5rem;
+}
+
+/* Notification icons */
+.notification-icon-lg {
+  font-size: 1.25rem;
+  margin-top: 0.125rem;
+}
+
+.notification-empty-icon {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+/* Bell icon colors */
+.bell-icon-unread {
+  color: #dc3545;
+}
+
+.bell-icon-normal {
+  color: inherit;
+}
+
+/* Button and notification positioning */
+.notification-bell-button {
+  position: relative;
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.notification-bell-button:hover {
+  opacity: 0.8;
+}
+
+/* Notification badge positioning */
+.notification-badge-position {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 0.7rem;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* Dropdown card - notification panel */
+.notification-dropdown-card {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 350px;
+  max-width: 90vw;
+  z-index: 1050;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Clear all button */
+.notification-clear-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.notification-clear-button:hover {
+  text-decoration: underline;
+}
+
+/* Individual notification item */
+.notification-item-button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0.75rem 1rem;
+  transition: background-color 0.15s ease-in-out;
+  cursor: pointer;
+}
+
+.notification-item-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Skeleton loading */
+.skeleton-custom-height {
+  height: 100px;
+}
+
+/* Header padding utility */
+.content-header-padding {
+  padding: 0 1.5rem;
+}

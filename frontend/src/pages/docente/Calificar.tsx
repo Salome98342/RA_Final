@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
-import Toast from '@/components/Toast'
+import { Alert } from '@/utils/alert'
 import { useSession } from '@/state/SessionContext'
 import type { Student, Activity, RA } from '@/types'
 import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade, getIndicatorChart } from '@/services/api'
@@ -23,7 +23,6 @@ const DocenteCalificar: React.FC = () => {
   const chartInstance = useRef<Chart | null>(null)
   const [chartEmpty, setChartEmpty] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [toast, setToast] = useState<{ text: string; type?: 'ok' | 'error' } | null>(null)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [exportingCourseCsv, setExportingCourseCsv] = useState(false)
 
@@ -31,7 +30,7 @@ const DocenteCalificar: React.FC = () => {
   const exportCsv = () => {
     const student = selectedStudent
     if (!student) {
-      setToast({ text: 'Selecciona un estudiante para exportar.', type: 'error' })
+      Alert.toast.error('Selecciona un estudiante para exportar.')
       return
     }
     const headers = ['Curso', 'RA', 'Estudiante', 'Actividad', 'Indicador', 'Nota', 'Retroalimentacion']
@@ -64,17 +63,17 @@ const DocenteCalificar: React.FC = () => {
     a.download = `calificaciones_${safeName}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    setToast({ text: 'CSV generado.' })
+    Alert.toast.success('CSV generado.')
   }
 
   // Exportar calificaciones de todos los estudiantes del curso para este RA
   const exportCsvCurso = async () => {
     if (!curso || !raId) {
-      setToast({ text: 'Falta información del curso o RA.', type: 'error' })
+      Alert.toast.error('Falta información del curso o RA.')
       return
     }
     if (students.length === 0) {
-      setToast({ text: 'No hay estudiantes para exportar.', type: 'error' })
+      Alert.toast.error('No hay estudiantes para exportar.')
       return
     }
     setExportingCourseCsv(true)
@@ -113,9 +112,9 @@ const DocenteCalificar: React.FC = () => {
       a.download = `calificaciones_${safeName}.csv`
       a.click()
       URL.revokeObjectURL(url)
-      setToast({ text: 'CSV del curso generado.' })
+      Alert.toast.success('CSV del curso generado.')
     } catch {
-      setToast({ text: 'No se pudo generar el CSV del curso.', type: 'error' })
+      Alert.toast.error('No se pudo generar el CSV del curso.')
     } finally {
       setExportingCourseCsv(false)
     }
@@ -145,6 +144,13 @@ const DocenteCalificar: React.FC = () => {
     }
     loadActs()
   }, [curso, raId])
+
+  // Limpiar estado de ediciones cuando cambia el estudiante seleccionado
+  useEffect(() => {
+    if (selectedStudent) {
+      setEdits({}) // Limpiar todas las ediciones pendientes
+    }
+  }, [selectedStudent])
 
   // Re-cargar actividades del estudiante (todas las de sus RAs) cuando se selecciona estudiante
   useEffect(() => {
@@ -327,23 +333,23 @@ const DocenteCalificar: React.FC = () => {
 
   const saveRow = async (a: Activity) => {
     if (!selectedStudent) {
-      setToast({ text: 'Selecciona un estudiante primero.', type: 'error' })
+      Alert.toast.error('Selecciona un estudiante primero.')
       return
     }
     const key = a.raActividadId || ''
     const eff = getEff(a)
     if (!key) return
     if (eff.nota === '' || eff.nota == null) {
-      setToast({ text: 'Debes ingresar una nota.', type: 'error' })
+      Alert.toast.error('Debes ingresar una nota.')
       return
     }
     const notaNum = Number(eff.nota)
     if (Number.isNaN(notaNum) || notaNum < 0 || notaNum > 5) {
-      setToast({ text: 'La nota debe estar entre 0 y 5.', type: 'error' })
+      Alert.toast.error('La nota debe estar entre 0 y 5.')
       return
     }
     if (isIndicatorRequired(a) && !eff.indicadorId) {
-      setToast({ text: 'Selecciona un indicador para esta actividad.', type: 'error' })
+      Alert.toast.error('Selecciona un indicador para esta actividad.')
       return
     }
 
@@ -354,13 +360,13 @@ const DocenteCalificar: React.FC = () => {
     
     // Validación adicional: verificar que hay relaciones válidas
     if (keysToUpdate.length === 0) {
-      setToast({ text: 'Error: No se encontraron relaciones RA-Actividad válidas.', type: 'error' })
+      Alert.toast.error('Error: No se encontraron relaciones RA-Actividad válidas.')
       return
     }
     
     // Validación: verificar que la matrícula existe
     if (!selectedStudent.matriculaId) {
-      setToast({ text: 'Error: Estudiante sin matrícula válida.', type: 'error' })
+      Alert.toast.error('Error: Estudiante sin matrícula válida.')
       return
     }
     
@@ -419,15 +425,12 @@ const DocenteCalificar: React.FC = () => {
           return updated
         })
         
-        setToast({ 
-          text: `Error al guardar: ${errorMsg}. ${failed.length > 1 ? `Fallaron ${failed.length} de ${keysToUpdate.length} operaciones.` : ''}`, 
-          type: 'error' 
-        })
+        Alert.toast.error(`Error al guardar: ${errorMsg}. ${failed.length > 1 ? `Fallaron ${failed.length} de ${keysToUpdate.length} operaciones.` : ''}`)
         return
       }
       
       if (import.meta.env.DEV) {
-        console.debug(`✅ Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
+        console.debug(`Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
       }
       
       // Marcar todas como guardadas
@@ -490,7 +493,7 @@ const DocenteCalificar: React.FC = () => {
       }))
       
       const multiMsg = keysToUpdate.length > 1 ? ` (replicada en ${keysToUpdate.length} RAs)` : ''
-      setToast({ text: `Guardado correctamente${multiMsg}.` })
+      Alert.toast.success(`Guardado correctamente${multiMsg}.`)
       
       // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
       const raForAct = (a as unknown as { _raId?: string })._raId
@@ -554,7 +557,7 @@ const DocenteCalificar: React.FC = () => {
         if (typeof eMsg === 'string') msg = eMsg
       }
       
-      setToast({ text: `${msg}${reason}`, type: 'error' })
+      Alert.toast.error(`${msg}${reason}`)
     }
   }
 
@@ -574,9 +577,9 @@ const DocenteCalificar: React.FC = () => {
         }
       }
     }
-    if (saved === 0 && failed === 0) setToast({ text: 'No hay cambios por guardar.' })
-    else if (failed === 0) setToast({ text: `Se guardaron ${saved} fila(s).` })
-    else setToast({ text: `Guardado parcial: ${saved} ok, ${failed} con error.`, type: 'error' })
+    if (saved === 0 && failed === 0) Alert.toast.info('No hay cambios por guardar.')
+    else if (failed === 0) Alert.toast.success(`Se guardaron ${saved} fila(s).`)
+    else Alert.toast.error(`Guardado parcial: ${saved} ok, ${failed} con error.`)
     setBulkSaving(false)
   }
 
@@ -648,11 +651,6 @@ const DocenteCalificar: React.FC = () => {
               </button>
             )}
           </div>
-          {!!toast && (
-            <div className="mb-2" role="status" aria-live="polite">
-              <Toast text={toast.text} type={toast.type} />
-            </div>
-          )}
           <div className="row g-3">
             <div id="student-list-panel" className="col-md-3" tabIndex={-1}>
               <div className="ra-card shadow-sm border-0"><div className="ra-card-body">

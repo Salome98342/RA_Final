@@ -79,7 +79,54 @@ Sistema integral de gestión de Resultados de Aprendizaje (RAs) para institucion
 
 ---
 
-## 🛠️ Stack Tecnológico
+## � Sistema de Correo de Bienvenida
+
+### **Registro Automático de Estudiantes**
+
+Cuando el coordinador registra nuevos estudiantes (individual o masivo), el sistema automáticamente:
+
+✅ **Genera contraseña provisional** aleatoria y segura  
+✅ **Envía correo de bienvenida** con credenciales de acceso  
+✅ **Incluye instrucciones** para cambio de contraseña  
+✅ **Confirma envío** al coordinador en tiempo real  
+
+#### **Métodos de Registro**
+
+1. **📝 Registro Individual** - Formulario en el dashboard del coordinador
+   - Completa datos del estudiante
+   - Contraseña generada automáticamente
+   - Correo enviado inmediatamente
+
+2. **📋 Carga Masiva CSV** - Importación de múltiples estudiantes
+   - Hasta 5,000 registros por archivo
+   - Contraseñas generadas para cada estudiante
+   - Envío de correos en segundo plano (no bloquea la importación)
+
+#### **Configuración**
+
+**Desarrollo (modo consola):**
+```bash
+# Los correos se imprimen en la consola del servidor (sin envío real)
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+```
+
+**Producción (envío real SMTP):**
+```bash
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=tu_correo@gmail.com
+EMAIL_HOST_PASSWORD=contraseña_de_aplicacion
+DEFAULT_FROM_EMAIL=tu_correo@gmail.com
+```
+
+📚 **Documentación completa:** [`backend/plantillas/CORREO_BIENVENIDA.md`](backend/plantillas/CORREO_BIENVENIDA.md)  
+📁 **Plantillas CSV:** [`backend/plantillas/`](backend/plantillas/)
+
+---
+
+## �🛠️ Stack Tecnológico
 
 ### **Backend**
 - **Django 5.2.6** - Framework web robusto en Python
@@ -1374,7 +1421,56 @@ Para problemas más específicos, consultar:
 
 ---
 
-## 📞 Soporte y Contacto
+## � Documentación Adicional
+
+### Guías de Referencia
+
+- **[REUSABLE_COMPONENTS.md](frontend/REUSABLE_COMPONENTS.md)** - Componentes y utilidades reutilizables disponibles
+  - Componentes UI listos para integrar (Alert, Dropdown)
+  - Biblioteca centralizada de mensajes (`alertMessages.ts`)
+  - Utilidades para periodos académicos
+  - Guía de integración y mejores prácticas
+
+- **[ADMIN_SCRIPTS.md](backend/ADMIN_SCRIPTS.md)** - Scripts de administración y diagnóstico
+  - `check_env.py` - Validación de entorno y configuración
+  - `diagnostico.py` - Diagnóstico completo del sistema
+  - `unlock_accounts.py` - Desbloqueo de cuentas
+  - `generate_secret_key.py` - Generación de claves seguras
+  - Checklist de deployment y automatización
+
+- **[URGENT_SECURITY_ACTIONS.md](URGENT_SECURITY_ACTIONS.md)** - Acciones de seguridad críticas
+  - Prioridades de seguridad identificadas
+  - Sistema de autenticación y bloqueo de cuentas
+  - Configuración de producción
+  - Protocolos de respuesta ante incidentes
+
+### Mejoras Recientes (Feb 2026)
+
+#### 🔐 Seguridad
+- ✅ Sistema de contraseñas con hash pbkdf2_sha256 (1M iteraciones)
+- ✅ Bloqueo de cuenta después de 3 intentos fallidos (30 minutos)
+- ✅ Notificaciones por email en bloqueos de seguridad
+- ✅ Sistema OTP para recuperación de contraseña (6 dígitos, 15 min)
+- ✅ Validación robusta de contraseñas (8+ chars, mayúsculas, minúsculas, números, especiales)
+- ✅ Auditoría completa de eventos de seguridad
+- ✅ Rate limiting en endpoints críticos
+
+#### 🎨 Experiencia de Usuario
+- ✅ Validación de contraseña en tiempo real con indicadores visuales (✓/✗)
+- ✅ Contador de intentos de login restantes
+- ✅ Mensajes de error descriptivos y útiles
+- ✅ Biblioteca centralizada de mensajes estandarizados
+- ✅ Sistema de notificaciones mejorado
+
+#### 🧹 Mantenimiento de Código
+- ✅ Eliminación de código sin uso y variables obsoletas
+- ✅ Scripts de utilidad documentados y organizados
+- ✅ Componentes reutilizables identificados y documentados
+- ✅ Mejora en alertMessages.ts con soporte completo de seguridad
+
+---
+
+## �📞 Soporte y Contacto
 
 ### 🔗 Enlaces del Proyecto
 - **Repositorio**: [github.com/Salome98342/RA_Final](https://github.com/Salome98342/RA_Final)
@@ -1399,8 +1495,8 @@ Por favor, incluir en el issue:
 
 ### 📧 Contacto
 - **Proyecto mantenido por**: JimmySoft
-- **Última actualización**: Noviembre 17, 2024
-- **Versión**: 1.0.0
+- **Última actualización**: Febrero 25, 2026
+- **Versión**: 1.1.0
 
 ---
 

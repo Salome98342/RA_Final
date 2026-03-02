@@ -23,11 +23,26 @@ load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-key-change-this')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv('SECRET_KEY')
+
+# Validar que SECRET_KEY esté configurada (especialmente en producción)
+if not SECRET_KEY:
+    raise ValueError(
+        "La variable de entorno SECRET_KEY no está configurada. "
+        "Por favor, copia .env.example a .env y genera una SECRET_KEY segura con: "
+        "python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
+
+# En producción, validar que no sea la clave por defecto
+if not DEBUG and SECRET_KEY.startswith('django-insecure'):
+    raise ValueError(
+        "⚠️ PELIGRO: Estás usando una SECRET_KEY insegura en producción. "
+        "Genera una nueva con: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
 
 # Parse ALLOWED_HOSTS from environment variable (comma-separated)
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
@@ -74,6 +89,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "rest_framework",
     "corsheaders",
+    "drf_spectacular",  # Documentación API con Swagger/OpenAPI
     "api.apps.ApiConfig",  # <-- registra tu app
 ]
 
@@ -89,6 +105,8 @@ MIDDLEWARE = [
     # Custom middleware para manejo robusto de errores y logging
     'api.middleware.error_handler.RequestLoggingMiddleware',
     'api.middleware.error_handler.ErrorHandlerMiddleware',
+    # Rate limiting middleware para registrar eventos de seguridad
+    'api.middleware.ratelimit.RateLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -147,7 +165,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '[{levelname}] {asctime} {module} {message}',
+            'format': '[{levelname}] {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
         'simple': {
@@ -161,24 +179,39 @@ LOGGING = {
             'formatter': 'verbose',
         },
         'file': {
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'logs' / 'django.log',
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 10,
             'formatter': 'verbose',
+        },
+        'error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'errors.log',
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'level': 'ERROR',
         },
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console', 'file'],
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file', 'error_file'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
         'api': {
-            'handlers': ['console'],
+            'handlers': ['console', 'file', 'error_file'],
             'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['error_file'],
+            'level': 'ERROR',
             'propagate': False,
         },
     },
@@ -211,7 +244,75 @@ MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Si tu front espera arrays (sin {count, results}):
+# REST Framework Configuration
 REST_FRAMEWORK = {
-    "DEFAULT_PAGINATION_CLASS": None,
+    # Paginación habilitada para mejorar performance en listados grandes
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,  # 50 items por página por defecto
+    
+    # Autenticación basada en tokens bearer
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    
+    # Por defecto, requiere autenticación (se puede sobrescribir por endpoint)
+    "DEFAULT_PERMISSION_CLASSES": [],
+    
+    # Formato de respuesta
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    
+    # Throttling global para prevenir abuso
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        # En desarrollo: límites más altos por React Strict Mode
+        "anon": "10000/hour" if DEBUG else "100/hour",
+        "user": "10000/hour" if DEBUG else "1000/hour",
+    },
+    
+    # Documentación API con drf-spectacular
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# Configuración de drf-spectacular para documentación API
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'RA-Manager API',
+    'DESCRIPTION': 'API REST para el sistema de gestión de Resultados de Aprendizaje (RA-Manager)',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    
+    # Información de contacto
+    'CONTACT': {
+        'name': 'Equipo RA-Manager',
+        'email': 'soporte@ra-manager.com',
+    },
+    
+    # Configuración de la UI
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+    },
+    
+    # Schemas
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api',
+    
+    # Autenticación
+    'SECURITY': [],
+    
+    # Tags para agrupar endpoints
+    'TAGS': [
+        {'name': 'Autenticación', 'description': 'Login, logout, recuperación de contraseña'},
+        {'name': 'Coordinador', 'description': 'Endpoints para coordinadores'},
+        {'name': 'Docente', 'description': 'Endpoints para docentes'},
+        {'name': 'Estudiante', 'description': 'Endpoints para estudiantes'},
+        {'name': 'Asignaturas', 'description': 'Gestión de asignaturas'},
+        {'name': 'Resultados de Aprendizaje', 'description': 'Gestión de RAs e indicadores'},
+        {'name': 'Actividades', 'description': 'Gestión de actividades y calificaciones'},
+        {'name': 'Catálogos', 'description': 'Tipos de documento, actividades, programas'},
+        {'name': 'Perfil', 'description': 'Gestión de perfil de usuario'},
+    ],
 }

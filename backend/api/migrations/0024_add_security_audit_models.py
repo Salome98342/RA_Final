@@ -1,0 +1,83 @@
+# Generated manually for security audit models
+
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('api', '0023_add_security_models'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='LoginAttempt',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True, serialize=False)),
+                ('usuario_codigo', models.CharField(db_index=True, help_text='Código del usuario que intentó autenticarse', max_length=100)),
+                ('usuario_email', models.EmailField(blank=True, help_text='Email usado en el intento', max_length=255, null=True)),
+                ('rol_intentado', models.CharField(blank=True, help_text='Rol que intentó usar (docente/estudiante/coordinador)', max_length=20, null=True)),
+                ('exito', models.BooleanField(default=False, help_text='Si el login fue exitoso')),
+                ('motivo_fallo', models.CharField(blank=True, help_text='Razón del fallo si aplica', max_length=200, null=True)),
+                ('ip_address', models.GenericIPAddressField(help_text='Dirección IP desde donde se realizó el intento')),
+                ('user_agent', models.TextField(blank=True, help_text='User-Agent del navegador', null=True)),
+                ('timestamp', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Fecha y hora del intento')),
+            ],
+            options={
+                'db_table': 'login_attempt',
+                'ordering': ['-timestamp'],
+            },
+        ),
+        migrations.CreateModel(
+            name='AccountLockout',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True, serialize=False)),
+                ('usuario_codigo', models.CharField(db_index=True, help_text='Código del usuario bloqueado', max_length=100, unique=True)),
+                ('intentos_fallidos', models.IntegerField(default=0, help_text='Contador de intentos fallidos consecutivos')),
+                ('bloqueado', models.BooleanField(db_index=True, default=False, help_text='Si la cuenta está actualmente bloqueada')),
+                ('fecha_bloqueo', models.DateTimeField(blank=True, help_text='Fecha y hora del bloqueo', null=True)),
+                ('fecha_desbloqueo', models.DateTimeField(blank=True, help_text='Fecha y hora programada para desbloqueo automático', null=True)),
+                ('ultimo_intento_fallido', models.DateTimeField(blank=True, help_text='Timestamp del último intento fallido', null=True)),
+                ('ultimo_intento_ip', models.GenericIPAddressField(blank=True, help_text='IP del último intento fallido', null=True)),
+                ('notificacion_enviada', models.BooleanField(default=False, help_text='Si se envió email de alerta al usuario')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                'db_table': 'account_lockout',
+                'ordering': ['-updated_at'],
+            },
+        ),
+        migrations.CreateModel(
+            name='SecurityEvent',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True, serialize=False)),
+                ('evento', models.CharField(choices=[('LOGIN_SUCCESS', 'Login exitoso'), ('LOGIN_FAILED', 'Login fallido'), ('ACCOUNT_LOCKED', 'Cuenta bloqueada'), ('ACCOUNT_UNLOCKED', 'Cuenta desbloqueada'), ('PASSWORD_RESET_REQUEST', 'Solicitud de recuperación de contraseña'), ('PASSWORD_RESET_SUCCESS', 'Contraseña restablecida'), ('OTP_GENERATED', 'OTP generado'), ('OTP_VERIFIED', 'OTP verificado'), ('OTP_FAILED', 'OTP inválido'), ('SUSPICIOUS_ACTIVITY', 'Actividad sospechosa'), ('RATE_LIMIT_EXCEEDED', 'Rate limit excedido')], db_index=True, max_length=50)),
+                ('usuario_codigo', models.CharField(blank=True, db_index=True, max_length=100, null=True)),
+                ('ip_address', models.GenericIPAddressField(blank=True, null=True)),
+                ('detalles', models.TextField(blank=True, help_text='Detalles adicionales del evento en formato JSON', null=True)),
+                ('timestamp', models.DateTimeField(auto_now_add=True, db_index=True)),
+            ],
+            options={
+                'db_table': 'security_event',
+                'ordering': ['-timestamp'],
+            },
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(fields=['usuario_codigo', 'timestamp'], name='login_attem_usuario_e8c9e8_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='loginattempt',
+            index=models.Index(fields=['ip_address', 'timestamp'], name='login_attem_ip_addr_4f7a31_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='securityevent',
+            index=models.Index(fields=['evento', 'timestamp'], name='security_e_evento_539bc9_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='securityevent',
+            index=models.Index(fields=['usuario_codigo', 'timestamp'], name='security_e_usuario_0e4b38_idx'),
+        ),
+    ]

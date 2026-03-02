@@ -48,6 +48,102 @@ export type GradeSummaryResponse = {
   ras: GradeSummaryRA[]
 }
 
+// Detalle completo de asignatura para analítica
+export type CourseDetailResponse = {
+  asignatura: {
+    codigo: string
+    nombre: string
+    grupo: string | null
+    creditos: number | null
+    programa: {
+      codigo: string | null
+      nombre: string | null
+    }
+    periodo: {
+      id: number | null
+      descripcion: string | null
+    }
+  }
+  docente: {
+    codigo: string
+    nombre: string
+    correo: string
+  } | null
+  estudiantes_matriculados: number
+  mi_estadistica: {
+    nota_strict: number
+    nota_progressive: number
+    coverage: number
+    actividades_totales: number
+    actividades_calificadas: number
+  }
+  estadistica_curso: {
+    promedio: number
+    nota_max: number
+    nota_min: number
+    estudiantes_aprobados: number
+    estudiantes_reprobados: number
+  }
+  resultados_aprendizaje: Array<{
+    id_ra: number
+    descripcion: string
+    porcentaje_ra: number
+    actividades_total: number
+    actividades_calificadas: number
+    coverage: number
+    nota: number | null
+  }>
+}
+
+// Análisis general de asignatura para coordinador
+export type CourseAnalyticsResponse = {
+  asignatura: {
+    codigo: string
+    nombre: string
+    grupo: string | null
+    creditos: number | null
+    programa: {
+      codigo: string | null
+      nombre: string | null
+    }
+    periodo: {
+      id: number | null
+      descripcion: string | null
+    }
+  }
+  docente: {
+    codigo: string
+    nombre: string
+    correo: string
+  } | null
+  estudiantes_matriculados: number
+  estadistica_curso: {
+    promedio: number
+    nota_max: number
+    nota_min: number
+    estudiantes_aprobados: number
+    estudiantes_reprobados: number
+    desviacion_estandar: number
+  }
+  resultados_aprendizaje: Array<{
+    id_ra: number
+    descripcion: string
+    porcentaje_ra: number
+    actividades_total: number
+    promedio: number
+    coverage_promedio: number
+  }>
+  estudiantes: Array<{
+    id: string
+    nombre: string
+    correo: string
+    nota: number
+    coverage: number
+    actividades_calificadas: number
+    actividades_totales: number
+  }>
+}
+
 export type Student = { id: string; name: string; matriculaId: string }
 export type Periodo = { id: string; descripcion: string }
 

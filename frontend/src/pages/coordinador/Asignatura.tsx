@@ -76,9 +76,10 @@ const AsignaturaDetalle: React.FC = () => {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const active = location.pathname.includes('/imports') ? 'imports' : 'materias'
+  const active = location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
@@ -91,6 +92,7 @@ const AsignaturaDetalle: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'imports') navigate('/coordinador/imports')
           }}
         />

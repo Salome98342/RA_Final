@@ -1,0 +1,51 @@
+/* Estilos personalizados para SweetAlert2 */
+@import 'sweetalert2/dist/sweetalert2.min.css';
+
+/* Botones personalizados */
+.swal-btn-confirm {
+  background-color: #0d6efd !important;
+  border-color: #0d6efd !important;
+  padding: 0.5rem 1.5rem !important;
+  font-weight: 500 !important;
+  border-radius: 0.375rem !important;
+}
+
+.swal-btn-confirm:hover {
+  background-color: #0b5ed7 !important;
+  border-color: #0a58ca !important;
+}
+
+.swal-btn-cancel {
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+  padding: 0.5rem 1.5rem !important;
+  font-weight: 500 !important;
+  border-radius: 0.375rem !important;
+}
+
+.swal-btn-cancel:hover {
+  background-color: #5c636a !important;
+  border-color: #565e64 !important;
+}
+
+/* Personalización del popup */
+.swal2-popup {
+  border-radius: 0.5rem !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+}
+
+.swal2-title {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  color: #212529 !important;
+}
+
+.swal2-html-container {
+  font-size: 1rem !important;
+  color: #6c757d !important;
+}
+
+/* Toast personalizado */
+.swal2-toast {
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}

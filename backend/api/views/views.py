@@ -1,60 +1,85 @@
+"""
+DEPRECADO: Este archivo será dividido en módulos.
+Por ahora se mantiene para compatibilidad, pero se recomienda importar desde:
+- api.views.auth
+- api.views.coordinador
+- api.views.docente
+- api.views.estudiante
+- api.views.catalogs
+- api.views.profile
+etc.
+
+TODO: Eliminar este archivo una vez migradas todas las importaciones.
+"""
+
+# Mantener imports actuales por compatibilidad
+from .utils import (
+    _add_notification, _normalize_login_payload, _serialize_user, 
+    _bearer_token, _send_welcome_email, _read_imported_file,
+    _find_user_by_credentials, _require_coordinador, TOKEN_MAX_AGE
+)
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.core import signing
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django_ratelimit.decorators import ratelimit
 import uuid
 from datetime import datetime as dt_module
 import os
 import io
 import csv
 import secrets
-import random
+import pandas as pd
 from django.core.files.storage import default_storage
 import logging
 from django.utils.text import get_valid_filename
-from django.db.models import Avg, Sum
+from django.utils import timezone
+from django.db.models import Avg, Sum, Q
 from django.db import transaction, DatabaseError, IntegrityError
 import datetime
 
 from ..models.models import (
     TipoDocumento, TipoActividad, Programa, Docente, Estudiante, Asignatura,
-    Task, ResultadoDeAprendizaje, Matricula, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, PeriodoAcademico, Recurso, RaActividadIndicador,
-    Coordinador, ImportAudit,
+    ResultadoDeAprendizaje, Matricula, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, PeriodoAcademico, Recurso, RaActividadIndicador,
+    Coordinador, ImportAudit, Anuncio, Notificacion,
 )
 from ..serializers.serializers import (
     TipoDocumentoSerializer, TipoActividadSerializer, ProgramaSerializer,
     DocenteSerializer, EstudianteSerializer, AsignaturaSerializer,
-    TaskSerializer, ResultadoDeAprendizajeSerializer, RecursoSerializer,
+    ResultadoDeAprendizajeSerializer, RecursoSerializer,
     PasswordForgotSerializer, VerifyOTPSerializer, PasswordResetSerializer
+)
+from ..utils.security import (
+    get_client_ip, get_user_agent, check_user_password, generate_secure_otp,
+    check_account_lockout, registrar_intento_login, manejar_intento_fallido,
+    limpiar_intentos_exitosos, registrar_evento_seguridad, validate_password_strength
 )
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
-RESET_TOKEN_MAX_AGE = 60 * 60  # 1 hora
 logger = logging.getLogger("ra_manager.coordinador")
 
-# Sistema de notificaciones en memoria (cache simple por estudiante)
-_NOTIFICATIONS_CACHE = {}  # {id_estudiante: [notificaciones...]}
 
 def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
-    """Agregar notificación para un estudiante"""
-    if id_estudiante not in _NOTIFICATIONS_CACHE:
-        _NOTIFICATIONS_CACHE[id_estudiante] = []
-    notif = {
-        "id": str(uuid.uuid4()),
-        "kind": kind,
-        "text": text,
-        "date": dt_module.now().isoformat(),
-        "read": False,
-        "link": link
-    }
-    _NOTIFICATIONS_CACHE[id_estudiante].append(notif)
-    # Mantener solo últimas 50 notificaciones por estudiante
-    if len(_NOTIFICATIONS_CACHE[id_estudiante]) > 50:
-        _NOTIFICATIONS_CACHE[id_estudiante] = _NOTIFICATIONS_CACHE[id_estudiante][-50:]
+    """Crear notificación persistente en BD para un estudiante"""
+    try:
+        estudiante = Estudiante.objects.get(id_estudiante=id_estudiante)
+        Notificacion.objects.create(
+            estudiante=estudiante,
+            tipo=kind,
+            texto=text,
+            enlace=link
+        )
+        logger.debug(f"Notificación creada para estudiante {id_estudiante}: {text}")
+    except Estudiante.DoesNotExist:
+        logger.error(f"No se pudo crear notificación: Estudiante {id_estudiante} no existe")
+    except Exception as e:
+        logger.error(f"Error al crear notificación: {e}")
+
 
 def _normalize_login_payload(data: dict):
     email = data.get("email") or data.get("correo")
@@ -76,50 +101,253 @@ def _bearer_token(request):
     auth = request.headers.get("Authorization", "")
     return auth.split(" ", 1)[1] if auth.startswith("Bearer ") and " " in auth else None
 
+def _send_welcome_email(estudiante, password_provisional):
+    """
+    Envía correo de bienvenida a un estudiante recién creado.
+    Args:
+        estudiante: Objeto Estudiante
+        password_provisional: Contraseña en texto plano (sin hashear)
+    """
+    try:
+        subject = "Bienvenido a RA Manager"
+        message = f"""
+¡Bienvenido/a a RA Manager!
+
+Hola {estudiante.nombre} {estudiante.apellido},
+
+Tu cuenta ha sido creada exitosamente en el sistema RA Manager.
+
+Tus credenciales de acceso son:
+- Código de estudiante: {estudiante.codigo_estudiante}
+- Correo: {estudiante.correo}
+- Contraseña provisional: {password_provisional}
+
+IMPORTANTE: Por tu seguridad, debes cambiar tu contraseña provisional en el primer inicio de sesión.
+
+Para acceder al sistema:
+1. Ingresa a la plataforma RA Manager
+2. Usa tus credenciales para iniciar sesión
+3. Cambia tu contraseña en tu perfil
+
+Si tienes alguna duda, contacta al coordinador del programa.
+
+Saludos,
+Equipo RA Manager
+        """.strip()
+        
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[estudiante.correo],
+            fail_silently=True,  # No fallar si el correo no se envía
+        )
+        logger.info(f"Correo de bienvenida enviado a {estudiante.correo}")
+    except Exception as e:
+        logger.error(f"Error enviando correo de bienvenida a {estudiante.correo}: {str(e)}")
+
+def _read_imported_file(file_obj):
+    """
+    Lee un archivo CSV o Excel y retorna un DataFrame de pandas.
+    Soporta múltiples formatos: .csv, .xlsx, .xls
+    
+    Args:
+        file_obj: Archivo subido (Django UploadedFile)
+    
+    Returns:
+        pandas.DataFrame o None si falla
+    """
+    filename = getattr(file_obj, 'name', '').lower()
+    logger.info(f"Intentando leer archivo: {filename}, tamaño: {getattr(file_obj, 'size', 'desconocido')} bytes")
+    
+    file_obj.seek(0)
+    
+    try:
+        # Detectar el tipo de archivo por extensión
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            # Leer archivo Excel
+            df = pd.read_excel(file_obj, engine='openpyxl' if filename.endswith('.xlsx') else None)
+            # Normalizar nombres de columnas: minúsculas y sin espacios
+            df.columns = df.columns.str.strip().str.lower()
+            logger.info(f"✓ Archivo Excel leído exitosamente: {len(df)} filas")
+            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+            return df
+        else:
+            # Intentar leer como CSV con múltiples encodings y delimitadores
+            encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+            delimiters_to_try = [',', ';', '\t', '|']
+            
+            for encoding in encodings_to_try:
+                for delimiter in delimiters_to_try:
+                    try:
+                        file_obj.seek(0)
+                        # Leer CSV con configuración tolerante a errores
+                        df = pd.read_csv(
+                            file_obj, 
+                            encoding=encoding,
+                            sep=delimiter,
+                            on_bad_lines='skip',  # Saltar líneas mal formateadas
+                            engine='python',  # Motor más tolerante
+                            skipinitialspace=True,  # Ignorar espacios después del delimitador
+                            quotechar='"'  # Carácter de comillas
+                        )
+                        # Verificar que se leyeron columnas válidas
+                        if len(df.columns) > 1 and len(df) > 0:
+                            # Normalizar nombres de columnas: minúsculas y sin espacios
+                            df.columns = df.columns.str.strip().str.lower()
+                            logger.info(f"✓ Archivo CSV leído exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
+                            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                            return df
+                    except UnicodeDecodeError:
+                        continue
+                    except Exception as e:
+                        continue
+            
+            logger.error("No se pudo leer el archivo CSV con ninguna codificación/delimitador soportado")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error leyendo archivo: {type(e).__name__} - {str(e)}")
+        return None
+
+def _find_user_by_credentials(email=None, codigo=None, rol=None):
+    """
+    Helper para buscar usuario por email/código en uno o varios roles.
+    Returns: (user, user_rol, user_email) o (None, None, None)
+    """
+    roles_a_intentar = [rol] if rol else ["docente", "estudiante", "coordinador"]
+    
+    for r in roles_a_intentar:
+        if r == "docente":
+            u = (Docente.objects.filter(codigo_docente=codigo).first()
+                 or Docente.objects.filter(correo=email).first()) if (codigo or email) else None
+            if u:
+                return u, "docente", u.correo
+        elif r == "estudiante":
+            u = (Estudiante.objects.filter(codigo_estudiante=codigo).first()
+                 or Estudiante.objects.filter(correo=email).first()) if (codigo or email) else None
+            if u:
+                return u, "estudiante", u.correo
+        elif r == "coordinador":
+            u = (Coordinador.objects.filter(codigo_coordinador=codigo).first()
+                 or Coordinador.objects.filter(correo=email).first()) if (codigo or email) else None
+            if u:
+                return u, "coordinador", u.correo
+    return None, None, None
+
+@ratelimit(key='ip', rate='10/m', method='POST', block=True)
+@ratelimit(key='user_or_ip', rate='20/h', method='POST', block=True)
 @api_view(["POST", "GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def login_view(request):
+    """
+    Endpoint de login seguro con protección contra fuerza bruta.
+    Rate limiting: 10 intentos/minuto por IP, 20 intentos/hora por usuario/IP
+    
+    - Registra todos los intentos (exitosos y fallidos)
+    - Bloquea cuenta tras 3 intentos fallidos
+    - Envía alerta por email al bloquear
+    - Registra IP, user-agent y timestamp
+    """
     data = request.data if request.method == "POST" else request.query_params
     email, codigo, password, rol = _normalize_login_payload(data or {})
+    
+    # Obtener datos de auditoría
+    ip_address = get_client_ip(request)
+    user_agent = get_user_agent(request)
+    
+    # Validar que se proporcionaron credenciales
     if not (email or codigo):
         return Response({"detail": "Faltan credenciales"}, status=status.HTTP_400_BAD_REQUEST)
-
-    def ok_pass(db_value: str | None) -> bool:
-        if not password:
-            return True
-        if not db_value:
-            return False
-        try:
-            if check_password(password, db_value):
-                return True
-        except Exception:
-            pass
-        return password == db_value
-
-    user = None
-    user_rol = None
-    for r in ( ["docente", "estudiante", "coordinador"] if not rol else [rol] ):
-        if r == "docente":
-            u = (Docente.objects.filter(codigo_docente=codigo).first()
-                 or Docente.objects.filter(correo=email).first())
-            if u and ok_pass(u.contrasenia_docente):
-                user = u; user_rol = "docente"; break
-        elif r == "estudiante":
-            u = (Estudiante.objects.filter(codigo_estudiante=codigo).first()
-                 or Estudiante.objects.filter(correo=email).first())
-            if u and ok_pass(u.contrasena_estudiante):
-                user = u; user_rol = "estudiante"; break
-        elif r == "coordinador":
-            u = (Coordinador.objects.filter(codigo_coordinador=codigo).first()
-                 or Coordinador.objects.filter(correo=email).first())
-            if u and ok_pass(u.contrasenia_coord):
-                user = u; user_rol = "coordinador"; break
-
+    
+    if not password:
+        return Response({"detail": "La contraseña es requerida"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Identificador del usuario para auditoría
+    usuario_identificador = codigo or email
+    
+    # 1. VERIFICAR SI LA CUENTA ESTÁ BLOQUEADA
+    is_locked, reason, remaining_minutes = check_account_lockout(usuario_identificador)
+    if is_locked:
+        mensaje = f"Cuenta bloqueada. {reason}."
+        if remaining_minutes is not None:
+            mensaje += f" Intenta nuevamente en {remaining_minutes} minutos."
+        
+        # Registrar intento en cuenta bloqueada
+        registrar_intento_login(
+            usuario_codigo=usuario_identificador,
+            exito=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            usuario_email=email,
+            rol_intentado=rol,
+            motivo_fallo="Cuenta bloqueada"
+        )
+        
+        return Response({"detail": mensaje}, status=status.HTTP_423_LOCKED)
+    
+    # 2. BUSCAR USUARIO Y VALIDAR CONTRASEÑA
+    user, user_rol, user_email = _find_user_by_credentials(email=email, codigo=codigo, rol=rol)
+    
+    # Verificar contraseña solo si se encontró el usuario
+    if user:
+        password_field = {
+            "docente": "contrasenia_docente",
+            "estudiante": "contrasena_estudiante",
+            "coordinador": "contrasenia_coord"
+        }.get(user_rol)
+        
+        if not password_field or not check_user_password(getattr(user, password_field), password):
+            user = None  # Contraseña incorrecta
+    
+    # 3. MANEJAR RESULTADO
     if not user:
-        return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
-
+        # LOGIN FALLIDO
+        registrar_intento_login(
+            usuario_codigo=usuario_identificador,
+            exito=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            usuario_email=email,
+            rol_intentado=rol,
+            motivo_fallo="Credenciales inválidas"
+        )
+        
+        # Incrementar contador y posiblemente bloquear
+        cuenta_bloqueada, intentos_restantes = manejar_intento_fallido(
+            usuario_identificador, 
+            ip_address,
+            email=user_email or email
+        )
+        
+        if cuenta_bloqueada:
+            return Response({
+                "detail": "Cuenta bloqueada por seguridad. Hemos enviado un email con instrucciones. Se desbloqueará automáticamente en 30 minutos."
+            }, status=status.HTTP_423_LOCKED)
+        else:
+            mensaje = "Credenciales inválidas"
+            if intentos_restantes > 0:
+                mensaje += f". Te quedan {intentos_restantes} intentos."
+            return Response({"detail": mensaje}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    # 4. LOGIN EXITOSO
+    registrar_intento_login(
+        usuario_codigo=usuario_identificador,
+        exito=True,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        usuario_email=user_email,
+        rol_intentado=user_rol,
+        motivo_fallo=None
+    )
+    
+    # Limpiar contadores de intentos fallidos
+    limpiar_intentos_exitosos(usuario_identificador)
+    
+    # Generar token de sesión
     token = signing.dumps({"rol": user_rol, "id": user.pk})
+    
     return Response({"token": token, "user": _serialize_user(user, user_rol)})
 
 @api_view(["GET"])
@@ -163,6 +391,381 @@ def _require_coordinador(request):
         return None, Response({"detail": "Coordinador no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
     return coord, None
 
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiantes_view(request):
+    """
+    GET: Lista todos los estudiantes (con filtros opcionales por código, nombre, correo)
+    POST: Crea un nuevo estudiante individual y envía correo de bienvenida.
+    Solo coordinador.
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+    
+    if request.method == "GET":
+        # Listar estudiantes con filtros opcionales
+        estudiantes = Estudiante.objects.select_related('tipo_documento').all()
+        
+        # Filtros opcionales
+        search = request.query_params.get('search', '').strip()
+        if search:
+            estudiantes = estudiantes.filter(
+                Q(codigo_estudiante__icontains=search) |
+                Q(nombre__icontains=search) |
+                Q(apellido__icontains=search) |
+                Q(correo__icontains=search) |
+                Q(num_documento__icontains=search)
+            )
+        
+        # Ordenar
+        estudiantes = estudiantes.order_by('apellido', 'nombre')
+        
+        # Serializar
+        data = []
+        for est in estudiantes:
+            data.append({
+                "id_estudiante": est.id_estudiante,
+                "nombre": est.nombre,
+                "apellido": est.apellido,
+                "codigo_estudiante": est.codigo_estudiante,
+                "correo": est.correo,
+                "tipo_documento": est.tipo_documento.descripcion if est.tipo_documento else None,
+                "num_documento": est.num_documento,
+                "jornada": est.jornada,
+            })
+        
+        return Response(data, status=status.HTTP_200_OK)
+    
+    elif request.method == "POST":
+        # Crear estudiante individual
+        data = request.data
+        
+        # Validar campos requeridos
+        required = ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento']
+        missing = [f for f in required if not data.get(f)]
+        if missing:
+            return Response(
+                {"detail": f"Faltan campos requeridos: {', '.join(missing)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        codigo = data['codigo_estudiante'].strip()
+        nombre = data['nombre'].strip()
+        apellido = data['apellido'].strip()
+        correo = data['correo'].strip().lower()
+        tipo_doc_desc = data['tipo_documento'].strip()
+        num_documento = data['num_documento'].strip()
+        jornada = data.get('jornada', '').strip() or None
+        
+        # Validar unicidad
+        if Estudiante.objects.filter(codigo_estudiante=codigo).exists():
+            return Response(
+                {"detail": f"Ya existe un estudiante con código {codigo}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if Estudiante.objects.filter(correo=correo).exists():
+            return Response(
+                {"detail": f"Ya existe un estudiante con correo {correo}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if Estudiante.objects.filter(num_documento=num_documento).exists():
+            return Response(
+                {"detail": f"Ya existe un estudiante con documento {num_documento}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar tipo de documento
+        tipo_doc = TipoDocumento.objects.filter(descripcion__iexact=tipo_doc_desc).first()
+        if not tipo_doc:
+            return Response(
+                {"detail": f"Tipo de documento no válido: {tipo_doc_desc}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Generar contraseña provisional
+        password_provisional = secrets.token_urlsafe(8)  # ~11 caracteres
+        hashed_password = make_password(password_provisional)
+        
+        # Crear estudiante
+        try:
+            estudiante = Estudiante.objects.create(
+                nombre=nombre,
+                apellido=apellido,
+                codigo_estudiante=codigo,
+                contrasena_estudiante=hashed_password,
+                correo=correo,
+                tipo_documento=tipo_doc,
+                num_documento=num_documento,
+                jornada=jornada
+            )
+            
+            # Enviar correo de bienvenida
+            _send_welcome_email(estudiante, password_provisional)
+            
+            # Registrar auditoría
+            try:
+                ImportAudit.objects.create(
+                    coordinador=coord,
+                    kind="estudiantes",
+                    filename=f"individual_{codigo}",
+                    created_count=1,
+                    existing_count=0,
+                    errors_count=0,
+                )
+            except Exception:
+                pass
+            
+            logger.info(f"Estudiante creado: {codigo} por coordinador {coord.codigo_coordinador}")
+            
+            return Response({
+                "detail": "Estudiante creado exitosamente",
+                "estudiante": {
+                    "id_estudiante": estudiante.id_estudiante,
+                    "codigo_estudiante": estudiante.codigo_estudiante,
+                    "nombre": estudiante.nombre,
+                    "apellido": estudiante.apellido,
+                    "correo": estudiante.correo,
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error creando estudiante: {str(e)}")
+            return Response(
+                {"detail": f"Error al crear estudiante: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_import_estudiantes_view(request):
+    """Importa estudiantes desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
+    Columnas mínimas requeridas: codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento
+    Opcionales: jornada, password (si no se provee se genera aleatoria).
+    Soporta: .csv, .xlsx, .xls
+    Sinónimos aceptados:
+      - codigo_estudiante | estudiante | codigo
+      - nombre | first_name
+      - apellido | last_name
+      - correo | email
+      - tipo_documento | tipo_doc | doc_type
+      - num_documento | documento | doc_number
+      - jornada | turno
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+    
+    # Debug logging
+    logger.info(f"[DEBUG] request.FILES keys: {list(request.FILES.keys())}")
+    logger.info(f"[DEBUG] request.POST keys: {list(request.POST.keys())}")
+    
+    f = request.FILES.get("file") or request.FILES.get("csv")
+    if not f:
+        return Response({"detail": "Archivo requerido (CSV o Excel). FILES recibidos: " + str(list(request.FILES.keys()))}, status=status.HTTP_400_BAD_REQUEST)
+    
+    fname = getattr(f, 'name', '').lower()
+    logger.info(f"[DEBUG] Archivo recibido: nombre='{fname}', size={getattr(f, 'size', 'unknown')}, type={type(f)}")
+    
+    # Validar extensión del archivo
+    if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
+        return Response({"detail": f"Se requiere archivo .csv, .xlsx o .xls (recibido: '{fname}')"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    size = int(getattr(f, "size", 0) or 0)
+    if size > 10 * 1024 * 1024:  # Aumentado a 10MB para Excel
+        return Response({"detail": "El archivo supera 10MB"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Leer archivo con pandas (soporta CSV y Excel)
+    df = _read_imported_file(f)
+    if df is None or df.empty:
+        return Response(
+            {"detail": "No se pudo leer el archivo o está vacío. Intente con formato .xlsx o .csv UTF-8."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Normalizar nombres de columnas
+    df.columns = df.columns.str.strip().str.lower()
+    
+    # OPTIMIZACIÓN: Pre-cargar datos existentes
+    tipos_documento_map_desc = {td.descripcion.lower(): td for td in TipoDocumento.objects.all()}
+    tipos_documento_map_id = {td.id_tipo_documento: td for td in TipoDocumento.objects.all()}
+    logger.info(f"[DEBUG] Tipos de documento disponibles (por descripción): {list(tipos_documento_map_desc.keys())}")
+    logger.info(f"[DEBUG] Tipos de documento disponibles (por ID): {list(tipos_documento_map_id.keys())}")
+    existing_estudiantes_codigos = set(Estudiante.objects.values_list('codigo_estudiante', flat=True))
+    existing_estudiantes_correos = set(Estudiante.objects.values_list('correo', flat=True))
+    existing_estudiantes_docs = set(Estudiante.objects.values_list('num_documento', flat=True))
+    
+    created = 0
+    existing = 0
+    errors = []
+    max_rows = 5000
+    to_create = []
+    passwords_for_emails = []  # Lista paralela: (correo, nombre, apellido, codigo, password)
+    
+    # Helper function para acceder a columnas de pandas de forma segura
+    def get_col(row, *col_names):
+        """Intenta obtener el valor de la primera columna que existe y no es None/NaN"""
+        for col in col_names:
+            if col in row.index:
+                val = row[col]
+                if pd.notna(val):
+                    return val
+        return None
+    
+    for idx, row in df.iterrows():
+        row_num = idx + 2  # +2 porque índice empieza en 0 y hay header
+        if idx >= max_rows:
+            errors.append({"row": row_num, "error": f"Se excede límite de {max_rows} filas"})
+            break
+        
+        # Log de debug para primera fila
+        if idx == 0:
+            logger.info(f"[DEBUG] Primera fila (dict): {row.to_dict()}")
+        
+        # Extraer campos con sinónimos utilizando la función helper
+        codigo = get_col(row, "codigo_estudiante", "estudiante", "codigo")
+        nombre = get_col(row, "nombre", "first_name")
+        apellido = get_col(row, "apellido", "last_name")
+        correo = get_col(row, "correo", "email")
+        tipo_doc_desc = get_col(row, "tipo_documento", "tipo_doc", "doc_type")
+        tipo_doc_id = get_col(row, "tipo_documento_id", "tipo_doc_id")
+        num_documento = get_col(row, "num_documento", "documento", "doc_number")
+        jornada = get_col(row, "jornada", "turno")
+        raw_pass = get_col(row, "password", "contrasena_estudiante")
+        
+        # Log de debug para primera fila - valores extraídos
+        if idx == 0:
+            logger.info(f"[DEBUG] Valores extraídos - codigo:{codigo}, nombre:{nombre}, apellido:{apellido}, correo:{correo}, tipo_doc_id:{tipo_doc_id}, tipo_doc_desc:{tipo_doc_desc}, num_doc:{num_documento}, jornada:{jornada}")
+        
+        # Limpiar strings
+        if codigo: codigo = str(codigo).strip()[:50]
+        if nombre: nombre = str(nombre).strip()[:50]
+        if apellido: apellido = str(apellido).strip()[:50]
+        if correo: correo = str(correo).strip()[:100]
+        if tipo_doc_desc: tipo_doc_desc = str(tipo_doc_desc).strip()
+        if num_documento: num_documento = str(num_documento).strip()[:20]
+        if jornada: jornada = str(jornada).strip()[:50]
+        if raw_pass: raw_pass = str(raw_pass).strip()
+        
+        if not (codigo and nombre and apellido and correo and (tipo_doc_desc or tipo_doc_id) and num_documento):
+            errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
+        
+        # Tipo documento - intentar por ID primero, luego por descripción
+        tipo_doc = None
+        if tipo_doc_id:
+            try:
+                tipo_doc = tipos_documento_map_id.get(int(tipo_doc_id))
+            except (ValueError, TypeError):
+                pass
+        
+        if not tipo_doc and tipo_doc_desc:
+            tipo_doc = tipos_documento_map_desc.get(tipo_doc_desc.lower())
+            if idx == 0:
+                logger.info(f"[DEBUG] Buscando tipo_doc_desc: '{tipo_doc_desc}' -> lower: '{tipo_doc_desc.lower()}' -> encontrado: {tipo_doc}")
+        
+        if not tipo_doc:
+            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: {tipo_doc_id or tipo_doc_desc}"}); continue
+        
+        # Verificar si ya existe
+        if codigo in existing_estudiantes_codigos:
+            existing += 1
+            continue
+        
+        # Validar unicidad de correo y documento
+        if correo in existing_estudiantes_correos:
+            errors.append({"row": row_num, "error": f"Correo ya existe: {correo}"}); continue
+        if num_documento in existing_estudiantes_docs:
+            errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
+        
+        # Generar contraseña si no viene
+        password = raw_pass or secrets.token_urlsafe(8)  # ~11 chars base64
+        hashed = make_password(password)
+        
+        # Agregar a lista de creación
+        to_create.append(Estudiante(
+            nombre=nombre,
+            apellido=apellido,
+            codigo_estudiante=codigo,
+            contrasena_estudiante=hashed,
+            correo=correo,
+            tipo_documento=tipo_doc,
+            num_documento=num_documento,
+            jornada=jornada or None
+        ))
+        
+        # Guardar información para envío de correos (solo si es contraseña generada)
+        if not raw_pass:  # Solo enviamos correo si se generó la contraseña
+            passwords_for_emails.append({
+                'correo': correo,
+                'nombre': nombre,
+                'apellido': apellido,
+                'codigo': codigo,
+                'password': password
+            })
+        
+        # Marcar como existente para evitar duplicados en el mismo archivo
+        existing_estudiantes_codigos.add(codigo)
+        existing_estudiantes_correos.add(correo)
+        existing_estudiantes_docs.add(num_documento)
+        created += 1
+    
+    logger.info(f"[DEBUG] Preparando bulk_create de {len(to_create)} estudiantes...")
+    
+    # BULK INSERT con transacción atómica
+    if to_create:
+        try:
+            with transaction.atomic():
+                Estudiante.objects.bulk_create(to_create, batch_size=500)
+            
+            logger.info(f"[DEBUG] Bulk_create completado. Iniciando envío de {len(passwords_for_emails)} correos...")
+            
+            # Enviar correos de bienvenida solo a los primeros 10 (para evitar timeout en imports masivos)
+            # En producción, esto debería hacerse de forma asíncrona con Celery o similar
+            emails_sent = 0
+            max_emails = min(10, len(passwords_for_emails))  # Limitar a 10 correos para evitar timeout
+            for email_data in passwords_for_emails[:max_emails]:
+                try:
+                    # Buscar el estudiante recién creado para obtener el objeto completo
+                    estudiante = Estudiante.objects.get(codigo_estudiante=email_data['codigo'])
+                    _send_welcome_email(estudiante, email_data['password'])
+                    emails_sent += 1
+                except Estudiante.DoesNotExist:
+                    logger.warning(f"Estudiante {email_data['codigo']} no encontrado después de bulk_create")
+                except Exception as e:
+                    logger.error(f"Error enviando correo a {email_data['correo']}: {str(e)}")
+            
+            logger.info(f"Correos de bienvenida enviados: {emails_sent}/{len(passwords_for_emails)}")
+            
+        except Exception as e:
+            errors.append({"error": f"Error en inserción masiva: {str(e)}"})
+            created = 0
+    
+    if len(errors) > 100:
+        errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
+    payload = {"created": created, "existing": existing, "errors": errors}
+    try:
+        logger.info("import_estudiantes: %s", {
+            "coordinador": getattr(coord, "codigo_coordinador", None),
+            "filename": getattr(f, "name", None),
+            **{k: payload[k] for k in ("created", "existing")},
+            "errors_count": len(errors)
+        })
+        ImportAudit.objects.create(
+            coordinador=coord,
+            kind="estudiantes",
+            filename=fname,
+            created_count=created,
+            existing_count=existing,
+            errors_count=len(errors),
+        )
+    except Exception:
+        pass
+    return Response(payload, status=status.HTTP_200_OK)
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -181,16 +784,22 @@ def coordinador_asignaturas_view(request):
         qs = qs.filter(docente__codigo_docente=docente_code)
     if periodo_desc:
         qs = qs.filter(matricula__periodo__descripcion=periodo_desc).distinct()
+    from django.db.models import Count
     page_size = int(request.query_params.get("page_size") or 20)
     page = int(request.query_params.get("page") or 1)
     if page < 1:
         page = 1
     offset = (page - 1) * page_size
+    
+    # Optimización: calcular conteos en una sola query con annotate
+    qs = qs.annotate(
+        total_estudiantes=Count('matricula', distinct=True),
+        total_ras=Count('resultadodeaprendizaje', distinct=True)
+    )
     total = qs.count()
+    
     rows = []
     for a in qs.order_by("nombre")[offset:offset+page_size]:
-        total_estudiantes = Matricula.objects.filter(asignatura=a).count()
-        ras_total = ResultadoDeAprendizaje.objects.filter(asignatura=a).count()
         rows.append({
             "codigo": a.codigo_asignatura,
             "nombre": a.nombre,
@@ -199,8 +808,8 @@ def coordinador_asignaturas_view(request):
             "programa_codigo": getattr(a.programa, "codigo_programa", None),
             "docente": getattr(a.docente, "nombre", None),
             "docente_codigo": getattr(a.docente, "codigo_docente", None),
-            "total_estudiantes": total_estudiantes,
-            "total_ras": ras_total,
+            "total_estudiantes": a.total_estudiantes,
+            "total_ras": a.total_ras,
         })
     return Response({
         "page": page,
@@ -228,18 +837,33 @@ def coordinador_asignatura_ras_view(request):
     asig = Asignatura.objects.filter(codigo_asignatura=codigo).first()
     if not asig:
         return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
-    ras = ResultadoDeAprendizaje.objects.filter(asignatura=asig).order_by("id_ra")
+    
+    # Optimización: prefetch relacionados para evitar N+1 queries
+    ras = ResultadoDeAprendizaje.objects.filter(asignatura=asig).prefetch_related(
+        'raactividad_set',
+        'raactividad_set__notasactividad_set',
+        'raactividad_set__notasactividad_set__matricula',
+        'raactividad_set__notasactividad_set__matricula__periodo'
+    ).order_by("id_ra")
+    
     out = []
     for ra in ras:
-        rels = RaActividad.objects.filter(ra=ra)
+        rels = ra.raactividad_set.all()
         # Si se filtra periodo, contar solo actividades con al menos una nota de matriculas de ese periodo
         if periodo_desc:
-            rels = rels.filter(notasactividad__matricula__periodo__descripcion=periodo_desc).distinct()
+            rels = [rel for rel in rels if any(
+                nota.matricula.periodo.descripcion == periodo_desc 
+                for nota in rel.notasactividad_set.all()
+            )]
+            count = len(rels)
+        else:
+            count = len(rels)
+        
         out.append({
             "id_ra": ra.id_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
-            "total_actividades": rels.count(),
+            "total_actividades": count,
         })
     return Response({
         "codigo_asignatura": codigo,
@@ -427,13 +1051,190 @@ def coordinador_asignatura_avance_view(request):
         "ras": ras_out,
     })
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiante_perfil_view(request, id_estudiante: int):
+    """
+    Vista detallada del estudiante para el coordinador.
+    Devuelve información personal y progreso en todas sus asignaturas.
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+    
+    # Obtener estudiante
+    try:
+        estudiante = Estudiante.objects.select_related(
+            'tipo_documento'
+        ).get(id_estudiante=id_estudiante)
+    except Estudiante.DoesNotExist:
+        return Response({"detail": "Estudiante no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Obtener todas las matrículas del estudiante
+    matriculas = Matricula.objects.filter(
+        estudiante=estudiante
+    ).select_related(
+        'asignatura', 'asignatura__docente', 'asignatura__programa', 'periodo'
+    ).order_by('-periodo__fecha_inicio')
+    
+    # Obtener programa del estudiante (de su primera matrícula)
+    programa_nombre = None
+    if matriculas.exists():
+        primera_mat = matriculas.first()
+        if primera_mat and primera_mat.asignatura and primera_mat.asignatura.programa:
+            programa_nombre = primera_mat.asignatura.programa.nombre
+    
+    # Información personal
+    info_personal = {
+        "id_estudiante": estudiante.id_estudiante,
+        "codigo_estudiante": estudiante.codigo_estudiante,
+        "nombre": estudiante.nombre,
+        "apellido": estudiante.apellido,
+        "nombre_completo": f"{estudiante.nombre} {estudiante.apellido}",
+        "correo": estudiante.correo,
+        "tipo_documento": estudiante.tipo_documento.descripcion if estudiante.tipo_documento else None,
+        "num_documento": estudiante.num_documento,
+        "programa": programa_nombre,
+        "jornada": estudiante.jornada,
+    }
+    
+    # Agrupar por período
+    periodos_dict = {}
+    # Lista para recopilar todas las notas calculadas (para las estadísticas)
+    todas_notas_calculadas = []
+    
+    for mat in matriculas:
+        periodo_id = mat.periodo_id
+        periodo_desc = mat.periodo.descripcion
+        
+        if periodo_id not in periodos_dict:
+            periodos_dict[periodo_id] = {
+                "id_periodo": periodo_id,
+                "descripcion": periodo_desc,
+                "fecha_inicio": mat.periodo.fecha_inicio,
+                "fecha_finalizacion": mat.periodo.fecha_finalizacion,
+                "asignaturas": []
+            }
+        
+        # Calcular progreso de la asignatura
+        asignatura = mat.asignatura
+        ras = ResultadoDeAprendizaje.objects.filter(asignatura=asignatura)
+        
+        total_strict = 0.0
+        total_prog = 0.0
+        total_coverage = 0.0
+        sum_peso_ras = 0.0
+        
+        ras_data = []
+        
+        for ra in ras:
+            peso_ra = float(ra.porcentaje_ra) / 100.0
+            sum_peso_ras += peso_ra
+            
+            # Obtener actividades del RA
+            rels = RaActividad.objects.filter(ra=ra).select_related('actividad')
+            
+            sum_w = 0.0
+            sum_w_graded = 0.0
+            acc_strict = 0.0
+            actividades_calificadas = 0
+            total_actividades = rels.count()
+            
+            for rel in rels:
+                w = float(rel.porcentaje_ra_actividad) / 100.0
+                sum_w += w
+                
+                nota_obj = NotasActividad.objects.filter(
+                    matricula=mat, ra_actividad=rel
+                ).first()
+                
+                if nota_obj and nota_obj.nota_ra_actividad is not None:
+                    nota = float(nota_obj.nota_ra_actividad)
+                    sum_w_graded += w
+                    acc_strict += nota * w
+                    actividades_calificadas += 1
+            
+            ra_strict = acc_strict
+            ra_prog = (acc_strict / sum_w_graded) if sum_w_graded > 0 else None
+            coverage = (sum_w_graded / sum_w) if sum_w > 0 else 0.0
+            
+            total_strict += ra_strict * peso_ra
+            if ra_prog is not None:
+                total_prog += ra_prog * peso_ra
+            total_coverage += coverage * peso_ra
+            
+            ras_data.append({
+                "id_ra": ra.id_ra,
+                "descripcion": ra.descripcion,
+                "porcentaje_ra": float(ra.porcentaje_ra),
+                "nota_strict": round(ra_strict, 2) if ra_strict else 0,
+                "nota_progressive": round(ra_prog, 2) if ra_prog else None,
+                "coverage": round(coverage * 100, 1),
+                "actividades_calificadas": actividades_calificadas,
+                "total_actividades": total_actividades,
+            })
+        
+        # Normalizar si los pesos no suman exactamente 100%
+        if sum_peso_ras > 0:
+            total_strict = total_strict / sum_peso_ras
+            total_prog = total_prog / sum_peso_ras
+            total_coverage = total_coverage / sum_peso_ras
+        
+        # Determinar estado
+        estado = "aprobado" if total_strict >= 3.0 else "reprobado"
+        if total_coverage < 0.5:
+            estado = "en_progreso"
+        
+        # Recopilar nota calculada para estadísticas (usar total_strict como nota definitiva)
+        # Solo incluir si hay cobertura (al menos 50% de actividades calificadas)
+        if total_coverage >= 0.5:
+            todas_notas_calculadas.append(total_strict)
+        
+        periodos_dict[periodo_id]["asignaturas"].append({
+            "id_asignatura": asignatura.id_asignatura,
+            "codigo_asignatura": asignatura.codigo_asignatura,
+            "nombre": asignatura.nombre,
+            "docente": f"{asignatura.docente.nombre} {asignatura.docente.apellido}",
+            "nota_final": float(mat.nota_final) if mat.nota_final else None,
+            "nota_strict": round(total_strict, 2),
+            "nota_progressive": round(total_prog, 2),
+            "coverage": round(total_coverage * 100, 1),
+            "estado": estado,
+            "ras": ras_data,
+        })
+    
+    # Convertir a lista ordenada por período
+    periodos_list = sorted(
+        periodos_dict.values(), 
+        key=lambda x: x['fecha_inicio'], 
+        reverse=True
+    )
+    
+    # Calcular estadísticas generales basadas en las notas calculadas
+    estadisticas = {
+        "total_asignaturas": matriculas.count(),
+        "promedio_general": round(sum(todas_notas_calculadas) / len(todas_notas_calculadas), 2) if todas_notas_calculadas else None,
+        "asignaturas_aprobadas": sum(1 for n in todas_notas_calculadas if n >= 3.0),
+        "asignaturas_reprobadas": sum(1 for n in todas_notas_calculadas if n < 3.0),
+        "tasa_aprobacion": round(sum(1 for n in todas_notas_calculadas if n >= 3.0) / len(todas_notas_calculadas) * 100, 1) if todas_notas_calculadas else None,
+    }
+    
+    return Response({
+        "estudiante": info_personal,
+        "estadisticas": estadisticas,
+        "periodos": periodos_list,
+    })
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def coordinador_import_matriculados_view(request):
-    """Importa matriculados desde CSV. Solo coordinador.
-    CSV esperado (cabeceras mínimas): codigo_estudiante, codigo_asignatura, periodo
-    Campos aceptados (sinónimos por fila):
+    """Importa matriculados desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
+    Columnas mínimas requeridas: codigo_estudiante, codigo_asignatura, periodo
+    Soporta: .csv, .xlsx, .xls
+    Campos aceptados (sinónimos):
       - codigo_estudiante | estudiante | code
       - codigo_asignatura | asignatura | curso
       - periodo | periodo_academico
@@ -443,70 +1244,114 @@ def coordinador_import_matriculados_view(request):
         return err
     f = request.FILES.get("file") or request.FILES.get("csv")
     if not f:
-        return Response({"detail": "Archivo CSV requerido como 'file'"}, status=status.HTTP_400_BAD_REQUEST)
-    # Validar nombre y tipo básico
-    fname = getattr(f, 'name', '')
-    ctype = (getattr(f, 'content_type', '') or '').lower()
-    if not fname.lower().endswith('.csv') and 'csv' not in ctype:
-        return Response({"detail": "Se requiere archivo .csv"}, status=status.HTTP_400_BAD_REQUEST)
-    if ctype and ctype not in ("text/csv", "application/vnd.ms-excel", "application/csv", "text/plain"):
-        return Response({"detail": f"Tipo MIME no permitido: {ctype}"}, status=status.HTTP_400_BAD_REQUEST)
-    # Límite básico 5MB
-    try:
-        size = int(getattr(f, "size", 0) or 0)
-    except Exception:
-        size = 0
-    if size > 5 * 1024 * 1024:
-        return Response({"detail": "El archivo supera 5MB"}, status=status.HTTP_400_BAD_REQUEST)
-    # Lectura CSV
-    try:
-        text_stream = io.TextIOWrapper(f.file, encoding="utf-8-sig")
-    except Exception:
-        content = f.read()
-        text_stream = io.StringIO(content.decode("utf-8", errors="ignore"))
-    reader = csv.DictReader(text_stream)
+        return Response({"detail": "Archivo requerido (CSV o Excel)"}, status=status.HTTP_400_BAD_REQUEST)
+    fname = getattr(f, 'name', '').lower()
+    
+    # Validar extensión del archivo
+    if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
+        return Response({"detail": "Se requiere archivo .csv, .xlsx o .xls"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    size = int(getattr(f, "size", 0) or 0)
+    if size > 10 * 1024 * 1024:  # Aumentado a 10MB para Excel
+        return Response({"detail": "El archivo supera 10MB"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Leer archivo con pandas (soporta CSV y Excel)
+    df = _read_imported_file(f)
+    if df is None or df.empty:
+        return Response(
+            {"detail": "No se pudo leer el archivo o está vacío. Intente con formato .xlsx o .csv UTF-8."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Normalizar nombres de columnas
+    df.columns = df.columns.str.strip().str.lower()
+    
+    # OPTIMIZACIÓN: Pre-cargar todos los datos en memoria
+    estudiantes_map = {e.codigo_estudiante: e for e in Estudiante.objects.all()}
+    asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.all()}
+    periodos_map = {p.descripcion: p for p in PeriodoAcademico.objects.all()}
+    
+    # Pre-cargar matrículas existentes para evitar duplicados
+    existing_matriculas = set(
+        Matricula.objects.values_list('estudiante_id', 'periodo_id', 'asignatura_id')
+    )
+    
     created = 0
     existing = 0
     errors = []
-    rownum = 1
     max_rows = 5000
-    for raw in reader:
-        if rownum > max_rows:
-            errors.append({"row": rownum, "error": f"Se excede límite de {max_rows} filas"})
+    to_create = []
+    
+    # Helper function para acceder a columnas de pandas de forma segura
+    def get_col(row, *col_names):
+        """Intenta obtener el valor de la primera columna que existe y no es None/NaN"""
+        for col in col_names:
+            if col in row.index:
+                val = row[col]
+                if pd.notna(val):
+                    return val
+        return None
+    
+    for idx, row in df.iterrows():
+        row_num = idx + 2  # +2 porque índice empieza en 0 y hay header
+        if idx >= max_rows:
+            errors.append({"row": row_num, "error": f"Se excede límite de {max_rows} filas"})
             break
-        rownum += 1
-        d = { (k or "").strip().lower(): ( (v.strip() if isinstance(v, str) else v) ) for k, v in (raw or {}).items() }
-        # Sanitizar longitud
-        for k in list(d.keys()):
-            v = d[k]
-            if isinstance(v, str):
-                d[k] = v.replace('\x00','').strip()[:255]
-        cod_est = d.get("codigo_estudiante") or d.get("estudiante") or d.get("code")
-        cod_asig = d.get("codigo_asignatura") or d.get("asignatura") or d.get("curso")
-        periodo_desc = d.get("periodo") or d.get("periodo_academico")
+        
+        # Extraer campos con sinónimos
+        cod_est = get_col(row, "codigo_estudiante", "estudiante", "code")
+        cod_asig = get_col(row, "codigo_asignatura", "asignatura", "curso")
+        periodo_desc = get_col(row, "periodo", "periodo_academico")
+        
+        # Limpiar strings
+        if cod_est: cod_est = str(cod_est).strip()[:50]
+        if cod_asig: cod_asig = str(cod_asig).strip()[:50]
+        if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
+        
         if not (cod_est and cod_asig and periodo_desc):
-            errors.append({"row": rownum, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura, periodo)"})
+            errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura, periodo)"})
             continue
-        est = Estudiante.objects.filter(codigo_estudiante=cod_est).first()
+        
+        est = estudiantes_map.get(cod_est)
         if not est:
-            errors.append({"row": rownum, "error": f"Estudiante no encontrado: {cod_est}"})
+            errors.append({"row": row_num, "error": f"Estudiante no encontrado: {cod_est}"})
             continue
-        asig = Asignatura.objects.filter(codigo_asignatura=cod_asig).first()
+        
+        asig = asignaturas_map.get(cod_asig)
         if not asig:
-            errors.append({"row": rownum, "error": f"Asignatura no encontrada: {cod_asig}"})
+            errors.append({"row": row_num, "error": f"Asignatura no encontrada: {cod_asig}"})
             continue
-        per = PeriodoAcademico.objects.filter(descripcion=periodo_desc).first()
+        
+        per = periodos_map.get(periodo_desc)
         if not per:
-            errors.append({"row": rownum, "error": f"Periodo no encontrado: {periodo_desc}"})
+            errors.append({"row": row_num, "error": f"Periodo no encontrado: {periodo_desc}"})
             continue
-        obj, was_created = Matricula.objects.get_or_create(
-            estudiante=est, periodo=per, asignatura=asig,
-            defaults={"nota_final": None}
-        )
-        if was_created:
-            created += 1
-        else:
+        
+        # Verificar si ya existe
+        key = (est.id_estudiante, per.id_periodo, asig.id_asignatura)
+        if key in existing_matriculas:
             existing += 1
+            continue
+        
+        # Agregar a lista de creación y marcar como existente para evitar duplicados en el mismo archivo
+        to_create.append(Matricula(
+            estudiante=est,
+            periodo=per,
+            asignatura=asig,
+            nota_final=None
+        ))
+        existing_matriculas.add(key)
+        created += 1
+    
+    # BULK INSERT con transacción atómica
+    if to_create:
+        try:
+            with transaction.atomic():
+                Matricula.objects.bulk_create(to_create, batch_size=500, ignore_conflicts=True)
+        except Exception as e:
+            errors.append({"error": f"Error en inserción masiva: {str(e)}"})
+            created = 0
+    
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
     payload = {"created": created, "existing": existing, "errors": errors}
@@ -658,13 +1503,228 @@ def docente_import_estudiantes_view(request, codigo_asignatura: str):
         "summary": f"Se matricularon {created} nuevos estudiantes. {existing} ya estaban matriculados."
     }, status=status.HTTP_200_OK)
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def docente_buscar_estudiante_view(request):
+    """
+    Permite al docente buscar un estudiante por código antes de agregarlo.
+    Query params: codigo_estudiante (formato: codigo o codigo-programa)
+    """
+    token = _bearer_token(request)
+    if not token:
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        return Response({"detail": "Solo docentes pueden buscar estudiantes"}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Obtener código del estudiante (puede incluir programa: codigo-programa)
+    codigo_completo = request.query_params.get("codigo_estudiante", "").strip()
+    
+    if not codigo_completo:
+        return Response({"detail": "El código del estudiante es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Separar código de estudiante y código de programa si vienen juntos
+    if "-" in codigo_completo:
+        codigo_estudiante, codigo_programa = codigo_completo.split("-", 1)
+    else:
+        codigo_estudiante = codigo_completo
+        codigo_programa = None
+    
+    # Buscar estudiante
+    estudiante = Estudiante.objects.filter(codigo_estudiante=codigo_estudiante).first()
+    
+    if not estudiante:
+        return Response(
+            {"detail": f"No se encontró un estudiante con código {codigo_estudiante}"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    return Response({
+        "ok": True,
+        "estudiante": {
+            "id": estudiante.id_estudiante,
+            "codigo": estudiante.codigo_estudiante,
+            "codigo_programa": codigo_programa,
+            "nombre": estudiante.nombre,
+            "apellido": estudiante.apellido,
+            "correo": estudiante.correo,
+            "documento": estudiante.num_documento,
+            "tipo_documento": estudiante.tipo_documento.descripcion if estudiante.tipo_documento else "N/A"
+        }
+    }, status=status.HTTP_200_OK)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def docente_agregar_estudiante_view(request, codigo_asignatura: str):
+    """
+    Agregar un estudiante individual a una asignatura por su código.
+    Solo el docente puede agregar estudiantes a su curso.
+    Se envía un email al estudiante y se crea la matrícula.
+    
+    Request Body:
+        - codigo_estudiante (str): Código del estudiante a agregar
+    
+    Response:
+        - 201: Estudiante agregado y notificado
+        - 400: Estudiante ya matriculado o no encontrado
+    """
+    logger = logging.getLogger(__name__)
+    
+    token = _bearer_token(request)
+    if not token:
+        logger.error("No se encontró token de autenticación")
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception as e:
+        logger.error(f"Error al decodificar token: {str(e)}")
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        logger.error(f"Usuario no es docente: rol={tok.get('rol')}")
+        return Response({"detail": "Solo docentes pueden agregar estudiantes"}, status=status.HTTP_403_FORBIDDEN)
+    
+    docente_id = tok.get("id")
+    
+    # Verificar que el docente dicta el curso
+    asignatura = Asignatura.objects.filter(
+        codigo_asignatura=codigo_asignatura,
+        docente_id=docente_id
+    ).select_related("docente", "programa").first()
+    
+    if not asignatura:
+        logger.error(f"Docente {docente_id} no dicta la asignatura {codigo_asignatura}")
+        return Response(
+            {"detail": "No tienes permisos para agregar estudiantes en este curso"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Obtener código del estudiante (puede incluir programa: codigo-programa)
+    codigo_completo = request.data.get("codigo_estudiante", "").strip()
+    
+    if not codigo_completo:
+        logger.error("No se proporcionó código de estudiante")
+        return Response({"detail": "El código del estudiante es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Separar código de estudiante y código de programa si vienen juntos
+    if "-" in codigo_completo:
+        codigo_estudiante, codigo_programa = codigo_completo.split("-", 1)
+        
+        # Validar que el código del programa coincida con el programa de la asignatura
+        if codigo_programa != asignatura.programa.codigo_programa:
+            logger.warning(f"Programa no coincide - estudiante: {codigo_programa}, asignatura: {asignatura.programa.codigo_programa}")
+            return Response(
+                {"detail": f"El estudiante pertenece al programa {codigo_programa}, pero este curso es del programa {asignatura.programa.codigo_programa}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    else:
+        codigo_estudiante = codigo_completo
+    
+    # Buscar estudiante
+    estudiante = Estudiante.objects.filter(codigo_estudiante=codigo_estudiante).first()
+    
+    if not estudiante:
+        logger.error(f"No se encontró estudiante con código {codigo_estudiante}")
+        return Response(
+            {"detail": f"No se encontró un estudiante con código {codigo_estudiante}"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Obtener periodo actual o más reciente
+    periodo_actual = PeriodoAcademico.objects.filter(
+        fecha_inicio__lte=datetime.date.today(),
+        fecha_finalizacion__gte=datetime.date.today()
+    ).first()
+    
+    if not periodo_actual:
+        periodo_actual = PeriodoAcademico.objects.order_by('-fecha_inicio').first()
+    
+    if not periodo_actual:
+        logger.error("No hay periodo académico configurado")
+        return Response(
+            {"detail": "No hay periodo académico configurado"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Verificar si ya está matriculado
+    matricula_existente = Matricula.objects.filter(
+        estudiante=estudiante,
+        periodo=periodo_actual,
+        asignatura=asignatura
+    ).first()
+    
+    if matricula_existente:
+        logger.warning(f"Estudiante {estudiante.nombre} ya está matriculado en {asignatura.nombre}")
+        return Response(
+            {"detail": f"{estudiante.nombre} {estudiante.apellido} ya está matriculado en este curso"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Crear matrícula
+    with transaction.atomic():
+        matricula = Matricula.objects.create(
+            estudiante=estudiante,
+            periodo=periodo_actual,
+            asignatura=asignatura,
+            nota_final=None
+        )
+        
+        logger.info(f"Estudiante {estudiante.codigo_estudiante} agregado a {asignatura.codigo_asignatura}")
+        
+        # Enviar email al estudiante
+        try:
+            subject = f"Inscripción en {asignatura.nombre}"
+            message = (
+                f"Hola {estudiante.nombre},\n\n"
+                f"Has sido agregado a la asignatura {asignatura.nombre} "
+                f"(código: {asignatura.codigo_asignatura}) "
+                f"dictada por {asignatura.docente.nombre} {asignatura.docente.apellido}.\n\n"
+                f"Periodo académico: {periodo_actual.descripcion}\n"
+                f"Programa: {asignatura.programa.nombre if asignatura.programa else 'N/A'}\n\n"
+                f"Puedes acceder al curso desde tu perfil en el sistema.\n\n"
+                f"Saludos,\n"
+                f"Sistema de Gestión Académica"
+            )
+            
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[estudiante.correo],
+                fail_silently=True
+            )
+        except Exception as e:
+            logger.error(f"Error enviando email: {str(e)}")
+    
+    return Response({
+        "ok": True,
+        "id_matricula": matricula.id_matricula,
+        "estudiante": {
+            "id": estudiante.id_estudiante,
+            "codigo": estudiante.codigo_estudiante,
+            "nombre": estudiante.nombre,
+            "apellido": estudiante.apellido,
+            "correo": estudiante.correo
+        },
+        "message": f"{estudiante.nombre} {estudiante.apellido} ha sido agregado exitosamente. Se envió una notificación a {estudiante.correo}"
+    }, status=status.HTTP_201_CREATED)
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def coordinador_import_docentes_view(request):
-    """Importa docentes desde CSV. Solo coordinador.
-    CSV columnas mínimas requeridas: codigo_docente, nombre, apellido, correo, tipo_documento, num_documento
-    Opcionales: num_telefono, password (si no se provee se genera aleatoria de 10 chars).
+    """Importa docentes desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
+    Columnas mínimas requeridas: codigo_docente, nombre, apellido, correo, tipo_documento, num_documento
+    Opcionales: num_telefono, password (si no se provee se genera aleatoria).
+    Soporta: .csv, .xlsx, .xls
     Sinónimos aceptados:
       - codigo_docente | docente | codigo
       - nombre | first_name
@@ -679,70 +1739,137 @@ def coordinador_import_docentes_view(request):
         return err
     f = request.FILES.get("file") or request.FILES.get("csv")
     if not f:
-        return Response({"detail": "Archivo CSV requerido"}, status=status.HTTP_400_BAD_REQUEST)
-    fname = getattr(f, 'name', '')
-    ctype = (getattr(f, 'content_type', '') or '').lower()
-    if not fname.lower().endswith('.csv') and 'csv' not in ctype:
-        return Response({"detail": "Se requiere archivo .csv"}, status=status.HTTP_400_BAD_REQUEST)
-    if ctype and ctype not in ("text/csv", "application/vnd.ms-excel", "application/csv", "text/plain"):
-        return Response({"detail": f"Tipo MIME no permitido: {ctype}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Archivo requerido (CSV o Excel)"}, status=status.HTTP_400_BAD_REQUEST)
+    fname = getattr(f, 'name', '').lower()
+    
+    # Validar extensión del archivo
+    if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
+        return Response({"detail": "Se requiere archivo .csv, .xlsx o .xls"}, status=status.HTTP_400_BAD_REQUEST)
+    
     size = int(getattr(f, "size", 0) or 0)
-    if size > 5 * 1024 * 1024:
-        return Response({"detail": "El archivo supera 5MB"}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        text_stream = io.TextIOWrapper(f.file, encoding="utf-8-sig")
-    except Exception:
-        content = f.read()
-        text_stream = io.StringIO(content.decode("utf-8", errors="ignore"))
-    reader = csv.DictReader(text_stream)
+    if size > 10 * 1024 * 1024:  # Aumentado a 10MB para Excel
+        return Response({"detail": "El archivo supera 10MB"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Leer archivo con pandas (soporta CSV y Excel)
+    df = _read_imported_file(f)
+    if df is None or df.empty:
+        return Response(
+            {"detail": "No se pudo leer el archivo o está vacío. Intente con formato .xlsx o .csv UTF-8."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Normalizar nombres de columnas
+    df.columns = df.columns.str.strip().str.lower()
+    
+    # OPTIMIZACIÓN: Pre-cargar datos existentes
+    tipos_documento_map = {td.descripcion.lower(): td for td in TipoDocumento.objects.all()}
+    existing_docentes_codigos = set(Docente.objects.values_list('codigo_docente', flat=True))
+    existing_docentes_correos = set(Docente.objects.values_list('correo', flat=True))
+    existing_docentes_docs = set(Docente.objects.values_list('num_documento', flat=True))
+    docentes_to_update = {}
+    
     created = 0
     existing = 0
     errors = []
     max_rows = 5000
-    for idx, raw in enumerate(reader, start=2):  # start=2 por header
-        if idx-1 > max_rows:
-            errors.append({"row": idx, "error": f"Se excede límite de {max_rows} filas"})
+    to_create = []
+    
+    # Helper function para acceder a columnas de pandas de forma segura
+    def get_col(row, *col_names):
+        """Intenta obtener el valor de la primera columna que existe y no es None/NaN"""
+        for col in col_names:
+            if col in row.index:
+                val = row[col]
+                if pd.notna(val):
+                    return val
+        return None
+    
+    for idx, row in df.iterrows():
+        row_num = idx + 2  # +2 porque índice empieza en 0 y hay header
+        if idx >= max_rows:
+            errors.append({"row": row_num, "error": f"Se excede límite de {max_rows} filas"})
             break
-        d = { (k or "").strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in (raw or {}).items() }
-        for k in list(d.keys()):
-            v = d[k]
-            if isinstance(v, str):
-                d[k] = v.replace('\x00','').strip()[:255]
-        codigo = d.get("codigo_docente") or d.get("docente") or d.get("codigo")
-        nombre = d.get("nombre") or d.get("first_name")
-        apellido = d.get("apellido") or d.get("last_name")
-        correo = d.get("correo") or d.get("email")
-        tipo_doc_desc = d.get("tipo_documento") or d.get("tipo_doc") or d.get("doc_type")
-        num_documento = d.get("num_documento") or d.get("documento") or d.get("doc_number")
-        telefono = d.get("num_telefono") or d.get("telefono") or d.get("phone")
-        raw_pass = d.get("password")
+        
+        # Extraer campos con sinónimos
+        codigo = get_col(row, "codigo_docente", "docente", "codigo")
+        nombre = get_col(row, "nombre", "first_name")
+        apellido = get_col(row, "apellido", "last_name")
+        correo = get_col(row, "correo", "email")
+        tipo_doc_desc = get_col(row, "tipo_documento", "tipo_doc", "doc_type")
+        num_documento = get_col(row, "num_documento", "documento", "doc_number")
+        telefono = get_col(row, "num_telefono", "telefono", "phone")
+        raw_pass = get_col(row, "password")
+        
+        # Limpiar strings
+        if codigo: codigo = str(codigo).strip()[:50]
+        if nombre: nombre = str(nombre).strip()[:50]
+        if apellido: apellido = str(apellido).strip()[:50]
+        if correo: correo = str(correo).strip()[:100]
+        if tipo_doc_desc: tipo_doc_desc = str(tipo_doc_desc).strip()
+        if num_documento: num_documento = str(num_documento).strip()[:20]
+        if telefono: telefono = str(telefono).strip()[:20]
+        if raw_pass: raw_pass = str(raw_pass).strip()
+        
         if not (codigo and nombre and apellido and correo and tipo_doc_desc and num_documento):
-            errors.append({"row": idx, "error": "Faltan columnas requeridas"}); continue
+            errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
+        
         # Tipo documento
-        tipo_doc = TipoDocumento.objects.filter(descripcion__iexact=tipo_doc_desc).first()
+        tipo_doc = tipos_documento_map.get(tipo_doc_desc.lower())
         if not tipo_doc:
-            errors.append({"row": idx, "error": f"TipoDocumento no encontrado: {tipo_doc_desc}"}); continue
-        # Existente?
-        doc = Docente.objects.filter(codigo_docente=codigo).first()
-        if doc:
+            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: {tipo_doc_desc}"}); continue
+        
+        # Verificar si ya existe
+        if codigo in existing_docentes_codigos:
             existing += 1
-            # Opcional: actualizar teléfono si viene
-            if telefono and telefono != doc.num_telefono:
-                doc.num_telefono = telefono
-                doc.save(update_fields=["num_telefono"])
+            # Guardar para actualizar teléfono después si es necesario
+            if telefono:
+                docentes_to_update[codigo] = telefono
             continue
+        
+        # Validar unicidad de correo y documento
+        if correo in existing_docentes_correos:
+            errors.append({"row": row_num, "error": f"Correo ya existe: {correo}"}); continue
+        if num_documento in existing_docentes_docs:
+            errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
+        
         # Generar contraseña si no viene
         password = raw_pass or secrets.token_urlsafe(8)  # ~11 chars base64
         hashed = make_password(password)
+        
+        # Agregar a lista de creación
+        to_create.append(Docente(
+            nombre=nombre,
+            apellido=apellido,
+            codigo_docente=codigo,
+            contrasenia_docente=hashed,
+            correo=correo,
+            tipo_documento=tipo_doc,
+            num_documento=num_documento,
+            num_telefono=telefono or None
+        ))
+        # Marcar como existente para evitar duplicados en el mismo archivo
+        existing_docentes_codigos.add(codigo)
+        existing_docentes_correos.add(correo)
+        existing_docentes_docs.add(num_documento)
+        created += 1
+    
+    # BULK INSERT con transacción atómica
+    if to_create:
         try:
-            Docente.objects.create(
-                nombre=nombre, apellido=apellido, codigo_docente=codigo,
-                contrasenia_docente=hashed, correo=correo, tipo_documento=tipo_doc,
-                num_documento=num_documento, num_telefono=telefono or None,
-            )
-            created += 1
+            with transaction.atomic():
+                Docente.objects.bulk_create(to_create, batch_size=500)
         except Exception as e:
-            errors.append({"row": idx, "error": f"No se pudo crear ({e})"})
+            errors.append({"error": f"Error en inserción masiva: {str(e)}"})
+            created = 0
+    
+    # Actualizar teléfonos de existentes si es necesario
+    if docentes_to_update:
+        try:
+            for codigo, telefono in docentes_to_update.items():
+                Docente.objects.filter(codigo_docente=codigo).update(num_telefono=telefono)
+        except Exception:
+            pass
+    
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
     payload = {"created": created, "existing": existing, "errors": errors}
@@ -769,10 +1896,11 @@ def coordinador_import_docentes_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([])
 def coordinador_import_asignaturas_ras_view(request):
-    """Importa asignaturas y RAs desde CSV. Solo coordinador.
+    """Importa asignaturas y RAs desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
     Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa
     Columnas RA opcionales (si presentes se crea RA): ra_descripcion, ra_porcentaje
     Grupo opcional: grupo
+    Soporta: .csv, .xlsx, .xls
     Sinónimos aceptados:
       - codigo_asignatura | asignatura | codigo
       - nombre_asignatura | nombre | nombre_curso
@@ -787,74 +1915,122 @@ def coordinador_import_asignaturas_ras_view(request):
         return err
     f = request.FILES.get("file") or request.FILES.get("csv")
     if not f:
-        return Response({"detail": "Archivo CSV requerido"}, status=status.HTTP_400_BAD_REQUEST)
-    fname = getattr(f, 'name', '')
-    ctype = (getattr(f, 'content_type', '') or '').lower()
-    if not fname.lower().endswith('.csv') and 'csv' not in ctype:
-        return Response({"detail": "Se requiere archivo .csv"}, status=status.HTTP_400_BAD_REQUEST)
-    if ctype and ctype not in ("text/csv", "application/vnd.ms-excel", "application/csv", "text/plain"):
-        return Response({"detail": f"Tipo MIME no permitido: {ctype}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Archivo requerido (CSV o Excel)"}, status=status.HTTP_400_BAD_REQUEST)
+    fname = getattr(f, 'name', '').lower()
+    
+    # Validar extensión del archivo
+    if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
+        return Response({"detail": "Se requiere archivo .csv, .xlsx o .xls"}, status=status.HTTP_400_BAD_REQUEST)
+    
     size = int(getattr(f, "size", 0) or 0)
-    if size > 5 * 1024 * 1024:
-        return Response({"detail": "El archivo supera 5MB"}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        text_stream = io.TextIOWrapper(f.file, encoding="utf-8-sig")
-    except Exception:
-        content = f.read(); text_stream = io.StringIO(content.decode("utf-8", errors="ignore"))
-    reader = csv.DictReader(text_stream)
+    if size > 10 * 1024 * 1024:  # Aumentado a 10MB para Excel
+        return Response({"detail": "El archivo supera 10MB"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Leer archivo con pandas (soporta CSV y Excel)
+    df = _read_imported_file(f)
+    if df is None or df.empty:
+        return Response(
+            {"detail": "No se pudo leer el archivo o está vacío. Intente con formato .xlsx o .csv UTF-8."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Normalizar nombres de columnas
+    df.columns = df.columns.str.strip().str.lower()
+    
+    # OPTIMIZACIÓN: Pre-cargar datos existentes
+    docentes_map = {d.codigo_docente: d for d in Docente.objects.all()}
+    programas_map = {p.codigo_programa: p for p in Programa.objects.all()}
+    asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+    
+    # Calcular sumas de porcentajes de RAs por asignatura
+    ra_sumas = {}
+    for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura').annotate(suma=Sum('porcentaje_ra')):
+        ra_sumas[ra['asignatura__codigo_asignatura']] = float(ra['suma'] or 0)
+    
     created_asig = 0
     existing_asig = 0
     created_ras = 0
     errors = []
     max_rows = 5000
-    for idx, raw in enumerate(reader, start=2):
-        if idx-1 > max_rows:
-            errors.append({"row": idx, "error": f"Se excede límite de {max_rows} filas"})
+    asignaturas_to_create = []
+    asignaturas_to_update = {}
+    ras_to_create = []
+    ras_pendientes = []  # Para procesar después de crear asignaturas
+    
+    # Helper function para acceder a columnas de pandas de forma segura
+    def get_col(row, *col_names):
+        """Intenta obtener el valor de la primera columna que existe y no es None/NaN"""
+        for col in col_names:
+            if col in row.index:
+                val = row[col]
+                if pd.notna(val):
+                    return val
+        return None
+    
+    for idx, row in df.iterrows():
+        row_num = idx + 2  # +2 porque índice empieza en 0 y hay header
+        if idx >= max_rows:
+            errors.append({"row": row_num, "error": f"Se excede límite de {max_rows} filas"})
             break
-        d = { (k or "").strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in (raw or {}).items() }
-        for k in list(d.keys()):
-            v = d[k]
-            if isinstance(v, str):
-                d[k] = v.replace('\x00','').strip()[:255]
-        codigo = d.get("codigo_asignatura") or d.get("asignatura") or d.get("codigo")
-        nombre = d.get("nombre_asignatura") or d.get("nombre") or d.get("nombre_curso")
-        codigo_doc = d.get("codigo_docente") or d.get("docente")
-        codigo_prog = d.get("codigo_programa") or d.get("programa")
-        grupo = d.get("grupo") or None
-        ra_desc = d.get("ra_descripcion") or d.get("ra_desc") or d.get("descripcion_ra")
-        raw_pct = d.get("ra_porcentaje") or d.get("ra_pct") or d.get("porcentaje_ra")
+        
+        # Extraer campos con sinónimos
+        codigo = get_col(row, "codigo_asignatura", "asignatura", "codigo")
+        nombre = get_col(row, "nombre_asignatura", "nombre", "nombre_curso")
+        codigo_doc = get_col(row, "codigo_docente", "docente")
+        codigo_prog = get_col(row, "codigo_programa", "programa")
+        grupo = get_col(row, "grupo")
+        ra_desc = get_col(row, "ra_descripcion", "ra_desc", "descripcion_ra")
+        raw_pct = get_col(row, "ra_porcentaje", "ra_pct", "porcentaje_ra")
+        
+        # Limpiar strings
+        if codigo: codigo = str(codigo).strip()[:50]
+        if nombre: nombre = str(nombre).strip()[:200]
+        if codigo_doc: codigo_doc = str(codigo_doc).strip()[:50]
+        if codigo_prog: codigo_prog = str(codigo_prog).strip()[:50]
+        if grupo: grupo = str(grupo).strip()[:50]
+        if ra_desc: ra_desc = str(ra_desc).strip()[:255]
+        
         if not (codigo and nombre and codigo_doc and codigo_prog):
-            errors.append({"row": idx, "error": "Faltan columnas requeridas asignatura"}); continue
-        docente = Docente.objects.filter(codigo_docente=codigo_doc).first()
+            errors.append({"row": row_num, "error": "Faltan columnas requeridas asignatura"}); continue
+        
+        docente = docentes_map.get(codigo_doc)
         if not docente:
-            errors.append({"row": idx, "error": f"Docente no encontrado: {codigo_doc}"}); continue
-        programa = Programa.objects.filter(codigo_programa=codigo_prog).first()
+            errors.append({"row": row_num, "error": f"Docente no encontrado: {codigo_doc}"}); continue
+        
+        programa = programas_map.get(codigo_prog)
         if not programa:
-            errors.append({"row": idx, "error": f"Programa no encontrado: {codigo_prog}"}); continue
-        asign = Asignatura.objects.filter(codigo_asignatura=codigo).first()
+            errors.append({"row": row_num, "error": f"Programa no encontrado: {codigo_prog}"}); continue
+        
+        # Verificar si asignatura existe
+        asign = asignaturas_map.get(codigo)
         if not asign:
-            try:
-                asign = Asignatura.objects.create(
-                    nombre=nombre, codigo_asignatura=codigo, docente=docente,
-                    grupo=grupo, programa=programa
-                )
+            # Verificar si ya la vamos a crear en este batch
+            if codigo not in [a.codigo_asignatura for a in asignaturas_to_create]:
+                asignaturas_to_create.append(Asignatura(
+                    nombre=nombre,
+                    codigo_asignatura=codigo,
+                    docente=docente,
+                    grupo=grupo,
+                    programa=programa
+                ))
+                asignaturas_map[codigo] = None  # Marcador temporal
                 created_asig += 1
-            except Exception as e:
-                errors.append({"row": idx, "error": f"No se pudo crear asignatura ({e})"}); continue
         else:
-            existing_asig += 1
-            # Opcional: actualizar nombre/grupo si difiere
+            if codigo not in asignaturas_to_update:
+                existing_asig += 1
+            # Actualizar nombre/grupo si difiere
             changed = False
+            updates = {}
             if nombre and asign.nombre != nombre:
-                asign.nombre = nombre; changed = True
+                updates['nombre'] = nombre
+                changed = True
             if grupo and asign.grupo != grupo:
-                asign.grupo = grupo; changed = True
+                updates['grupo'] = grupo
+                changed = True
             if changed:
-                try:
-                    asign.save(update_fields=["nombre", "grupo"])
-                except Exception:
-                    pass
-        # Crear RA si columnas presentes
+                asignaturas_to_update[codigo] = updates
+        
+        # Procesar RA si columnas presentes
         if ra_desc and raw_pct is not None and raw_pct != "":
             try:
                 pct = float(raw_pct)
@@ -862,14 +2038,60 @@ def coordinador_import_asignaturas_ras_view(request):
                 errors.append({"row": idx, "error": f"ra_porcentaje inválido: {raw_pct}"}); continue
             if pct < 0 or pct > 100:
                 errors.append({"row": idx, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
-            suma_actual = (ResultadoDeAprendizaje.objects.filter(asignatura=asign).aggregate(v=Sum("porcentaje_ra"))["v"] or 0)
+            
+            # Validar suma de porcentajes
+            suma_actual = ra_sumas.get(codigo, 0)
             if float(suma_actual) + pct > 100.0:
                 errors.append({"row": idx, "error": f"Suma RA excede 100% ({float(suma_actual)+pct:.2f})"}); continue
-            try:
-                ResultadoDeAprendizaje.objects.create(asignatura=asign, porcentaje_ra=pct, descripcion=ra_desc)
-                created_ras += 1
-            except Exception as e:
-                errors.append({"row": idx, "error": f"No se pudo crear RA ({e})"})
+            
+            # Guardar para crear después
+            ras_pendientes.append({
+                'codigo_asignatura': codigo,
+                'descripcion': ra_desc,
+                'porcentaje': pct
+            })
+            ra_sumas[codigo] = suma_actual + pct
+            created_ras += 1
+    
+    # BULK INSERT de asignaturas nuevas
+    if asignaturas_to_create:
+        try:
+            with transaction.atomic():
+                Asignatura.objects.bulk_create(asignaturas_to_create, batch_size=500)
+                # Recargar mapa de asignaturas con las recién creadas
+                asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+        except Exception as e:
+            errors.append({"error": f"Error en inserción masiva de asignaturas: {str(e)}"})
+            created_asig = 0
+            ras_pendientes = []  # No crear RAs si falló la creación de asignaturas
+    
+    # Actualizar asignaturas existentes
+    if asignaturas_to_update:
+        try:
+            for codigo, updates in asignaturas_to_update.items():
+                Asignatura.objects.filter(codigo_asignatura=codigo).update(**updates)
+        except Exception:
+            pass
+    
+    # BULK INSERT de RAs
+    if ras_pendientes:
+        try:
+            for ra_data in ras_pendientes:
+                asign = asignaturas_map.get(ra_data['codigo_asignatura'])
+                if asign:
+                    ras_to_create.append(ResultadoDeAprendizaje(
+                        asignatura=asign,
+                        porcentaje_ra=ra_data['porcentaje'],
+                        descripcion=ra_data['descripcion']
+                    ))
+            
+            if ras_to_create:
+                with transaction.atomic():
+                    ResultadoDeAprendizaje.objects.bulk_create(ras_to_create, batch_size=500)
+        except Exception as e:
+            errors.append({"error": f"Error en inserción masiva de RAs: {str(e)}"})
+            created_ras = 0
+    
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
     payload = {
@@ -905,28 +2127,33 @@ def coordinador_import_asignaturas_ras_view(request):
 def logout_view(request):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
+@ratelimit(key='user_or_ip', rate='10/h', method='POST', block=True)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_forgot_view(request):
     """
-    Endpoint para solicitar recuperación de contraseña mediante OTP.
+    Endpoint para solicitar recuperación de contraseña mediante OTP seguro.
+    Rate limiting: 5 intentos/minuto por IP, 10 intentos/hora por usuario/IP
     
-    Busca el correo primero en Estudiantes, luego en Docentes.
-    Genera un código OTP de 6 dígitos y lo envía por correo electrónico.
+    - Usa secrets en lugar de random para generar OTP
+    - Registra evento de seguridad
+    - OTP de 6 dígitos con expiración de 5 minutos
     
     Request Body:
         - email (str): Correo electrónico del usuario
     
     Response:
         - 200: {"ok": true, "message": "Si el correo existe, recibirás un código OTP"}
-        - 400: Error de validación
     """
-    import random
     from django.utils import timezone
     from datetime import timedelta
     from ..models.models import PasswordResetOTP
     from ..serializers.serializers import PasswordForgotSerializer
+    
+    # Obtener IP para auditoría
+    ip_address = get_client_ip(request)
 
     # Validar datos de entrada con serializer
     serializer = PasswordForgotSerializer(data=request.data)
@@ -950,9 +2177,14 @@ def password_forgot_view(request):
         if docente:
             user = docente
             rol = "docente"
+        else:
+            # 3. Si no es docente, buscar en Coordinadores
+            coordinador = Coordinador.objects.filter(correo__iexact=email).first()
+            if coordinador:
+                user = coordinador
+                rol = "coordinador"
 
     # Siempre responder 200 OK para evitar enumeración de usuarios
-    # (no revelar si el email existe o no en la base de datos)
     if user and rol:
         try:
             # Invalidar todos los OTPs anteriores no usados del mismo email
@@ -961,16 +2193,26 @@ def password_forgot_view(request):
                 is_used=False
             ).update(is_used=True)
 
-            # Generar código OTP de 6 dígitos aleatorio
-            otp_code = str(random.randint(100000, 999999))
+            # Generar código OTP SEGURO usando secrets
+            otp_code = generate_secure_otp(length=6)
             
-            # Crear nuevo registro OTP con expiración de 5 minutos (según requisitos)
+            # Crear nuevo registro OTP con expiración de 5 minutos
             expires_at = timezone.now() + timedelta(minutes=5)
             PasswordResetOTP.objects.create(
                 email=email.lower(),
                 otp_code=otp_code,
                 expires_at=expires_at,
                 rol=rol
+            )
+            
+            # Registrar evento de seguridad
+            registrar_evento_seguridad(
+                evento='OTP_GENERATED',
+                usuario_codigo=getattr(user, 'codigo_estudiante', None) or 
+                              getattr(user, 'codigo_docente', None) or
+                              getattr(user, 'codigo_coordinador', None),
+                ip_address=ip_address,
+                detalles={'email': email, 'rol': rol}
             )
 
             # Preparar y enviar correo electrónico
@@ -979,14 +2221,14 @@ def password_forgot_view(request):
                 f"Hola {user.nombre},\n\n"
                 "Recibimos una solicitud para restablecer tu contraseña en RA Manager.\n\n"
                 f"Tu código de verificación es: {otp_code}\n\n"
-                "⚠️ Este código es válido por 5 minutos.\n\n"
+                "Este código es válido por 5 minutos.\n\n"
                 "Si no solicitaste este cambio, puedes ignorar este mensaje de forma segura.\n\n"
                 "Saludos,\n"
                 "Equipo RA Manager\n"
                 "Universidad del Valle"
             )
             
-            # Enviar correo (fail_silently=False para capturar errores en desarrollo)
+            # Enviar correo
             send_mail(
                 subject=subject,
                 message=message,
@@ -1006,12 +2248,15 @@ def password_forgot_view(request):
         "message": "Si el correo está registrado, recibirás un código de verificación"
     })
 
+@ratelimit(key='ip', rate='10/m', method='POST', block=True)
+@ratelimit(key='user_or_ip', rate='20/h', method='POST', block=True)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def verify_otp_view(request):
     """
     Endpoint para verificar un código OTP.
+    Rate limiting: 10 intentos/minuto por IP, 20 intentos/hora por usuario/IP
     
     Valida que el código OTP sea correcto, no esté usado y no haya expirado.
     
@@ -1065,30 +2310,37 @@ def verify_otp_view(request):
 
     return Response(response_data)
 
+@ratelimit(key='ip', rate='10/m', method='POST', block=True)
+@ratelimit(key='user_or_ip', rate='20/h', method='POST', block=True)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_reset_view(request):
     """
-    Endpoint para restablecer la contraseña usando un código OTP verificado.
+    Endpoint para restablecer la contraseña usando OTP verificado.
+    Rate limiting: 10 intentos/minuto por IP, 20 intentos/hora por usuario/IP
     
-    Cambia la contraseña del usuario y marca el OTP como usado.
-    Utiliza transacciones para garantizar consistencia.
+    - Valida fortaleza de la contraseña
+    - Usa transacciones atómicas
+    - Registra evento de seguridad
+    - Marca OTP como usado
     
     Request Body:
-        - email (str): Correo electrónico del usuario
+        - email (str): Correo electrónico
         - otp_code (str): Código OTP de 6 dígitos
-        - password (str): Nueva contraseña (mínimo 6 caracteres)
+        - password (str): Nueva contraseña (requisitos estrictos)
     
     Response:
-        - 200: {"ok": true, "message": "Contraseña actualizada correctamente"}
-        - 400: Error de validación o código inválido
-        - 404: Usuario no encontrado
+        - 200: Contraseña actualizada
+        - 400: Error de validación
     """
     from django.utils import timezone
     from django.db import transaction
     from ..models.models import PasswordResetOTP
     from ..serializers.serializers import PasswordResetSerializer
+    
+    # Obtener IP para auditoría
+    ip_address = get_client_ip(request)
 
     # Validar datos de entrada con serializer
     serializer = PasswordResetSerializer(data=request.data)
@@ -1098,6 +2350,11 @@ def password_reset_view(request):
     email = serializer.validated_data["email"]
     otp_code = serializer.validated_data["otp_code"]
     new_password = serializer.validated_data["password"]
+    
+    # VALIDAR FORTALEZA DE LA CONTRASEÑA
+    is_valid, error_msg = validate_password_strength(new_password)
+    if not is_valid:
+        return Response({"message": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
     # Buscar el OTP más reciente que coincida y sea válido
     otp = PasswordResetOTP.objects.filter(
@@ -1108,6 +2365,13 @@ def password_reset_view(request):
     ).order_by('-created_at').first()
 
     if not otp:
+        # Registrar evento de OTP fallido
+        registrar_evento_seguridad(
+            evento='OTP_FAILED',
+            usuario_codigo=None,
+            ip_address=ip_address,
+            detalles={'email': email, 'motivo': 'OTP inválido o expirado'}
+        )
         return Response(
             {"message": "Código OTP inválido o expirado. Solicita un nuevo código."},
             status=status.HTTP_400_BAD_REQUEST
@@ -1120,6 +2384,7 @@ def password_reset_view(request):
         with transaction.atomic():
             # Buscar y actualizar contraseña según el rol
             user = None
+            codigo_usuario = None
             
             if rol == "docente":
                 user = Docente.objects.filter(correo__iexact=email).first()
@@ -1128,9 +2393,9 @@ def password_reset_view(request):
                         {"message": "Usuario docente no encontrado"},
                         status=status.HTTP_404_NOT_FOUND
                     )
-                # Actualizar contraseña hasheada
                 user.contrasenia_docente = make_password(new_password)
                 user.save(update_fields=["contrasenia_docente"])
+                codigo_usuario = user.codigo_docente
                 
             elif rol == "estudiante":
                 user = Estudiante.objects.filter(correo__iexact=email).first()
@@ -1139,9 +2404,20 @@ def password_reset_view(request):
                         {"message": "Usuario estudiante no encontrado"},
                         status=status.HTTP_404_NOT_FOUND
                     )
-                # Actualizar contraseña hasheada
                 user.contrasena_estudiante = make_password(new_password)
                 user.save(update_fields=["contrasena_estudiante"])
+                codigo_usuario = user.codigo_estudiante
+                
+            elif rol == "coordinador":
+                user = Coordinador.objects.filter(correo__iexact=email).first()
+                if not user:
+                    return Response(
+                        {"message": "Usuario coordinador no encontrado"},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                user.contrasenia_coord = make_password(new_password)
+                user.save(update_fields=["contrasenia_coord"])
+                codigo_usuario = user.codigo_coordinador
             else:
                 return Response(
                     {"message": "Rol de usuario no válido"},
@@ -1157,10 +2433,16 @@ def password_reset_view(request):
                 email__iexact=email,
                 is_used=False
             ).exclude(id=otp.id).update(is_used=True)
+            
+            # Registrar evento de seguridad
+            registrar_evento_seguridad(
+                evento='PASSWORD_RESET_SUCCESS',
+                usuario_codigo=codigo_usuario,
+                ip_address=ip_address,
+                detalles={'email': email, 'rol': rol}
+            )
 
-        # Log de éxito (opcional)
-        logger_instance = logging.getLogger(__name__)
-        logger_instance.info(f"Contraseña restablecida exitosamente para {email} (rol: {rol})")
+        logger.info(f"Contraseña restablecida exitosamente para {email} (rol: {rol})")
 
         return Response({
             "ok": True,
@@ -1178,32 +2460,75 @@ def password_reset_view(request):
         )
 
 
-class TaskViewSet(viewsets.ModelViewSet):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-
 class TipoDocumentoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para tipos de documento.
+    Acceso público para registro de usuarios.
+    """
     queryset = TipoDocumento.objects.all()
     serializer_class = TipoDocumentoSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None  # Sin paginación para catálogos pequeños
+
 
 class TipoActividadViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para tipos de actividad.
+    Solo lectura para usuarios autenticados.
+    """
     queryset = TipoActividad.objects.all()
     serializer_class = TipoActividadSerializer
+    permission_classes = [AllowAny]  # Cambiable a IsAuthenticated según necesidad
+    pagination_class = None
+    http_method_names = ['get', 'head', 'options']  # Solo lectura
+
 
 class ProgramaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para programas académicos.
+    Solo lectura para usuarios autenticados.
+    """
     queryset = Programa.objects.all()
     serializer_class = ProgramaSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None
+    http_method_names = ['get', 'head', 'options']
+
 
 class DocenteViewSet(viewsets.ModelViewSet):
-    queryset = Docente.objects.all()
+    """
+    ViewSet para docentes.
+    ADVERTENCIA: Datos sensibles - requiere autenticación y permisos.
+    """
+    # Optimización: select_related para evitar queries N+1 al acceder a tipo_documento
+    queryset = Docente.objects.select_related('tipo_documento').all()
     serializer_class = DocenteSerializer
+    permission_classes = [AllowAny]  # TODO: Cambiar a IsAuthenticated + custom permissions
+    # TODO: Implementar filtrado por usuario autenticado
+
 
 class EstudianteViewSet(viewsets.ModelViewSet):
-    queryset = Estudiante.objects.all()
+    """
+    ViewSet para estudiantes.
+    ADVERTENCIA: Datos sensibles - requiere autenticación y permisos.
+    """
+    # Optimización: select_related para tipo_documento y programa
+    queryset = Estudiante.objects.select_related('tipo_documento', 'programa').all()
     serializer_class = EstudianteSerializer
+    permission_classes = [AllowAny]  # TODO: Cambiar a IsAuthenticated + custom permissions
+    # TODO: Implementar filtrado por usuario autenticado
+
 
 class AsignaturaViewSet(viewsets.ModelViewSet):
-    queryset = Asignatura.objects.all()
+    # Optimización: select_related para docente y programa
+    queryset = Asignatura.objects.select_related(
+        'docente',
+        'docente__tipo_documento',
+        'programa'
+    ).prefetch_related(
+        'resultadodeaprendizaje_set',
+        'matricula_set__estudiante'
+    ).order_by('codigo_asignatura')
     serializer_class = AsignaturaSerializer
     lookup_field = "codigo_asignatura"
 
@@ -1333,6 +2658,70 @@ class AsignaturaViewSet(viewsets.ModelViewSet):
             "fecha_subida": rec.fecha_subida,
         }, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["get", "post"], url_path="anuncios")
+    def anuncios(self, request, codigo_asignatura=None):
+        asign = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
+        if not asign:
+            return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        # GET: listar anuncios
+        if request.method.lower() == "get":
+            qs = Anuncio.objects.filter(asignatura=asign).select_related("docente").order_by("-fecha_publicacion")
+            out = []
+            for a in qs:
+                out.append({
+                    "id": a.id,
+                    "titulo": a.titulo,
+                    "contenido": a.contenido,
+                    "fecha_publicacion": a.fecha_publicacion,
+                    "es_importante": a.es_importante,
+                    "docente_nombre": f"{a.docente.nombre} {a.docente.apellido}",
+                })
+            return Response(out)
+
+        # POST: crear anuncio (requiere autenticación de docente)
+        token = _bearer_token(request)
+        docente_id = None
+        if token:
+            try:
+                data = signing.loads(token, max_age=TOKEN_MAX_AGE)
+                if data.get("rol") == "docente":
+                    docente_id = data.get("id")
+            except Exception:
+                pass
+        
+        if not docente_id:
+            return Response({"detail": "Autenticación de docente requerida"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Verificar que el docente pertenece a la asignatura
+        if asign.docente_id != docente_id:
+            return Response({"detail": "No tienes permiso para crear anuncios en esta asignatura"}, status=status.HTTP_403_FORBIDDEN)
+        
+        titulo = request.data.get("titulo", "").strip()
+        contenido = request.data.get("contenido", "").strip()
+        es_importante = request.data.get("es_importante", False)
+        
+        if not titulo:
+            return Response({"detail": "El título es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        if not contenido:
+            return Response({"detail": "El contenido es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        anuncio = Anuncio.objects.create(
+            asignatura=asign,
+            docente_id=docente_id,
+            titulo=titulo,
+            contenido=contenido,
+            es_importante=bool(es_importante)
+        )
+        
+        return Response({
+            "id": anuncio.id,
+            "titulo": anuncio.titulo,
+            "contenido": anuncio.contenido,
+            "fecha_publicacion": anuncio.fecha_publicacion,
+            "es_importante": anuncio.es_importante,
+        }, status=status.HTTP_201_CREATED)
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -1390,6 +2779,41 @@ def ra_indicador_detail_view(request, ra_id: int, ind_id: int):
         # Eliminación en cascada de relaciones se maneja por FK CASCADE en RaActividadIndicador
         ind.delete()
 
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+@api_view(["DELETE"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def anuncio_delete_view(request, anuncio_id: int):
+    """
+    DELETE: Elimina un anuncio.
+    Requiere:
+      - Header Authorization con token de docente
+      - El docente debe ser el dueño del anuncio
+    """
+    anuncio = Anuncio.objects.filter(pk=anuncio_id).select_related("docente", "asignatura").first()
+    if not anuncio:
+        return Response({"detail": "Anuncio no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    token = _bearer_token(request)
+    if not token:
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        return Response({"detail": "Solo un docente puede eliminar anuncios"}, status=status.HTTP_403_FORBIDDEN)
+    
+    docente_id = tok.get("id")
+    
+    # Verificar que el docente es el dueño del anuncio O es el docente de la asignatura
+    if anuncio.docente_id != docente_id and anuncio.asignatura.docente_id != docente_id:
+        return Response({"detail": "No tienes permiso para eliminar este anuncio"}, status=status.HTTP_403_FORBIDDEN)
+    
+    anuncio.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(["GET", "POST"])
@@ -1512,7 +2936,7 @@ def ra_actividades_view(request, ra_id: int):
     bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
     RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
     
-    # 🔔 Crear notificación personalizada para cada estudiante del curso
+    # Crear notificación personalizada para cada estudiante del curso
     try:
         ra_obj = ResultadoDeAprendizaje.objects.filter(pk=ra_id).select_related('asignatura').first()
         if ra_obj:
@@ -1525,7 +2949,7 @@ def ra_actividades_view(request, ra_id: int):
             
             # Crear notificación personalizada para cada estudiante
             for mat in matriculas:
-                notif_text = f"🎯 {mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                notif_text = f"{mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
                 _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
     except Exception:
         pass  # No fallar si hay error en notificación
@@ -1703,7 +3127,7 @@ def notas_view(request):
         obj.retroalimentacion = retro
         obj.save(update_fields=["nota_ra_actividad", "retroalimentacion"])
     
-    # 🔔 Crear notificación personalizada para el estudiante
+    # Crear notificación personalizada para el estudiante
     try:
         matricula = obj.matricula
         ra_act = obj.ra_actividad
@@ -1712,7 +3136,7 @@ def notas_view(request):
         estudiante = matricula.estudiante
         
         # Mensaje personalizado con el nombre del estudiante
-        notif_text = f"📝 {estudiante.primer_nombre}, tu calificación en {asignatura.nombre}: {actividad.nombre_actividad} es {nota}/5"
+        notif_text = f"{estudiante.primer_nombre}, tu calificación en {asignatura.nombre}: {actividad.nombre_actividad} es {nota}/5"
         notif_link = f"/estudiante?curso={asignatura.codigo_asignatura}"
         
         _add_notification(estudiante.id_estudiante, "grade", notif_text, notif_link)
@@ -1866,6 +3290,381 @@ def course_grade_view(request, codigo_asignatura: str, id_estudiante: int):
             "coverage": round(total_coverage, 4),
         },
         "ras": out_ras,
+    })
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
+    """
+    Devuelve información detallada de una asignatura para un estudiante específico.
+    Incluye:
+    - Información de la asignatura
+    - Información del docente
+    - Total de estudiantes matriculados
+    - Estadísticas del estudiante (nota, cobertura)
+    - Estadísticas del curso (promedio, desviación)
+    - Lista de RAs con progreso
+    """
+    asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).select_related("docente", "programa").first()
+    if not asig:
+        return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Verificar matrícula del estudiante
+    mat = (Matricula.objects
+           .filter(asignatura=asig, estudiante_id=id_estudiante)
+           .select_related("periodo")
+           .order_by("-id_matricula")
+           .first())
+    
+    if not mat:
+        return Response({"detail": "Sin matrícula para este estudiante en la asignatura"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Información básica de la asignatura
+    asignatura_info = {
+        "codigo": asig.codigo_asignatura,
+        "nombre": asig.nombre,
+        "grupo": asig.grupo,
+        "creditos": None,  # Campo no disponible en el modelo
+        "programa": {
+            "codigo": asig.programa.codigo_programa if asig.programa else None,
+            "nombre": asig.programa.nombre if asig.programa else None,
+        },
+        "periodo": {
+            "id": mat.periodo.id_periodo if mat.periodo else None,
+            "descripcion": mat.periodo.descripcion if mat.periodo else None,
+        },
+    }
+
+    # Información del docente
+    docente_info = None
+    if asig.docente:
+        docente_info = {
+            "codigo": asig.docente.codigo_docente,
+            "nombre": f"{asig.docente.nombre} {asig.docente.apellido}",
+            "correo": asig.docente.correo,
+        }
+
+    # Total de estudiantes matriculados en este curso
+    total_estudiantes = Matricula.objects.filter(asignatura=asig, periodo=mat.periodo).count()
+
+    # Calcular estadísticas del estudiante
+    ras = list(ResultadoDeAprendizaje.objects.filter(asignatura=asig))
+    
+    estudiante_stats = {
+        "nota_strict": 0.0,
+        "nota_progressive": 0.0,
+        "coverage": 0.0,
+        "actividades_totales": 0,
+        "actividades_calificadas": 0,
+    }
+
+    total_strict = 0.0
+    total_prog = 0.0
+    total_coverage = 0.0
+    total_acts = 0
+    total_acts_graded = 0
+
+    ras_info = []
+
+    for ra in ras:
+        rels = list(RaActividad.objects.filter(ra=ra).select_related("actividad"))
+        sum_w = 0.0
+        sum_w_graded = 0.0
+        acc_strict = 0.0
+        acts_graded = 0
+
+        for rel in rels:
+            total_acts += 1
+            w = float(rel.porcentaje_ra_actividad) / 100.0
+            sum_w += w
+            nota_obj = NotasActividad.objects.filter(matricula=mat, ra_actividad=rel).first()
+            nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+            if nota is not None:
+                sum_w_graded += w
+                acc_strict += nota * w
+                acts_graded += 1
+                total_acts_graded += 1
+
+        ra_strict = acc_strict
+        ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else None
+        coverage = min(1.0, max(0.0, sum_w_graded / (sum_w if sum_w > 0 else 1.0)))
+
+        w_ra = float(ra.porcentaje_ra) / 100.0
+        total_strict += (ra_strict or 0.0) * w_ra
+        total_prog += (ra_prog or 0.0) * w_ra
+        total_coverage += coverage * w_ra
+
+        ras_info.append({
+            "id_ra": ra.id_ra,
+            "descripcion": ra.descripcion,
+            "porcentaje_ra": float(ra.porcentaje_ra),
+            "actividades_total": len(rels),
+            "actividades_calificadas": acts_graded,
+            "coverage": round(coverage * 100, 1),
+            "nota": round(ra_prog, 2) if ra_prog is not None else None,
+        })
+
+    estudiante_stats["nota_strict"] = round(total_strict, 2)
+    estudiante_stats["nota_progressive"] = round(total_prog, 2) if total_prog != 0.0 else 0.0
+    estudiante_stats["coverage"] = round(total_coverage * 100, 1)
+    estudiante_stats["actividades_totales"] = total_acts
+    estudiante_stats["actividades_calificadas"] = total_acts_graded
+
+    # Calcular estadísticas del curso (promedio de todos los estudiantes)
+    # Obtenemos todas las matrículas del mismo periodo
+    matriculas_curso = Matricula.objects.filter(asignatura=asig, periodo=mat.periodo).select_related("estudiante")
+    
+    notas_curso = []
+    for m in matriculas_curso:
+        nota_m = 0.0
+        for ra in ras:
+            rels = list(RaActividad.objects.filter(ra=ra))
+            sum_w = 0.0
+            sum_w_graded = 0.0
+            acc_strict = 0.0
+            
+            for rel in rels:
+                w = float(rel.porcentaje_ra_actividad) / 100.0
+                sum_w += w
+                nota_obj = NotasActividad.objects.filter(matricula=m, ra_actividad=rel).first()
+                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                if nota is not None:
+                    sum_w_graded += w
+                    acc_strict += nota * w
+            
+            ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else 0.0
+            w_ra = float(ra.porcentaje_ra) / 100.0
+            nota_m += ra_prog * w_ra
+        
+        notas_curso.append(nota_m)
+
+    curso_stats = {
+        "promedio": 0.0,
+        "nota_max": 0.0,
+        "nota_min": 0.0,
+        "estudiantes_aprobados": 0,
+        "estudiantes_reprobados": 0,
+    }
+
+    if notas_curso:
+        curso_stats["promedio"] = round(sum(notas_curso) / len(notas_curso), 2)
+        curso_stats["nota_max"] = round(max(notas_curso), 2)
+        curso_stats["nota_min"] = round(min(notas_curso), 2)
+        curso_stats["estudiantes_aprobados"] = sum(1 for n in notas_curso if n >= 3.0)
+        curso_stats["estudiantes_reprobados"] = sum(1 for n in notas_curso if n < 3.0)
+
+    return Response({
+        "asignatura": asignatura_info,
+        "docente": docente_info,
+        "estudiantes_matriculados": total_estudiantes,
+        "mi_estadistica": estudiante_stats,
+        "estadistica_curso": curso_stats,
+        "resultados_aprendizaje": ras_info,
+    })
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def course_analytics_view(request, codigo_asignatura: str):
+    """
+    Devuelve análisis general de una asignatura para vista del coordinador.
+    Incluye:
+    - Información de la asignatura
+    - Información del docente
+    - Total de estudiantes matriculados
+    - Estadísticas del curso (promedio, desviación, distribución de notas)
+    - Lista de RAs con promedios generales
+    - Lista de estudiantes con sus notas
+    """
+    # Obtener asignatura con optimización de queries
+    asig = Asignatura.objects.filter(
+        codigo_asignatura=codigo_asignatura
+    ).select_related(
+        "docente", 
+        "programa"
+    ).first()
+    
+    if not asig:
+        return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Obtener periodo más reciente para esta asignatura
+    mat_reciente = (Matricula.objects
+                    .filter(asignatura=asig)
+                    .select_related("periodo")
+                    .order_by("-periodo__id_periodo")
+                    .first())
+    
+    if not mat_reciente:
+        return Response({"detail": "Sin matrículas para esta asignatura"}, status=status.HTTP_404_NOT_FOUND)
+
+    periodo = mat_reciente.periodo
+
+    # Información básica de la asignatura
+    asignatura_info = {
+        "codigo": asig.codigo_asignatura,
+        "nombre": asig.nombre,
+        "grupo": asig.grupo,
+        "creditos": None,  # Campo no disponible en el modelo
+        "programa": {
+            "codigo": asig.programa.codigo_programa if asig.programa else None,
+            "nombre": asig.programa.nombre if asig.programa else None,
+        },
+        "periodo": {
+            "id": periodo.id_periodo if periodo else None,
+            "descripcion": periodo.descripcion if periodo else None,
+        },
+    }
+
+    # Información del docente
+    docente_info = None
+    if asig.docente:
+        docente_info = {
+            "codigo": asig.docente.codigo_docente,
+            "nombre": f"{asig.docente.nombre} {asig.docente.apellido}",
+            "correo": asig.docente.correo,
+        }
+
+    # Optimización: Traer todas las matrículas con estudiantes en una sola query
+    matriculas_curso = Matricula.objects.filter(
+        asignatura=asig, 
+        periodo=periodo
+    ).select_related("estudiante")
+    total_estudiantes = matriculas_curso.count()
+
+    # Optimización: Prefetch RAs con todas sus relaciones
+    ras = list(ResultadoDeAprendizaje.objects.filter(
+        asignatura=asig
+    ).prefetch_related(
+        'raactividad_set',
+        'raactividad_set__notasactividad_set',
+        'raactividad_set__notasactividad_set__matricula'
+    ))
+
+    # Calcular estadísticas por estudiante
+    estudiantes_data = []
+    notas_curso = []
+
+    for mat in matriculas_curso:
+        nota_total = 0.0
+        coverage_total = 0.0
+        acts_calificadas = 0
+        acts_totales = 0
+
+        for ra in ras:
+            # Usar datos ya prefetched para evitar N+1 queries
+            rels = list(ra.raactividad_set.all())
+            sum_w = 0.0
+            sum_w_graded = 0.0
+            acc_strict = 0.0
+            
+            for rel in rels:
+                acts_totales += 1
+                w = float(rel.porcentaje_ra_actividad) / 100.0
+                sum_w += w
+                # Buscar en los datos ya prefetched
+                nota_obj = None
+                for nota in rel.notasactividad_set.all():
+                    if nota.matricula_id == mat.id_matricula:
+                        nota_obj = nota
+                        break
+                
+                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                if nota is not None:
+                    sum_w_graded += w
+                    acc_strict += nota * w
+                    acts_calificadas += 1
+            
+            ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else 0.0
+            coverage = min(1.0, max(0.0, sum_w_graded / (sum_w if sum_w > 0 else 1.0)))
+            w_ra = float(ra.porcentaje_ra) / 100.0
+            nota_total += ra_prog * w_ra
+            coverage_total += coverage * w_ra
+
+        notas_curso.append(nota_total)
+        estudiantes_data.append({
+            "id": mat.estudiante.codigo_estudiante,
+            "nombre": f"{mat.estudiante.nombre} {mat.estudiante.apellido}",
+            "correo": mat.estudiante.correo,
+            "nota": round(nota_total, 2),
+            "coverage": round(coverage_total * 100, 1),
+            "actividades_calificadas": acts_calificadas,
+            "actividades_totales": acts_totales,
+        })
+
+    # Estadísticas del curso
+    curso_stats = {
+        "promedio": 0.0,
+        "nota_max": 0.0,
+        "nota_min": 0.0,
+        "estudiantes_aprobados": 0,
+        "estudiantes_reprobados": 0,
+        "desviacion_estandar": 0.0,
+    }
+
+    if notas_curso:
+        promedio = sum(notas_curso) / len(notas_curso)
+        curso_stats["promedio"] = round(promedio, 2)
+        curso_stats["nota_max"] = round(max(notas_curso), 2)
+        curso_stats["nota_min"] = round(min(notas_curso), 2)
+        curso_stats["estudiantes_aprobados"] = sum(1 for n in notas_curso if n >= 3.0)
+        curso_stats["estudiantes_reprobados"] = sum(1 for n in notas_curso if n < 3.0)
+        
+        # Calcular desviación estándar
+        if len(notas_curso) > 1:
+            varianza = sum((n - promedio) ** 2 for n in notas_curso) / len(notas_curso)
+            curso_stats["desviacion_estandar"] = round(varianza ** 0.5, 2)
+
+    # Información de RAs con promedios
+    ras_info = []
+    for ra in ras:
+        # Usar datos ya prefetched
+        rels = list(ra.raactividad_set.all())
+        notas_ra = []
+        
+        for mat in matriculas_curso:
+            sum_w = 0.0
+            sum_w_graded = 0.0
+            acc_strict = 0.0
+            
+            for rel in rels:
+                w = float(rel.porcentaje_ra_actividad) / 100.0
+                sum_w += w
+                # Buscar en datos prefetched
+                nota_obj = None
+                for nota in rel.notasactividad_set.all():
+                    if nota.matricula_id == mat.id_matricula:
+                        nota_obj = nota
+                        break
+                
+                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                if nota is not None:
+                    sum_w_graded += w
+                    acc_strict += nota * w
+            
+            ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else None
+            if ra_prog is not None:
+                notas_ra.append(ra_prog)
+
+        promedio_ra = round(sum(notas_ra) / len(notas_ra), 2) if notas_ra else 0.0
+        coverage_promedio = round((len(notas_ra) / max(1, len(matriculas_curso))) * 100, 1)
+
+        ras_info.append({
+            "id_ra": ra.id_ra,
+            "descripcion": ra.descripcion,
+            "porcentaje_ra": float(ra.porcentaje_ra),
+            "actividades_total": len(rels),
+            "promedio": promedio_ra,
+            "coverage_promedio": coverage_promedio,
+        })
+
+    return Response({
+        "asignatura": asignatura_info,
+        "docente": docente_info,
+        "estudiantes_matriculados": total_estudiantes,
+        "estadistica_curso": curso_stats,
+        "resultados_aprendizaje": ras_info,
+        "estudiantes": estudiantes_data,
     })
 
 @api_view(["GET", "PUT", "PATCH"])
@@ -2081,7 +3880,7 @@ def profile_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([])
 def password_change_view(request):
-    """Cambia la contraseña del usuario autenticado (docente/estudiante).
+    """Cambia la contraseña del usuario autenticado (docente/estudiante/coordinador).
     Body: { current_password: str, new_password: str }
     Auth: Authorization: Bearer <token>
     """
@@ -2099,35 +3898,41 @@ def password_change_view(request):
     new = body.get("new_password")
     if not cur or not new:
         return Response({"message": "Se requieren current_password y new_password"}, status=status.HTTP_400_BAD_REQUEST)
-    if len(str(new)) < 6:
-        return Response({"message": "La nueva contraseña debe tener al menos 6 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # VALIDAR FORTALEZA DE LA CONTRASEÑA (debe coincidir con frontend)
+    is_valid, error_msg = validate_password_strength(new)
+    if not is_valid:
+        return Response({"message": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
     if rol == "docente":
         u = Docente.objects.filter(pk=uid).first()
         if not u:
             return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            ok = check_password(cur, u.contrasenia_docente)
-        except Exception:
-            ok = (cur == (u.contrasenia_docente or ""))
-        if not ok:
+        # SOLO usar check_password, sin fallback inseguro
+        if not check_user_password(u.contrasenia_docente, cur):
             return Response({"message": "Contraseña actual incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
         u.contrasenia_docente = make_password(new)
         u.save(update_fields=["contrasenia_docente"])
-    else:
+    elif rol == "coordinador":
+        u = Coordinador.objects.filter(pk=uid).first()
+        if not u:
+            return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+        # SOLO usar check_password, sin fallback inseguro
+        if not check_user_password(u.contrasenia_coord, cur):
+            return Response({"message": "Contraseña actual incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
+        u.contrasenia_coord = make_password(new)
+        u.save(update_fields=["contrasenia_coord"])
+    else:  # estudiante
         u = Estudiante.objects.filter(pk=uid).first()
         if not u:
             return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            ok = check_password(cur, u.contrasena_estudiante)
-        except Exception:
-            ok = (cur == (u.contrasena_estudiante or ""))
-        if not ok:
+        # SOLO usar check_password, sin fallback inseguro
+        if not check_user_password(u.contrasena_estudiante, cur):
             return Response({"message": "Contraseña actual incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
         u.contrasena_estudiante = make_password(new)
         u.save(update_fields=["contrasena_estudiante"])
 
-    return Response({"ok": True})
+    return Response({"ok": True, "message": "Contraseña actualizada correctamente"})
 
 
 @api_view(["POST"])
@@ -2193,10 +3998,14 @@ def asignatura_validation_view(request, codigo_asignatura: str):
         "ras": {"suma": float(ra_sum), "ok": float(ra_sum) == 100.0, "faltante": max(0.0, 100.0 - float(ra_sum))},
     })
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
 def notifications_view(request):
+    """
+    GET: Obtener notificaciones del estudiante desde BD (persistentes)
+    POST: Marcar notificaciones como leídas
+    """
     token = _bearer_token(request)
     if not token:
         return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -2208,79 +4017,42 @@ def notifications_view(request):
     if rol != "estudiante":
         return Response([], status=status.HTTP_200_OK)
     
-    # 🔔 Obtener notificaciones del cache
-    cached_notifications = _NOTIFICATIONS_CACHE.get(uid, [])
-
-    mats = Matricula.objects.filter(estudiante_id=uid).select_related("asignatura")
-    hoy = datetime.date.today()
-    limite = hoy + datetime.timedelta(days=7)
-    hace_7_dias = hoy - datetime.timedelta(days=7)
-    proximas, bajas, nuevas_notas, nuevas_actividades = [], [], [], []
-
-    # 1. Actividades próximas a vencer (sin calificar)
-    for m in mats:
-        rels = RaActividad.objects.filter(ra__asignatura=m.asignatura).select_related("actividad", "ra")
-        notas = {n.ra_actividad_id: n for n in NotasActividad.objects.filter(matricula=m)}
-        for rel in rels:
-            act = rel.actividad
-            n = notas.get(rel.id_ra_actividad)
-            if act.fecha_cierre and (hoy <= act.fecha_cierre <= limite) and (not n or n.nota_ra_actividad is None):
-                proximas.append({"kind": "deadline", "text": f'Actividad "{act.nombre_actividad}" de {m.asignatura.nombre} vence {act.fecha_cierre.isoformat()}', "date": act.fecha_cierre.isoformat(), "id": f"deadline-{rel.id_ra_actividad}"})
-
-    # 2. Notas recién calificadas (últimos 7 días) - NUEVO
-    from django.db.models import Max
-    for m in mats:
-        # Buscar notas que fueron actualizadas recientemente
-        # Nota: Necesitaríamos un campo `fecha_calificacion` en NotasActividad para ser preciso
-        # Por ahora, mostramos notas que existen (asumiendo que son recientes si no se habían visto)
-        notas_recientes = NotasActividad.objects.filter(
-            matricula=m,
-            nota_ra_actividad__isnull=False
-        ).select_related('ra_actividad__actividad').order_by('-id')[:5]  # Últimas 5 notas
-        
-        for nota in notas_recientes:
-            act_nombre = nota.ra_actividad.actividad.nombre_actividad
-            nota_val = float(nota.nota_ra_actividad)
-            nuevas_notas.append({
-                "kind": "grade",
-                "text": f'Nueva calificación en "{act_nombre}" de {m.asignatura.nombre}: {nota_val:.1f}/5',
-                "id": f"grade-{nota.id}",
-                "link": f"/estudiante?curso={m.asignatura.codigo_asignatura}"
-            })
-
-    # 3. Nuevas actividades creadas (últimos 7 días) - NUEVO
-    for m in mats:
-        acts_nuevas = Actividad.objects.filter(
-            id_actividad__in=RaActividad.objects.filter(
-                ra__asignatura=m.asignatura
-            ).values_list('actividad_id', flat=True),
-            fecha_creacion__gte=hace_7_dias
-        ).order_by('-fecha_creacion')[:5]
-        
-        for act in acts_nuevas:
-            nuevas_actividades.append({
-                "kind": "resource",
-                "text": f'Nueva actividad "{act.nombre_actividad}" en {m.asignatura.nombre}',
-                "date": act.fecha_creacion.isoformat(),
-                "id": f"activity-{act.id_actividad}",
-                "link": f"/estudiante?curso={m.asignatura.codigo_asignatura}"
-            })
-
-    # 4. Promedios bajos
-    for m in mats:
-        qs = NotasActividad.objects.filter(matricula=m).exclude(nota_ra_actividad__isnull=True)
-        avg = qs.aggregate(v=Avg("nota_ra_actividad"))["v"]
-        if avg is not None and avg < 3.0:
-            bajas.append({"kind": "danger", "text": f'Vas bajo en {m.asignatura.nombre}: promedio {avg:.2f}/5', "id": f"low-{m.id_matricula}"})
-
-    # Combinar notificaciones del cache con las automáticas del sistema
-    all_notifications = (
-        cached_notifications +  # 🔔 Notificaciones en tiempo real (calificaciones, nuevas actividades)
-        proximas[:10] +  # Actividades por vencer
-        bajas[:5]  # Promedios bajos
-    )
-    # Retornar últimas 30 notificaciones
-    return Response(all_notifications[-30:])
+    if request.method == "POST":
+        # Marcar notificaciones como leídas
+        notif_ids = request.data.get("ids", [])
+        if notif_ids:
+            Notificacion.objects.filter(
+                estudiante_id=uid,
+                id__in=notif_ids
+            ).update(leida=True, fecha_lectura=timezone.now())
+        return Response({"message": "Notificaciones actualizadas"}, status=status.HTTP_200_OK)
+    
+    # GET: Obtener notificaciones desde BD
+    # Limitar a las últimas 50 notificaciones no leídas + las 10 más recientes leídas
+    notificaciones_no_leidas = Notificacion.objects.filter(
+        estudiante_id=uid,
+        leida=False
+    ).order_by('-fecha_creacion')[:50]
+    
+    notificaciones_leidas = Notificacion.objects.filter(
+        estudiante_id=uid,
+        leida=True
+    ).order_by('-fecha_creacion')[:10]
+    
+    # Combinar y serializar
+    todas_notificaciones = list(notificaciones_no_leidas) + list(notificaciones_leidas)
+    todas_notificaciones.sort(key=lambda n: n.fecha_creacion, reverse=True)
+    
+    result = [{
+        "id": str(notif.id),
+        "kind": notif.tipo,
+        "text": notif.texto,
+        "date": notif.fecha_creacion.isoformat(),
+        "read": notif.leida,
+        "link": notif.enlace
+    } for notif in todas_notificaciones[:30]]  # Retornar últimas 30
+    
+    return Response(result)
 
 
 @api_view(["POST"])
@@ -2402,7 +4174,7 @@ def actividades_multi_view(request):
                 bulk = [RaActividadIndicador(ra_actividad=rel, indicador_id=i) for i in valid_inds]
                 RaActividadIndicador.objects.bulk_create(bulk, ignore_conflicts=True)
             
-            # 🔔 Crear notificación personalizada para cada estudiante del curso
+            # Crear notificación personalizada para cada estudiante del curso
             try:
                 asignatura = ra_objs[0].asignatura if ra_objs else None
                 if asignatura:
@@ -2412,7 +4184,7 @@ def actividades_multi_view(request):
                     
                     # Crear notificación personalizada para cada estudiante
                     for mat in matriculas:
-                        notif_text = f"🎯 {mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                        notif_text = f"{mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
                         _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
             except Exception:
                 pass  # No fallar si hay error en notificación

@@ -12,6 +12,17 @@ const Recuperar: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showRequirements, setShowRequirements] = useState(false)
+
+  // Validaciones individuales para mostrar en tiempo real
+  const requirements = React.useMemo(() => ({
+    minLength: password.length >= 8,
+    hasUpperCase: /[A-Z]/.test(password),
+    hasLowerCase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecial: /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(password),
+    passwordsMatch: password === confirmPassword && confirmPassword.length > 0
+  }), [password, confirmPassword])
 
   const onSubmitEmail = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,10 +66,29 @@ const Recuperar: React.FC = () => {
       setError('Las contraseñas no coinciden')
       return
     }
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
+    
+    // Validar fortaleza de contraseña (debe coincidir con backend)
+    if (!requirements.minLength) {
+      setError('La contraseña debe tener al menos 8 caracteres')
       return
     }
+    if (!requirements.hasUpperCase) {
+      setError('La contraseña debe contener al menos una mayúscula')
+      return
+    }
+    if (!requirements.hasLowerCase) {
+      setError('La contraseña debe contener al menos una minúscula')
+      return
+    }
+    if (!requirements.hasNumber) {
+      setError('La contraseña debe contener al menos un número')
+      return
+    }
+    if (!requirements.hasSpecial) {
+      setError('La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)')
+      return
+    }
+    
     try {
       setLoading(true)
       setError(null)
@@ -146,7 +176,30 @@ const Recuperar: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setShowRequirements(true)}
                 />
+                {showRequirements && password.length > 0 && (
+                  <div className="mb-3 p-2 border rounded bg-light">
+                    <div className="small fw-bold mb-1">Requisitos de contraseña:</div>
+                    <div className="d-flex flex-column gap-1 small">
+                      <span className={requirements.minLength ? 'text-success' : 'text-danger'}>
+                        {requirements.minLength ? '✓' : '✗'} Mínimo 8 caracteres
+                      </span>
+                      <span className={requirements.hasUpperCase ? 'text-success' : 'text-danger'}>
+                        {requirements.hasUpperCase ? '✓' : '✗'} Una mayúscula (A-Z)
+                      </span>
+                      <span className={requirements.hasLowerCase ? 'text-success' : 'text-danger'}>
+                        {requirements.hasLowerCase ? '✓' : '✗'} Una minúscula (a-z)
+                      </span>
+                      <span className={requirements.hasNumber ? 'text-success' : 'text-danger'}>
+                        {requirements.hasNumber ? '✓' : '✗'} Un número (0-9)
+                      </span>
+                      <span className={requirements.hasSpecial ? 'text-success' : 'text-danger'}>
+                        {requirements.hasSpecial ? '✓' : '✗'} Un carácter especial (!@#$%...)
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <label htmlFor="confirm-password" className="visually-hidden">Confirmar contraseña</label>
                 <input
                   id="confirm-password"
@@ -158,6 +211,11 @@ const Recuperar: React.FC = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
+                {confirmPassword.length > 0 && (
+                  <small className={requirements.passwordsMatch ? 'text-success d-block mb-2' : 'text-danger d-block mb-2'}>
+                    {requirements.passwordsMatch ? '✓ Las contraseñas coinciden' : '✗ Las contraseñas no coinciden'}
+                  </small>
+                )}
                 <button className="btn btn-danger w-100" type="submit" disabled={loading}>
                   {loading ? 'Guardando...' : 'Cambiar contraseña'}
                 </button>

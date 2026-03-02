@@ -1,13 +1,10 @@
 from rest_framework import serializers
 from ..models.models import (
     TipoDocumento, TipoActividad, Programa, Docente, Estudiante, Asignatura,
-    Task, ResultadoDeAprendizaje, Matricula, Recurso, PasswordResetOTP
+    ResultadoDeAprendizaje, Matricula, Recurso, PasswordResetOTP,
+    LoginAttempt, AccountLockout, SecurityEvent
 )
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = "__all__"
 
 class TipoDocumentoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,6 +22,9 @@ class ProgramaSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class DocenteSerializer(serializers.ModelSerializer):
+    # Expandir tipo_documento como objeto anidado
+    tipo_documento = TipoDocumentoSerializer(read_only=True)
+    
     class Meta:
         model = Docente
         fields = "__all__"
@@ -35,6 +35,10 @@ class EstudianteSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class AsignaturaSerializer(serializers.ModelSerializer):
+    # Expandir ForeignKeys como objetos anidados para el frontend
+    docente = DocenteSerializer(read_only=True)
+    programa = ProgramaSerializer(read_only=True)
+    
     class Meta:
         model = Asignatura
         fields = "__all__"

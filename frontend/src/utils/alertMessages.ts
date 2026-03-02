@@ -13,6 +13,19 @@ export const ALERT_MESSAGES = {
     passwordResetError: 'No se pudo restablecer la contraseña. Verifica el enlace o solicita uno nuevo',
     passwordUpdateSuccess: 'Contraseña actualizada correctamente',
     passwordUpdateError: 'Error al actualizar la contraseña. Verifica que la contraseña actual sea correcta',
+    
+    // Seguridad y bloqueos
+    accountLocked: 'Tu cuenta ha sido bloqueada temporalmente por múltiples intentos fallidos. Se ha enviado un correo de notificación.',
+    attemptsRemaining: (attempts: number) => `Te quedan ${attempts} ${attempts === 1 ? 'intento' : 'intentos'}`,
+    otpSent: 'Se ha enviado un código de verificación a tu correo electrónico',
+    otpInvalid: 'El código ingresado no es válido o ha expirado',
+    otpExpired: 'El código ha expirado. Solicita uno nuevo',
+    otpSuccess: 'Código verificado correctamente',
+    
+    // Validación de contraseña
+    passwordTooWeak: 'La contraseña debe cumplir con todos los requisitos de seguridad',
+    passwordMismatch: 'Las contraseñas no coinciden',
+    passwordRequirements: 'La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas, números y caracteres especiales',
   },
 
   // Perfil
@@ -145,6 +158,11 @@ export function formatMessage(message: string, variables: Record<string, string 
     formatted = formatted.replace(`{{${key}}}`, String(value))
   })
   return formatted
+}
+
+// Función para construir mensaje con dinámicamente (ej: attemptsRemaining)
+export function buildMessage(messageFn: (...args: any[]) => string, ...args: any[]): string {
+  return messageFn(...args)
 }
 
 // Función para obtener mensaje de error de API
