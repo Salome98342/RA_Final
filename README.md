@@ -121,7 +121,7 @@ EMAIL_HOST_PASSWORD=contraseña_de_aplicacion
 DEFAULT_FROM_EMAIL=tu_correo@gmail.com
 ```
 
-📚 **Documentación completa:** [`backend/plantillas/CORREO_BIENVENIDA.md`](backend/plantillas/CORREO_BIENVENIDA.md)  
+📚 **Plantillas disponibles:** [`backend/plantillas/`](backend/plantillas/)  
 📁 **Plantillas CSV:** [`backend/plantillas/`](backend/plantillas/)
 
 ---
@@ -277,9 +277,9 @@ El archivo `.env` contiene **información sensible y personal** de cada desarrol
 
 Para información detallada sobre configuración:
 
-1. **[SETUP.md](backend/SETUP.md)** - Guía completa de instalación paso a paso
-2. **[ENV_GUIDE.md](backend/ENV_GUIDE.md)** - Explicación detallada del sistema de variables de entorno
-3. **[EMAIL_SETUP.md](backend/docs/EMAIL_SETUP.md)** - Configuración del sistema de correo electrónico
+1. **[backend/db/README.md](backend/db/README.md)** - Guía de base de datos PostgreSQL
+2. **[backend/ADMIN_SCRIPTS.md](backend/ADMIN_SCRIPTS.md)** - Scripts de administración y diagnóstico
+3. **[GUIA_AGREGAR_ESTUDIANTES.md](./GUIA_AGREGAR_ESTUDIANTES.md)** - Guía para agregar estudiantes
 
 ### 🚀 Inicio Rápido
 
@@ -490,33 +490,33 @@ RA-Manager/
 
 ### 📊 Métricas del Proyecto
 
-- **Backend**: ~5,000 líneas de código Python
-- **Frontend**: ~12,000 líneas de código TypeScript/React
-- **Migraciones**: 23 archivos (historial completo de BD)
-- **Componentes React**: 30+ componentes reutilizables
-- **Endpoints API**: 40+ endpoints RESTful
-- **Documentación**: 2,000+ líneas en Markdown
+- **Backend**: ~5,500 líneas de código Python
+- **Frontend**: ~13,000 líneas de código TypeScript/React
+- **Migraciones**: 28 archivos de migración aplicadas
+- **Componentes React**: 35+ componentes reutilizables
+- **Endpoints API**: 45+ endpoints RESTful
+- **Documentación**: 1,500+ líneas en Markdown
+- **Tests**: Configuración con Vitest (Frontend)
 
 ---
 
 ## 📚 Documentación Adicional
 
 ### 📘 Documentación Principal
-- **[SECURITY.md](./SECURITY.md)** - Configuración de seguridad, variables de entorno y best practices
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Guía completa de desarrollo, convenciones de código y testing
-- **[OPTIMIZATIONS.md](./OPTIMIZATIONS.md)** - Optimizaciones de rendimiento y escalabilidad recomendadas
+- **[CHANGELOG.md](./CHANGELOG.md)** - Historial de cambios y versiones del proyecto
+- **[CREDENCIALES.md](./CREDENCIALES.md)** - Credenciales de acceso (desarrollo)
+- **[CORRECCIONES_PRIORIDAD_ALTA.md](./CORRECCIONES_PRIORIDAD_ALTA.md)** - Correcciones críticas pendientes
+- **[CORRECCIONES_PRIORIDAD_MEDIA.md](./CORRECCIONES_PRIORIDAD_MEDIA.md)** - Mejoras de prioridad media
+- **[CORRECCIONES_PRIORIDAD_BAJA.md](./CORRECCIONES_PRIORIDAD_BAJA.md)** - Optimizaciones y mejoras menores
+- **[GUIA_AGREGAR_ESTUDIANTES.md](./GUIA_AGREGAR_ESTUDIANTES.md)** - Guía para agregar estudiantes (coordinador)
 
 ### 📗 Documentación Backend
 - **[backend/db/README.md](./backend/db/README.md)** - Documentación de scripts SQL y estructura de BD
+- **[backend/ADMIN_SCRIPTS.md](./backend/ADMIN_SCRIPTS.md)** - Scripts de administración y diagnóstico
 
 ### 📙 Documentación Frontend
-- **[frontend/docs/ALERTS_SYSTEM.md](./frontend/docs/ALERTS_SYSTEM.md)** - Sistema completo de alertas y notificaciones
-- **[frontend/docs/ALERTS_IMPROVEMENTS_SUMMARY.md](./frontend/docs/ALERTS_IMPROVEMENTS_SUMMARY.md)** - Resumen de mejoras en UX
-- **[frontend/docs/API_CONTRACT.md](./frontend/docs/API_CONTRACT.md)** - Contrato de API entre Backend y Frontend
-- **[frontend/docs/COORDINADOR_IMPORTS.md](./frontend/docs/COORDINADOR_IMPORTS.md)** - Formato y reglas de importación CSV
-
-### 📕 Especificaciones Técnicas
-- **[docs/ACTIVIDADES_AGRUPADAS.md](./docs/ACTIVIDADES_AGRUPADAS.md)** - Implementación de actividades multi-RA
+- **[frontend/README.md](./frontend/README.md)** - Información específica del frontend
+- **[frontend/REUSABLE_COMPONENTS.md](./frontend/REUSABLE_COMPONENTS.md)** - Componentes y utilidades reutilizables
 
 ---
 
@@ -575,7 +575,7 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 - [ ] Backups automáticos de BD configurados
 - [ ] Logs de errores monitoreados
 
-**Ver [SECURITY.md](./SECURITY.md)** para guía completa de seguridad.
+**Ver [CREDENCIALES.md](./CREDENCIALES.md)** para credenciales de desarrollo.
 
 ---
 
@@ -693,7 +693,7 @@ npm run test:coverage
 4. **Responsividad**: Probar en móvil, tablet, desktop
 5. **Accesibilidad**: Navegar solo con teclado (Tab, Enter, Escape)
 
-Ver [DEVELOPMENT.md](./DEVELOPMENT.md) para guías detalladas de testing y casos de prueba.
+**Nota**: Para testing frontend, usar `npm run test` en la carpeta frontend.
 
 ---
 
@@ -1037,7 +1037,33 @@ sudo crontab -e
 0 2 * * * /usr/local/bin/backup-ra-manager.sh
 ```
 
-**Más detalles**: Ver sección "Deployment" en [DEVELOPMENT.md](./DEVELOPMENT.md)
+**Más detalles**: Ver configuración de Docker en la sección anterior
+
+---
+
+## 📋 Gestión de Correcciones y Mejoras
+
+El proyecto mantiene un sistema de seguimiento de correcciones organizado por prioridad:
+
+### 🔴 Prioridad Alta
+Ver [CORRECCIONES_PRIORIDAD_ALTA.md](./CORRECCIONES_PRIORIDAD_ALTA.md) para:
+- Correcciones críticas de seguridad
+- Bugs bloqueantes
+- Problemas de funcionalidad esencial
+
+### 🟡 Prioridad Media
+Ver [CORRECCIONES_PRIORIDAD_MEDIA.md](./CORRECCIONES_PRIORIDAD_MEDIA.md) para:
+- Mejoras de UX/UI
+- Optimizaciones de rendimiento
+- Refactorización de código
+
+### 🟢 Prioridad Baja
+Ver [CORRECCIONES_PRIORIDAD_BAJA.md](./CORRECCIONES_PRIORIDAD_BAJA.md) para:
+- Mejoras estéticas menores
+- Optimizaciones de código
+- Documentación adicional
+
+**Nota**: Los colaboradores deben revisar estas listas antes de comenzar nuevas tareas.
 
 ---
 
@@ -1063,7 +1089,7 @@ sudo crontab -e
 - Componentes funcionales con hooks
 - Props tipadas con interfaces
 
-**Ver [DEVELOPMENT.md](./DEVELOPMENT.md)** para convenciones completas.
+**Ver [frontend/REUSABLE_COMPONENTS.md](./frontend/REUSABLE_COMPONENTS.md)** para componentes reutilizables.
 
 ---
 
@@ -1241,8 +1267,8 @@ python manage.py shell
 ### 📱 Más Soluciones
 
 Para problemas más específicos, consultar:
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Troubleshooting detallado de desarrollo
-- **[SECURITY.md](./SECURITY.md)** - Problemas de configuración de seguridad
+- **[backend/ADMIN_SCRIPTS.md](./backend/ADMIN_SCRIPTS.md)** - Scripts de diagnóstico y administración
+- **[CORRECCIONES_PRIORIDAD_ALTA.md](./CORRECCIONES_PRIORIDAD_ALTA.md)** - Problemas conocidos y en progreso
 - **[GitHub Issues](https://github.com/Salome98342/RA_Final/issues)** - Reportar bugs nuevos
 
 ### 💬 Obtener Ayuda
@@ -1363,28 +1389,32 @@ Para problemas más específicos, consultar:
 
 | Métrica | Valor |
 |---------|-------|
-| **Líneas de código** | ~17,000 |
-| **Componentes React** | 30+ |
-| **Endpoints API** | 40+ |
-| **Migraciones BD** | 23 |
+| **Líneas de código** | ~18,500 |
+| **Componentes React** | 35+ |
+| **Endpoints API** | 45+ |
+| **Migraciones BD** | 28 |
 | **Tests** | 3 (frontend) |
-| **Documentación (MD)** | 2,000+ líneas |
+| **Documentación (MD)** | 1,500+ líneas |
 | **Cobertura de código** | Por implementar |
 
 ### 🏆 Logros Recientes
 
-- ✨ **Nov 2024**: Sistema de alertas modernizado (40% menos código, animaciones 60fps)
-- 🔒 **Nov 2024**: Seguridad reforzada (SECRET_KEY regenerada, variables de entorno)
-- 🎨 **Nov 2024**: Rediseño completo del módulo Docente (estética consistente)
-- 📝 **Nov 2024**: Documentación exhaustiva del sistema
-- 🐛 **Oct 2024**: Corrección de migraciones Django (dependencias)
+- ✨ **Mar 2026**: Limpieza de código y eliminación de documentación obsoleta
+- 🗂️ **Mar 2026**: Reorganización de archivos de correcciones por prioridad
+- 🔒 **Mar 2026**: Nuevas migraciones de seguridad (modelos de auditoría)
+- 🎨 **Mar 2026**: Mejoras en componentes de frontend (Login, Docente, Estudiante)
+- 📝 **Feb 2026**: Sistema de alertas modernizado (40% menos código, animaciones 60fps)
+- 🔐 **Feb 2026**: Sistema de seguridad reforzado (bloqueo de cuentas, validación OTP)
+- 🐛 **Feb 2026**: Corrección de migraciones Django y optimizaciones de BD
 
 ---
 
 ## 📧 Contacto
 
 - **Proyecto**: [RA_Final en GitHub](https://github.com/Salome98342/RA_Final)
-- **Rama actual**: `Ajustes_Indicadores_RA`
+- **Rama actual**: `main`
+- **Owner**: Salome98342
+- **Última actualización**: Marzo 2, 2026
 
 ---
 
@@ -1411,13 +1441,14 @@ Para problemas más específicos, consultar:
 8. ✅ Hacer testing exhaustivo antes de lanzar
 
 ### Para Contribuir
-1. Fork del repositorio
-2. Crear rama feature: `git checkout -b feature/NuevaCaracteristica`
-3. Seguir convenciones de código (ESLint/Prettier)
-4. Escribir tests para nuevas funcionalidades
-5. Commit con mensajes descriptivos: `feat: Agregar exportación PDF`
-6. Push: `git push origin feature/NuevaCaracteristica`
-7. Crear Pull Request con descripción detallada
+1. Revisar [CORRECCIONES_PRIORIDAD_ALTA.md](./CORRECCIONES_PRIORIDAD_ALTA.md) para tareas críticas
+2. Fork del repositorio
+3. Crear rama feature: `git checkout -b feature/NuevaCaracteristica`
+4. Seguir convenciones de código (ESLint/Prettier)
+5. Escribir tests para nuevas funcionalidades
+6. Commit con mensajes descriptivos: `feat: Agregar exportación PDF`
+7. Push: `git push origin feature/NuevaCaracteristica`
+8. Crear Pull Request con descripción detallada
 
 ---
 
@@ -1438,13 +1469,18 @@ Para problemas más específicos, consultar:
   - `generate_secret_key.py` - Generación de claves seguras
   - Checklist de deployment y automatización
 
-- **[URGENT_SECURITY_ACTIONS.md](URGENT_SECURITY_ACTIONS.md)** - Acciones de seguridad críticas
-  - Prioridades de seguridad identificadas
-  - Sistema de autenticación y bloqueo de cuentas
-  - Configuración de producción
-  - Protocolos de respuesta ante incidentes
+- **[CORRECCIONES_PRIORIDAD_ALTA.md](CORRECCIONES_PRIORIDAD_ALTA.md)** - Correcciones críticas pendientes
+  - Problemas conocidos de alta prioridad
+  - Bugs que requieren atención inmediata
+  - Mejoras de seguridad prioritarias
 
-### Mejoras Recientes (Feb 2026)
+### Mejoras Recientes (Marzo 2026)
+
+#### 🎨 Limpieza de Código
+- ✅ Eliminación de archivos `__pycache__` del repositorio
+- ✅ Limpieza de documentación obsoleta
+- ✅ Organización de correcciones por prioridad
+- ✅ Actualización de .gitignore
 
 #### 🔐 Seguridad
 - ✅ Sistema de contraseñas con hash pbkdf2_sha256 (1M iteraciones)
@@ -1475,7 +1511,6 @@ Para problemas más específicos, consultar:
 ### 🔗 Enlaces del Proyecto
 - **Repositorio**: [github.com/Salome98342/RA_Final](https://github.com/Salome98342/RA_Final)
 - **Branch principal**: `main`
-- **Branch de desarrollo**: `Ajustes_Indicadores_RA`
 - **Issues**: [github.com/Salome98342/RA_Final/issues](https://github.com/Salome98342/RA_Final/issues)
 
 ### 🐛 Reportar Bugs
@@ -1494,9 +1529,10 @@ Por favor, incluir en el issue:
 - Marcar como "enhancement" en labels
 
 ### 📧 Contacto
-- **Proyecto mantenido por**: JimmySoft
-- **Última actualización**: Febrero 25, 2026
-- **Versión**: 1.1.0
+- **Proyecto mantenido por**: JimmySoft / Salome98342
+- **Última actualización**: Marzo 2, 2026
+- **Versión**: 1.2.0
+- **Estado**: Desarrollo activo ✅
 
 ---
 
