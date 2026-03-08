@@ -1,0 +1,454 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Diagrama C4 – Nivel 1: Contexto del Sistema RA-Manager
+
+' ──────────────────────────────────────
+'  ACTORES (Personas)
+' ──────────────────────────────────────
+Person(estudiante, "Estudiante", "Consulta calificaciones, avance por RA, recursos educativos y notificaciones.")
+Person(docente, "Docente", "Gestiona actividades, califica estudiantes por indicador de logro, publica recursos y anuncios.")
+Person(coordinador, "Coordinador", "Administra estudiantes, docentes, asignaturas. Importa datos masivos y monitorea avance académico.")
+
+' ──────────────────────────────────────
+'  SISTEMA PRINCIPAL
+' ──────────────────────────────────────
+System(ra_manager, "RA-Manager", "Sistema integral de gestión de Resultados de Aprendizaje (RAs) para instituciones educativas. Stack: Django 5.2 + React 19 + PostgreSQL.")
+
+' ──────────────────────────────────────
+'  SISTEMAS EXTERNOS
+' ──────────────────────────────────────
+System_Ext(smtp, "Servidor SMTP", "Envía correos de bienvenida con credenciales provisionales y alertas de seguridad (bloqueo de cuenta).")
+System_Ext(navegador, "Navegador Web", "Cliente SPA (React + TypeScript) que consume la API REST a través de HTTP/JSON.")
+
+' ──────────────────────────────────────
+'  RELACIONES
+' ──────────────────────────────────────
+Rel(estudiante, ra_manager, "Consulta calificaciones, descarga recursos", "HTTPS / JSON")
+Rel(docente, ra_manager, "Crea actividades, califica, gestiona recursos", "HTTPS / JSON")
+Rel(coordinador, ra_manager, "Administra usuarios, importa datos masivos", "HTTPS / JSON")
+
+Rel(ra_manager, smtp, "Envía correos electrónicos", "SMTP / TLS")
+Rel(estudiante, navegador, "Accede al sistema")
+Rel(docente, navegador, "Accede al sistema")
+Rel(coordinador, navegador, "Accede al sistema")
+Rel(navegador, ra_manager, "Consume API REST", "HTTPS / JSON + Bearer Token")
+
+SHOW_LEGEND()
+@enduml
+
+
+' ═══════════════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════
+
+
+@startuml C4_Containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Diagrama C4 – Nivel 2: Contenedores del Sistema RA-Manager
+
+Person(estudiante, "Estudiante")
+Person(docente, "Docente")
+Person(coordinador, "Coordinador")
+
+System_Boundary(ra_manager, "RA-Manager") {
+
+    Container(spa, "Frontend SPA", "React 19 + TypeScript + Vite", "Interfaz de usuario responsiva con Bootstrap 5, Chart.js para gráficas, Axios como cliente HTTP y React Router para navegación.")
+
+    Container(api, "API Backend", "Django 5.2.6 + DRF 3.16", "API RESTful que expone endpoints para autenticación, gestión académica, calificaciones, importaciones masivas y analíticas. Autenticación por Bearer Token (django.core.signing).")
+
+    Container(middleware_layer, "Capa de Middleware", "Django Middleware", "Error handler centralizado, rate limiting (django-ratelimit), auditoría de seguridad y logging.")
+
+    ContainerDb(db, "Base de Datos", "PostgreSQL", "Almacena estudiantes, docentes, coordinadores, asignaturas, RAs, indicadores, actividades, calificaciones, notificaciones, auditoría de importaciones y eventos de seguridad.")
+
+    Container(media, "Almacenamiento de Archivos", "Sistema de Archivos (media/)", "Recursos educativos (PDF, imágenes, videos), avatares de perfil y plantillas CSV.")
+
+    Container(logs, "Sistema de Logging", "Python logging", "Registros de errores, auditoría de login, eventos de seguridad y trazabilidad de importaciones.")
+}
+
+System_Ext(smtp, "Servidor SMTP", "Envío de correos electrónicos")
+
+' ──────────────────────────────────────
+'  RELACIONES
+' ──────────────────────────────────────
+Rel(estudiante, spa, "Usa", "HTTPS")
+Rel(docente, spa, "Usa", "HTTPS")
+Rel(coordinador, spa, "Usa", "HTTPS")
+
+Rel(spa, api, "Consume API REST", "HTTP/JSON + Bearer Token (Axios)")
+
+Rel(api, middleware_layer, "Pasa por", "Pipeline Django")
+Rel(middleware_layer, api, "Procesa request/response")
+
+Rel(api, db, "Lee y escribe datos", "Django ORM / psycopg2")
+Rel(api, media, "Lee/escribe archivos", "django.core.files")
+Rel(api, logs, "Registra eventos", "Python logging")
+Rel(api, smtp, "Envía correos", "SMTP / django.core.mail")
+
+SHOW_LEGEND()
+@enduml
+
+
+' ═══════════════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════
+
+
+@startuml C4_Components_API
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Diagrama C4 – Nivel 3: Componentes de la API Backend
+
+Container(spa, "Frontend SPA", "React 19 + TypeScript", "")
+ContainerDb(db, "PostgreSQL", "", "")
+System_Ext(smtp, "Servidor SMTP", "")
+
+Container_Boundary(api, "API Backend – Django REST Framework") {
+
+    ' ── AUTENTICACIÓN Y SEGURIDAD ──
+    Component(auth, "Módulo de Autenticación", "views.py – login_view, me_view, logout_view", "Login con rate limiting, Bearer Token (signing), detección de fuerza bruta, bloqueo de cuenta y auditoría de intentos.")
+
+    Component(password_recovery, "Recuperación de Contraseña", "views.py – password_forgot/verify_otp/reset", "Sistema OTP por correo electrónico (6 dígitos) con expiración temporal para restablecer contraseña.")
+
+    Component(profile, "Gestión de Perfil", "views.py – profile_view, password_change, avatar", "Consulta y actualización de datos personales, cambio de contraseña y gestión de avatar por rol.")
+
+    ' ── GESTIÓN ACADÉMICA ──
+    Component(asignaturas, "Gestión de Asignaturas", "AsignaturaViewSet + course_detail_view", "CRUD de asignaturas, detalle por estudiante, analíticas de rendimiento y actividades agrupadas.")
+
+    Component(ras, "Resultados de Aprendizaje", "ra_indicadores_view, ra_actividades_view", "Gestión de RAs e indicadores de logro. Validación de porcentajes (sumatorias ≤ 100%).")
+
+    Component(actividades, "Gestión de Actividades", "actividades_multi_view, ra_actividad_detail_view", "Creación de actividades asociadas a múltiples RAs en una sola operación. CRUD de relaciones RA-Actividad.")
+
+    Component(notas, "Sistema de Calificaciones", "notas_view, course_grade_view", "Registro de calificaciones por indicador de logro. Consolidado de notas por asignatura y estudiante.")
+
+    Component(analitica, "Analítica Académica", "course_analytics_view, course_student_indicators_view", "Promedios, avance por RA, indicadores de rendimiento individual y grupal.")
+
+    ' ── COORDINADOR ──
+    Component(coord, "Módulo Coordinador", "coordinador_*_view", "Gestión administrativa: CRUD estudiantes, listado asignaturas, avance académico, perfil completo de estudiantes.")
+
+    Component(importaciones, "Motor de Importaciones", "coordinador_import_*_view + _read_imported_file", "Importación masiva desde CSV/Excel (pandas + openpyxl): matriculados, docentes, estudiantes y asignaturas con RAs. Auditoría via ImportAudit.")
+
+    ' ── DOCENTE ──
+    Component(docente_mgmt, "Módulo Docente", "docente_import/buscar/agregar_estudiante_view", "Importar estudiantes por CSV a sus asignaturas, buscar por código y agregar individualmente.")
+
+    Component(recursos, "Gestión de Recursos", "RecursoSerializer + media/", "Publicación y descarga de recursos educativos (PDF, imágenes, videos).")
+
+    Component(anuncios, "Sistema de Anuncios", "anuncio_delete_view + Anuncio model", "Creación y eliminación de comunicados del docente hacia sus estudiantes.")
+
+    Component(notificaciones, "Sistema de Notificaciones", "notifications_view + _add_notification", "Notificaciones persistentes en BD para estudiantes (nuevas calificaciones, recursos, anuncios).")
+
+    ' ── CATÁLOGOS ──
+    Component(catalogos, "Catálogos", "TipoDocumento/TipoActividad/Programa ViewSets", "Datos referenciales: tipos de documento, tipos de actividad, programas académicos y periodos.")
+
+    ' ── SERIALIZERS ──
+    Component(serializers, "Capa de Serialización", "serializers.py – DRF Serializers", "Conversión bidireccional modelo ↔ JSON. Validación de entrada, expansión de FK anidados.")
+
+    ' ── MODELOS ──
+    Component(models, "Capa de Modelos (ORM)", "models.py – Django Models", "16+ entidades: Estudiante, Docente, Coordinador, Asignatura, RA, Indicador, Actividad, NotasActividad, Matrícula, Recurso, Anuncio, Notificación, ImportAudit, LoginAttempt, etc.")
+
+    ' ── SEGURIDAD ──
+    Component(security, "Utilidades de Seguridad", "utils/security.py", "Hashing de contraseñas, generación de OTP seguro, detección de IP, control de bloqueo de cuentas, registro de eventos de seguridad.")
+
+    ' ── MIDDLEWARE ──
+    Component(error_handler, "Error Handler", "middleware/error_handler.py", "Captura excepciones no manejadas y retorna respuestas JSON estandarizadas con logging.")
+
+    Component(ratelimit_mw, "Rate Limit Middleware", "middleware/ratelimit.py + django-ratelimit", "Limita intentos de login (10/min por IP, 20/h por usuario) y audita violaciones.")
+}
+
+' ──────────────────────────────────────
+'  RELACIONES EXTERNAS
+' ──────────────────────────────────────
+Rel(spa, auth, "POST /api/auth/login", "JSON")
+Rel(spa, password_recovery, "POST /api/auth/password/*", "JSON")
+Rel(spa, profile, "GET/PUT /api/auth/profile", "JSON + Bearer")
+Rel(spa, asignaturas, "GET /api/asignaturas/*", "JSON + Bearer")
+Rel(spa, ras, "GET/POST /api/ras/*/indicadores", "JSON + Bearer")
+Rel(spa, actividades, "POST /api/actividades/multi", "JSON + Bearer")
+Rel(spa, notas, "POST /api/notas", "JSON + Bearer")
+Rel(spa, analitica, "GET /api/asignaturas/*/analitica", "JSON + Bearer")
+Rel(spa, coord, "GET/POST /api/coordinador/*", "JSON + Bearer")
+Rel(spa, importaciones, "POST /api/coordinador/import/*", "multipart/form-data + Bearer")
+Rel(spa, notificaciones, "GET/PATCH /api/notificaciones", "JSON + Bearer")
+Rel(spa, catalogos, "GET /api/tipos-documento, programas", "JSON")
+
+' ──────────────────────────────────────
+'  RELACIONES INTERNAS
+' ──────────────────────────────────────
+Rel(auth, security, "Valida credenciales, bloqueo")
+Rel(auth, models, "Consulta Docente/Estudiante/Coordinador")
+Rel(password_recovery, smtp, "Envía OTP por correo", "SMTP")
+Rel(password_recovery, security, "Genera OTP seguro")
+
+Rel(notas, models, "Escribe NotasActividad")
+Rel(notas, notificaciones, "Dispara notificación al calificar")
+Rel(asignaturas, serializers, "Serializa respuestas")
+Rel(ras, models, "CRUD RA + Indicadores")
+Rel(actividades, models, "CRUD Actividad + RaActividad")
+Rel(importaciones, models, "Crea registros masivos")
+Rel(importaciones, smtp, "Envía correo de bienvenida")
+Rel(coord, models, "CRUD Estudiantes, consultas")
+
+Rel(serializers, models, "Mapea modelos ↔ JSON")
+Rel(models, db, "Django ORM", "SQL / psycopg2")
+
+Rel(error_handler, auth, "Intercepta excepciones", "Pipeline")
+Rel(ratelimit_mw, auth, "Limita rate de login", "Pipeline")
+
+SHOW_LEGEND()
+@enduml
+
+
+' ═══════════════════════════════════════════════════════════════
+' ═══════════════════════════════════════════════════════════════
+
+
+@startuml C4_Code
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Diagrama C4 – Nivel 4: Código (Clases y Relaciones Principales)
+
+package "Modelos de Dominio (api.models.models)" {
+
+    class TipoDocumento {
+        +id_tipo_documento : BigAutoField <<PK>>
+        +descripcion : CharField(100) <<unique>>
+    }
+
+    class Coordinador {
+        +id_coordinador : BigAutoField <<PK>>
+        +nombre : CharField(100)
+        +codigo_coordinador : CharField(50) <<unique>>
+        +contrasenia_coord : CharField(255)
+        +correo : EmailField(255) <<unique>>
+    }
+
+    class Docente {
+        +id_docente : BigAutoField <<PK>>
+        +nombre : CharField(100)
+        +apellido : CharField(100)
+        +codigo_docente : CharField(50) <<unique>>
+        +contrasenia_docente : CharField(255)
+        +correo : EmailField(255) <<unique>>
+        +tipo_documento : FK → TipoDocumento
+        +num_documento : CharField(50) <<unique>>
+        +num_telefono : CharField(30)
+    }
+
+    class Estudiante {
+        +id_estudiante : BigAutoField <<PK>>
+        +nombre : CharField(100)
+        +apellido : CharField(100)
+        +codigo_estudiante : CharField(50) <<unique>>
+        +contrasena_estudiante : CharField(255)
+        +tipo_documento : FK → TipoDocumento
+        +num_documento : CharField(50) <<unique>>
+        +correo : EmailField(255) <<unique>>
+        +jornada : CharField(50)
+    }
+
+    class Programa {
+        +id_programa : BigAutoField <<PK>>
+        +nombre : CharField(150)
+        +codigo_programa : CharField(50) <<unique>>
+    }
+
+    class PeriodoAcademico {
+        +id_periodo : BigAutoField <<PK>>
+        +descripcion : CharField(100) <<unique>>
+        +fecha_inicio : DateField
+        +fecha_finalizacion : DateField
+        __
+        constraint: fecha_fin >= fecha_inicio
+    }
+
+    class Asignatura {
+        +id_asignatura : BigAutoField <<PK>>
+        +nombre : CharField(150)
+        +codigo_asignatura : CharField(50) <<unique>>
+        +docente : FK → Docente
+        +grupo : CharField(20)
+        +programa : FK → Programa
+    }
+
+    class ResultadoDeAprendizaje {
+        +id_ra : BigAutoField <<PK>>
+        +asignatura : FK → Asignatura
+        +porcentaje_ra : Decimal(5,2)
+        +descripcion : TextField
+        __
+        constraint: 0 ≤ porcentaje_ra ≤ 100
+    }
+
+    class IndicadoresDeLogro {
+        +id_ind : BigAutoField <<PK>>
+        +ra : FK → ResultadoDeAprendizaje
+        +porcentaje_ind : Decimal(5,2)
+        +descripcion : TextField
+        __
+        constraint: 0 ≤ porcentaje_ind ≤ 100
+    }
+
+    class TipoActividad {
+        +id_tipo_actividad : BigAutoField <<PK>>
+        +descripcion : CharField(100) <<unique>>
+    }
+
+    class Actividad {
+        +id_actividad : BigAutoField <<PK>>
+        +tipo_actividad : FK → TipoActividad
+        +nombre_actividad : CharField(150)
+        +descripcion : TextField
+        +fecha_creacion : DateField
+        +fecha_cierre : DateField
+        __
+        constraint: fecha_cierre >= fecha_creacion
+    }
+
+    class RaActividad {
+        +id_ra_actividad : BigAutoField <<PK>>
+        +actividad : FK → Actividad
+        +ra : FK → ResultadoDeAprendizaje
+        +porcentaje_ra_actividad : Decimal(5,2)
+        __
+        unique: (actividad, ra)
+    }
+
+    class RaActividadIndicador {
+        +id : BigAutoField <<PK>>
+        +ra_actividad : FK → RaActividad
+        +indicador : FK → IndicadoresDeLogro
+        +porcentaje : Decimal(5,2)
+    }
+
+    class Matricula {
+        +id_matricula : BigAutoField <<PK>>
+        +estudiante : FK → Estudiante
+        +asignatura : FK → Asignatura
+        +periodo : FK → PeriodoAcademico
+        __
+        unique: (estudiante, asignatura, periodo)
+    }
+
+    class NotasActividad {
+        +id : BigAutoField <<PK>>
+        +matricula : FK → Matricula
+        +ra_actividad : FK → RaActividad
+        +indicador : FK → IndicadoresDeLogro
+        +calificacion : Decimal(5,2)
+        +retroalimentacion : TextField
+        __
+        constraint: 0 ≤ calificacion ≤ 5
+    }
+
+    class Recurso {
+        +id_recurso : BigAutoField <<PK>>
+        +asignatura : FK → Asignatura
+        +titulo : CharField
+        +descripcion : TextField
+        +archivo : FileField
+        +fecha_publicacion : DateTimeField
+    }
+
+    class Anuncio {
+        +id_anuncio : BigAutoField <<PK>>
+        +asignatura : FK → Asignatura
+        +titulo : CharField
+        +contenido : TextField
+        +fecha_publicacion : DateTimeField
+    }
+
+    class Notificacion {
+        +id : BigAutoField <<PK>>
+        +estudiante : FK → Estudiante
+        +tipo : CharField
+        +texto : TextField
+        +enlace : CharField
+        +leida : BooleanField
+        +created_at : DateTimeField
+    }
+
+    class ImportAudit {
+        +id : BigAutoField <<PK>>
+        +coordinador : FK → Coordinador
+        +kind : CharField(32)
+        +filename : CharField(255)
+        +created_count : IntegerField
+        +existing_count : IntegerField
+        +errors_count : IntegerField
+        +created_at : DateTimeField
+    }
+
+    class PasswordResetOTP {
+        +id : BigAutoField <<PK>>
+        +email : EmailField
+        +otp_code : CharField(6)
+        +created_at : DateTimeField
+        +expires_at : DateTimeField
+        +is_used : BooleanField
+        +rol : CharField(20)
+        __
+        +is_valid() : bool
+    }
+
+    class LoginAttempt {
+        +id : BigAutoField <<PK>>
+        +usuario_codigo : CharField
+        +usuario_email : EmailField
+        +exito : BooleanField
+        +ip_address : GenericIPAddressField
+        +user_agent : TextField
+        +rol_intentado : CharField
+        +motivo_fallo : CharField
+        +created_at : DateTimeField
+    }
+
+    class SecurityEvent {
+        +id : BigAutoField <<PK>>
+        +tipo_evento : CharField
+        +usuario_codigo : CharField
+        +ip_address : GenericIPAddressField
+        +detalles : JSONField
+        +created_at : DateTimeField
+    }
+
+    class AccountLockout {
+        +id : BigAutoField <<PK>>
+        +usuario_codigo : CharField <<unique>>
+        +intentos_fallidos : IntegerField
+        +bloqueado_hasta : DateTimeField
+        +created_at : DateTimeField
+        +updated_at : DateTimeField
+    }
+}
+
+' ──────────────────────────────────────
+'  RELACIONES ENTRE CLASES
+' ──────────────────────────────────────
+Docente "1" --> "*" Asignatura : imparte
+Docente --> TipoDocumento
+Estudiante --> TipoDocumento
+
+Programa "1" --> "*" Asignatura : contiene
+
+Asignatura "1" --> "*" ResultadoDeAprendizaje : define
+ResultadoDeAprendizaje "1" --> "*" IndicadoresDeLogro : tiene
+
+Actividad --> TipoActividad
+RaActividad --> Actividad
+RaActividad --> ResultadoDeAprendizaje
+RaActividadIndicador --> RaActividad
+RaActividadIndicador --> IndicadoresDeLogro
+
+Matricula --> Estudiante
+Matricula --> Asignatura
+Matricula --> PeriodoAcademico
+
+NotasActividad --> Matricula
+NotasActividad --> RaActividad
+NotasActividad --> IndicadoresDeLogro
+
+Recurso --> Asignatura
+Anuncio --> Asignatura
+Notificacion --> Estudiante
+ImportAudit --> Coordinador
+
+@enduml
