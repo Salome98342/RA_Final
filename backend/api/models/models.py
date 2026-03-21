@@ -156,16 +156,20 @@ class PeriodoAcademico(models.Model):
 class Asignatura(models.Model):
     id_asignatura = models.BigAutoField(primary_key=True, db_column="id_asignatura")
     nombre = models.CharField(max_length=150)
-    codigo_asignatura = models.CharField(max_length=50, unique=True)
+    codigo_asignatura = models.CharField(max_length=50)
     docente = models.ForeignKey(Docente, on_delete=models.RESTRICT, db_column="id_docente")
-    grupo = models.CharField(max_length=20, blank=True, null=True)
+    grupo = models.CharField(max_length=20)
+    creditos = models.PositiveSmallIntegerField(default=0)
     programa = models.ForeignKey(Programa, on_delete=models.RESTRICT, db_column="id_programa")
 
     class Meta:
         db_table = "asignatura"
+        constraints = [
+            models.UniqueConstraint(fields=["codigo_asignatura", "grupo"], name="uq_asignatura_codigo_grupo"),
+        ]
 
     def __str__(self):
-        return self.nombre
+        return f"{self.nombre} ({self.codigo_asignatura} - {self.grupo})"
 
 
 class ResultadoDeAprendizaje(models.Model):

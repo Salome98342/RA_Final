@@ -10,36 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameIndex(
-            model_name='loginattempt',
-            new_name='login_attem_usuario_24160f_idx',
-            old_name='login_attem_usuario_e8c9e8_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='loginattempt',
-            new_name='login_attem_ip_addr_c30e68_idx',
-            old_name='login_attem_ip_addr_4f7a31_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificacion',
-            new_name='notificacio_estudia_bbe226_idx',
-            old_name='notificacio_estudia_8a7e8b_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificacion',
-            new_name='notificacio_estudia_25c8bb_idx',
-            old_name='notificacio_estudia_9c8f7a_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='securityevent',
-            new_name='security_ev_evento_f0893b_idx',
-            old_name='security_e_evento_539bc9_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='securityevent',
-            new_name='security_ev_usuario_0eb400_idx',
-            old_name='security_e_usuario_0e4b38_idx',
-        ),
         migrations.AlterField(
             model_name='importaudit',
             name='kind',

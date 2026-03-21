@@ -45,6 +45,42 @@
   color: #6c757d !important;
 }
 
+.swal-import-summary {
+  max-height: 360px;
+  overflow-y: auto;
+  text-align: left;
+  padding-right: 0.25rem;
+}
+
+.swal-import-section-title {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #212529;
+}
+
+.swal-import-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.swal-import-list li {
+  margin-bottom: 0.35rem;
+  color: #495057;
+  line-height: 1.35;
+}
+
+.swal-import-more {
+  margin-top: 0.45rem;
+  margin-bottom: 0;
+  color: #495057;
+  font-weight: 500;
+}
+
+.swal-import-errors li {
+  color: #842029;
+}
+
 /* Toast personalizado */
 .swal2-toast {
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;

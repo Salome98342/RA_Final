@@ -15,6 +15,7 @@ django-ratelimit>=4.0.0
 # ==================== PROCESAMIENTO DE DATOS ====================
 pandas>=2.0.0
 openpyxl>=3.1.0
+xlrd>=2.0.1  # Requerido para leer archivos .xls antiguos
 
 # ==================== DOCUMENTACIÓN API ====================
 drf-spectacular>=0.27.0

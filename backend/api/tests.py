@@ -259,3 +259,18 @@ class CoordinadorEndpointsTests(TestCase):
 		self.assertIn("límite", (errors[0].get("error") or "").lower())
 		self.assertTrue(ImportAudit.objects.filter(kind="docentes", filename="docentes.csv").exists())
 
+	def test_import_estudiantes_csv_basic(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		content = (
+			b"codigo_estudiante,nombre,apellido,correo,tipo_documento,num_documento,jornada\n"
+			b"E2001,Ana,Perez,ana.perez@example.com,CC,2001,Diurna"
+		)
+		f = SimpleUploadedFile("estudiantes.csv", content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/estudiantes", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		data = res.json()
+		self.assertEqual(data.get("created"), 1)
+		self.assertEqual(data.get("existing"), 0)
+		self.assertEqual(len(data.get("errors", [])), 0)
+		self.assertTrue(ImportAudit.objects.filter(kind="estudiantes", filename="estudiantes.csv", created_count=1).exists())
+

@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveConstraint(
-            model_name='actividad',
-            name='chk_act_pct',
+        migrations.RunSQL(
+            sql=("ALTER TABLE actividad DROP CONSTRAINT IF EXISTS chk_act_pct;"),
+            reverse_sql=migrations.RunSQL.noop,
         ),
     ]

@@ -11,9 +11,11 @@ export interface Paged<T> {
 
 // ========== TIPOS PARA ASIGNATURAS ==========
 export interface AsignaturaRow {
+  id_asignatura: number
   codigo: string
   nombre: string
-  grupo: string | null
+  grupo: string
+  creditos?: number
   programa: string | null
   programa_codigo: string | null
   docente: string | null
@@ -72,6 +74,8 @@ export type EstudianteListItem = {
   tipo_documento: string | null
   num_documento: string
   jornada: string | null
+  programa_codigo?: string | null
+  programa?: string | null
 }
 
 export type CreateEstudiantePayload = {
@@ -89,15 +93,99 @@ export type TipoDocumento = {
   descripcion: string
 }
 
+export type ProgramaItem = {
+  id_programa: number
+  codigo_programa: string
+  nombre: string
+}
+
+export type CreateAsignaturaWithRAItem = {
+  descripcion: string
+  porcentaje_ra: number
+  indicadores: Array<{
+    descripcion: string
+    porcentaje_ind: number
+  }>
+}
+
+export type CreateAsignaturaWithRAPayload = {
+  codigo_asignatura: string
+  nombre_asignatura: string
+  codigo_docente: string
+  codigo_programa: string
+  grupo?: string
+  ras: CreateAsignaturaWithRAItem[]
+}
+
+export type CreateAsignaturaWithRAResponse = {
+  detail: string
+  asignatura: {
+    codigo: string
+    nombre: string
+    grupo: string | null
+    programa_codigo: string | null
+    docente_codigo: string | null
+  }
+  asignatura_creada: boolean
+  asignatura_actualizada: boolean
+  ras_creados: Array<{
+    id_ra: number
+    descripcion: string | null
+    porcentaje_ra: number
+    indicadores: Array<{
+      id_ind: number
+      descripcion: string | null
+      porcentaje_ind: number
+    }>
+  }>
+  ras_omitidos: Array<{
+    descripcion: string
+    motivo: string
+  }>
+  total_ra_asignatura: number
+}
+
+// ========== GESTIÓN DE DOCENTES ==========
+export type DocenteListItem = {
+  id_docente: number
+  nombre: string
+  apellido: string
+  codigo_docente: string
+  correo: string
+  tipo_documento: string | null
+  num_documento: string
+}
+
+export type CreateDocentePayload = {
+  codigo_docente: string
+  nombre: string
+  apellido: string
+  correo: string
+  tipo_documento: string
+  num_documento: string
+}
+
 // ========== FUNCIONES API - ASIGNATURAS ==========
 export async function fetchAsignaturas(params: Record<string, string | number | undefined> = {}): Promise<Paged<AsignaturaRow>> {
   const { data } = await api.get(endpoints.coordinador.asignaturas, { params })
   return data
 }
 
-export async function fetchAsignaturaEstudiantes(params: { codigo_asignatura: string; periodo?: string; page?: number; page_size?: number }): Promise<Paged<EstudianteRow>> {
+export async function fetchAsignaturaEstudiantes(params: {
+  codigo_asignatura: string
+  grupo?: string
+  id_asignatura?: number
+  periodo?: string
+  page?: number
+  page_size?: number
+}): Promise<Paged<EstudianteRow>> {
   const { data } = await api.get(endpoints.coordinador.asignaturaEstudiantes, { params })
   return data
+}
+
+export async function fetchPeriodosCoordinador(): Promise<Array<{ id_periodo: number; descripcion: string; fecha_inicio: string; fecha_finalizacion: string }>> {
+  const { data } = await api.get(endpoints.coordinador.periodos)
+  return Array.isArray(data) ? data : []
 }
 
 export async function fetchAsignaturaRAs(params: { codigo_asignatura: string; periodo?: string }): Promise<{ codigo_asignatura: string; periodo?: string; ras: RARow[]; total_ras: number }> {
@@ -114,12 +202,26 @@ export async function fetchAsignaturaAvance(params: { codigo_asignatura: string;
 function uploadCsv(url: string, file: File) {
   const fd = new FormData()
   fd.append('file', file)
-  return api.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  return api.post(url, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 0,
+  })
 }
 
 export async function importEstudiantes(file: File) {
   const { data } = await uploadCsv(endpoints.coordinador.importEstudiantes, file)
-  return data as { created: number; existing: number; errors: Array<{ row: number; error: string }> }
+  return data as {
+    created: number
+    existing: number
+    errors: Array<{ row: number; error: string }>
+    imported_students?: Array<{
+      nombre?: string
+      apellido?: string
+      codigo_estudiante?: string
+      num_documento?: string
+      correo?: string
+    }>
+  }
 }
 
 export async function importMatriculados(file: File) {
@@ -143,9 +245,57 @@ export async function fetchEstudiantes(search?: string): Promise<EstudianteListI
   return data
 }
 
+export async function fetchEstudiantesParaMatricula(params: {
+  codigo_asignatura: string
+  grupo?: string
+  id_asignatura?: number
+  search?: string
+  include_all_when_empty?: boolean
+}): Promise<{
+  id_asignatura?: number
+  codigo_asignatura: string
+  grupo?: string
+  programa_codigo: string | null
+  programa_nombre: string | null
+  used_fallback_all: boolean
+  total: number
+  results: EstudianteListItem[]
+}> {
+  const { data } = await api.get(endpoints.coordinador.estudiantesParaMatricula, {
+    params: {
+      codigo_asignatura: params.codigo_asignatura,
+      grupo: params.grupo || undefined,
+      id_asignatura: params.id_asignatura || undefined,
+      search: params.search || undefined,
+      include_all_when_empty: params.include_all_when_empty === false ? 0 : 1,
+    },
+  })
+  return data
+}
+
+export async function fetchDocentes(search?: string): Promise<DocenteListItem[]> {
+  const { data } = await api.get(endpoints.coordinador.docentes, { params: { search } })
+  return data
+}
+
+export async function fetchProgramas(): Promise<ProgramaItem[]> {
+  const { data } = await api.get(endpoints.programas.list)
+  return Array.isArray(data) ? data : []
+}
+
+export async function createAsignaturaWithRAs(payload: CreateAsignaturaWithRAPayload): Promise<CreateAsignaturaWithRAResponse> {
+  const { data } = await api.post(endpoints.coordinador.crearAsignaturaRA, payload)
+  return data
+}
+
 export async function createEstudiante(payload: CreateEstudiantePayload) {
   const { data } = await api.post(endpoints.coordinador.estudiantes, payload)
   return data as { detail: string; estudiante: EstudianteListItem }
+}
+
+export async function createDocente(payload: CreateDocentePayload) {
+  const { data } = await api.post(endpoints.coordinador.docentes, payload)
+  return data as { detail: string; docente: DocenteListItem }
 }
 
 export async function fetchTiposDocumento(): Promise<TipoDocumento[]> {
@@ -205,5 +355,39 @@ export interface EstudiantePerfilCompleto {
 
 export async function fetchEstudiantePerfil(id_estudiante: number): Promise<EstudiantePerfilCompleto> {
   const { data } = await api.get(`/coordinador/estudiantes/${id_estudiante}/perfil`)
+  return data
+}
+
+// ========== PERFIL COMPLETO DE DOCENTE ==========
+export interface DocentePerfilCompleto {
+  docente: {
+    id_docente: number
+    codigo_docente: string
+    nombre: string
+    apellido: string
+    nombre_completo: string
+    correo: string
+    tipo_documento: string | null
+    num_documento: string
+    num_telefono: string | null
+  }
+  estadisticas: {
+    total_asignaturas: number
+    total_estudiantes: number
+    total_ras: number
+  }
+  asignaturas: Array<{
+    id_asignatura: number
+    codigo_asignatura: string
+    nombre: string
+    grupo: string | null
+    programa: string | null
+    total_estudiantes: number
+    total_ras: number
+  }>
+}
+
+export async function fetchDocentePerfil(id_docente: number): Promise<DocentePerfilCompleto> {
+  const { data } = await api.get(`/coordinador/docentes/${id_docente}/perfil`)
   return data
 }

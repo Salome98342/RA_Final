@@ -163,6 +163,18 @@ const Profile: React.FC = () => {
                     <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador')}>
                       <i className="bi bi-grid-1x2" /> Dashboard
                     </button>
+                    <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador/estudiantes')}>
+                      <i className="bi bi-people" /> Estudiantes
+                    </button>
+                    <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador/docentes')}>
+                      <i className="bi bi-person-badge" /> Docentes
+                    </button>
+                    <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador/matriculados')}>
+                      <i className="bi bi-clipboard-check" /> Matriculados
+                    </button>
+                    <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador/asignaturas-ra')}>
+                      <i className="bi bi-journal-bookmark" /> Asignaturas + RA
+                    </button>
                     <button className="btn btn-outline-secondary" onClick={() => navigate('/coordinador/imports')}>
                       <i className="bi bi-upload" /> Imports
                     </button>

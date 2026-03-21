@@ -33,10 +33,13 @@ const Materias: React.FC = () => {
 
   const navigate = useNavigate()
   const location = useLocation()
-  const active = location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/imports') ? 'imports' : 'materias'
+  const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
+    { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
+    { key: 'asignaturas-ra', icon: 'bi-journal-bookmark', title: 'Asignaturas + RA' },
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
@@ -166,7 +169,10 @@ const Materias: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
+            else if (key === 'matriculados') navigate('/coordinador/matriculados')
+            else if (key === 'asignaturas-ra') navigate('/coordinador/asignaturas-ra')
             else if (key === 'imports') navigate('/coordinador/imports')
           }}
         />

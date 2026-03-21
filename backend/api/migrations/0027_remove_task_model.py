@@ -9,7 +9,17 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.DeleteModel(
-            name='Task',
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    sql="DROP TABLE IF EXISTS api_task CASCADE;",
+                    reverse_sql=migrations.RunSQL.noop,
+                ),
+            ],
+            state_operations=[
+                migrations.DeleteModel(
+                    name='Task',
+                ),
+            ],
         ),
     ]

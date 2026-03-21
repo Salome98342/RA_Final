@@ -17,6 +17,17 @@ body {
   background: linear-gradient(to bottom, #dadada, #f3f3f3);
 }
 
+* {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
 /* Table column width helpers (avoid inline styles) */
 .table-col-40 { width: 40%; }
 .table-col-25 { width: 25%; }
@@ -109,17 +120,17 @@ body {
 .login-container { display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 7vh); }
 .login-box {
   background: #ffffff;
-  position: absolute;
+  position: relative;
   padding: 30px;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   text-align: center;
-  width: 350px;
+  width: min(100%, 420px);
 }
 .login-box img { width: 100px; margin-bottom: 20px; }
 .login-box label { display: block; text-align: left; margin: 8px 0 4px; font-size: 14px; font-weight: bold; color: #4b2c5e; }
 .login-box input {
-  width: 93%; padding: 12px; margin-bottom: 12px; margin-right:10%;
+  width: 100%; padding: 12px; margin-bottom: 12px; margin-right: 0;
   border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
 }
 .login-box button {
@@ -160,7 +171,7 @@ body {
   color: #fff;
   box-shadow: 0 6px 18px rgba(200, 16, 46, .18);
   border-bottom: 1px solid rgba(255,255,255,.15);
-  margin-right: 10px; 
+  margin-right: 0;
 
 }
 .dash-header::after {
@@ -176,13 +187,22 @@ body {
   width: 55px; height: 55px;
   border-radius: 8px;
   display: inline-grid; place-items: center;
-  background: #a50e25; color: #fff;
-  border: 1px solid rgba(255,255,255,.22);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.05), 0 4px 10px rgba(0,0,0,.18);
+  background: #fff;
+  border: 1px solid rgba(255,255,255,.35);
+  box-shadow: 0 4px 10px rgba(0,0,0,.18);
   text-decoration: none;
   margin-right: 10px;
+  overflow: hidden;
 }
 .brand-icon:hover { filter: brightness(1.02); transform: translateY(-1px); transition: all .15s ease; }
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 4px;
+}
 
 .brand-title {
   margin-left: 10px;
@@ -244,7 +264,7 @@ body {
 }
 
 /* Contenido */
-.dash-content { padding: 28px; }
+.dash-content { padding: 28px; min-width: 0; }
 .content-title {
   background: #fff; border-radius: 999px; padding: 10px 18px; display: inline-flex; align-items: center; gap: 8px;
   color: #333; border: 1px solid var(--uv-border);
@@ -408,6 +428,221 @@ body {
 /* Estados vacíos y mensajes */
 .dashboard-body .ra-card .ra-card-body .text-muted {
   color: var(--uv-muted) !important;
+}
+
+/* Generic table safety inside app panels */
+.dashboard-body .table-responsive {
+  overflow-x: auto;
+}
+
+@media (max-width: 992px) {
+  .dash-header {
+    height: auto;
+    min-height: 72px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .brand-title {
+    font-size: 16px;
+  }
+
+  .dash-wrapper {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .dash-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 950;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .side-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    font-size: 17px;
+    flex: 0 0 auto;
+  }
+
+  .dash-content {
+    padding: 18px 14px 24px;
+  }
+
+  .content-title {
+    display: flex;
+    width: 100%;
+    border-radius: 14px;
+    white-space: normal;
+  }
+
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 12px;
+  }
+
+  .login-page header {
+    padding: 10px 16px;
+    height: auto;
+    min-height: 68px;
+  }
+
+  .login-page header h1 {
+    font-size: 18px;
+  }
+
+  .login-container {
+    align-items: flex-start;
+    padding: 16px;
+    min-height: calc(100vh - 68px);
+  }
+
+  .login-box {
+    padding: 18px;
+    border-radius: 10px;
+  }
+
+  .top-bar {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 576px) {
+  .brand-icon {
+    width: 44px;
+    height: 44px;
+    margin-right: 8px;
+  }
+
+  .brand-title {
+    margin-left: 6px;
+    font-size: 14px;
+  }
+
+  .dash-username {
+    max-width: 140px;
+  }
+
+  .dash-content {
+    padding: 12px;
+  }
+
+  .content-title {
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ra-card .ra-card-body {
+    padding: 10px 12px;
+  }
+
+  .matriculados-students-scroll {
+    max-height: 52vh;
+  }
+}
+
+/* Coordinador imports */
+.imports-card {
+  min-height: 100%;
+}
+
+.imports-card-target {
+  border: 2px solid var(--uv-danger);
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.15);
+}
+
+.imports-card-icon {
+  font-size: 1.35rem;
+}
+
+.imports-errors-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.imports-error-summary {
+  cursor: pointer;
+}
+
+.table-row-clickable {
+  cursor: pointer;
+}
+
+.modal-overlay-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Coordinador: formularios individuales en módulos de import */
+.coordinator-individual-hero {
+  border: 1px solid var(--uv-border);
+}
+
+.coordinator-individual-hero-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.coordinator-individual-chips .badge {
+  font-weight: 500;
+}
+
+.coordinator-form-card {
+  border: 1px solid var(--uv-border);
+}
+
+.coordinator-form-card .card-header {
+  border-bottom: none;
+}
+
+.coordinator-form-section-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.coordinator-inline-progress {
+  height: 10px;
+}
+
+.matriculados-students-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.matriculados-col-select {
+  width: 55px;
+}
+
+@media (max-width: 768px) {
+  .coordinator-individual-hero .ra-card-body {
+    padding: 0.9rem;
+  }
+
+  .coordinator-form-card .card-body {
+    padding: 1rem;
+  }
 }
 
 /* Marca */

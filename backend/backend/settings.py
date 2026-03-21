@@ -257,8 +257,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [],
     
     # Formato de respuesta
+    # En desarrollo se habilita la Browsable API para facilitar pruebas manuales.
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
+        *(["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     ],
     
     # Throttling global para prevenir abuso
@@ -282,6 +284,8 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API REST para el sistema de gestión de Resultados de Aprendizaje (RA-Manager)',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    # Oculta warnings/errores de introspección del esquema para vistas APIView/@api_view.
+    'DISABLE_ERRORS_AND_WARNINGS': True,
     
     # Información de contacto
     'CONTACT': {

@@ -10,7 +10,12 @@ from ..views.views import (
     notifications_view, ra_validation_view, asignatura_validation_view,
     actividades_multi_view, ra_actividad_detail_view, course_grade_view, course_detail_view, course_analytics_view,
     coordinador_asignaturas_view, coordinador_asignatura_estudiantes_view, coordinador_import_matriculados_view, coordinador_asignatura_ras_view,
+    coordinador_crear_asignatura_ra_view,
     coordinador_import_docentes_view, coordinador_import_asignaturas_ras_view, coordinador_import_estudiantes_view, coordinador_estudiantes_view,
+    coordinador_periodos_view,
+    coordinador_estudiantes_para_matricula_view,
+    coordinador_docentes_view,
+    coordinador_docente_perfil_view,
     coordinador_asignatura_avance_view, coordinador_estudiante_perfil_view, current_period_view, course_activities_grouped_view,
     docente_import_estudiantes_view, docente_buscar_estudiante_view, docente_agregar_estudiante_view, anuncio_delete_view,
 )
@@ -47,8 +52,13 @@ urlpatterns = [
     path("notificaciones", notifications_view),
     # Coordinador: listados administrativos
     path("coordinador/estudiantes", coordinador_estudiantes_view),  # GET: listar, POST: crear individual
+    path("coordinador/periodos", coordinador_periodos_view),
+    path("coordinador/estudiantes-para-matricula", coordinador_estudiantes_para_matricula_view),
+    path("coordinador/docentes", coordinador_docentes_view),  # GET: listar, POST: crear individual
+    path("coordinador/docentes/<int:id_docente>/perfil", coordinador_docente_perfil_view),  # GET: Perfil completo del docente
     path("coordinador/estudiantes/<int:id_estudiante>/perfil", coordinador_estudiante_perfil_view),  # GET: Perfil completo del estudiante
     path("coordinador/asignaturas", coordinador_asignaturas_view),
+    path("coordinador/asignaturas/crear-ra", coordinador_crear_asignatura_ra_view),
     path("coordinador/asignaturas/estudiantes", coordinador_asignatura_estudiantes_view),
     path("coordinador/asignaturas/ras", coordinador_asignatura_ras_view),
     path("coordinador/asignaturas/avance", coordinador_asignatura_avance_view),

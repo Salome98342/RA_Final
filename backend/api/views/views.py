@@ -16,13 +16,14 @@ TODO: Eliminar este archivo una vez migradas todas las importaciones.
 from .utils import (
     _add_notification, _normalize_login_payload, _serialize_user, 
     _bearer_token, _send_welcome_email, _read_imported_file,
-    _find_user_by_credentials, _require_coordinador, TOKEN_MAX_AGE
+    _find_user_by_credentials, _require_coordinador, _normalize_text, TOKEN_MAX_AGE
 )
 
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.exceptions import NotFound
 from django.core import signing
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
@@ -34,6 +35,7 @@ import os
 import io
 import csv
 import secrets
+import threading
 import pandas as pd
 from django.core.files.storage import default_storage
 import logging
@@ -146,6 +148,139 @@ Equipo RA Manager
     except Exception as e:
         logger.error(f"Error enviando correo de bienvenida a {estudiante.correo}: {str(e)}")
 
+
+def _send_welcome_email_docente(docente, password_provisional):
+    """
+    Envía correo de bienvenida a un docente recién creado.
+    Args:
+        docente: Objeto Docente
+        password_provisional: Contraseña en texto plano (sin hashear)
+    """
+    try:
+        subject = "Bienvenido/a a RA Manager"
+        message = f"""
+¡Bienvenido/a a RA Manager!
+
+Hola {docente.nombre} {docente.apellido},
+
+Tu cuenta ha sido creada exitosamente en el sistema RA Manager.
+
+Tus credenciales de acceso son:
+- Código de docente: {docente.codigo_docente}
+- Correo: {docente.correo}
+- Contraseña provisional: {password_provisional}
+
+IMPORTANTE: Por tu seguridad, debes cambiar tu contraseña provisional en el primer inicio de sesión.
+
+Para acceder al sistema:
+1. Ingresa a la plataforma RA Manager
+2. Usa tus credenciales para iniciar sesión
+3. Cambia tu contraseña en tu perfil
+
+Si tienes alguna duda, contacta al coordinador del programa.
+
+Saludos,
+Equipo RA Manager
+        """.strip()
+
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[docente.correo],
+            fail_silently=True,
+        )
+        logger.info(f"Correo de bienvenida enviado a docente {docente.correo}")
+    except Exception as e:
+        logger.error(f"Error enviando correo de bienvenida a docente {docente.correo}: {str(e)}")
+
+
+def _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10):
+    """
+    Envia correos en segundo plano para no bloquear la respuesta HTTP del import masivo.
+    Se controla por setting SEND_WELCOME_EMAILS_ON_IMPORT (default: False).
+    """
+    if not passwords_for_emails:
+        return 0
+
+    if not getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", False):
+        logger.info("Envio de correos en import deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
+        return 0
+
+    total_to_send = min(max_emails, len(passwords_for_emails))
+
+    def _worker():
+        sent = 0
+        for email_data in passwords_for_emails[:total_to_send]:
+            try:
+                estudiante = Estudiante.objects.filter(codigo_estudiante=email_data['codigo']).first()
+                if not estudiante:
+                    logger.warning(f"Estudiante {email_data['codigo']} no encontrado para envio de correo")
+                    continue
+                _send_welcome_email(estudiante, email_data['password'])
+                sent += 1
+            except Exception as e:
+                logger.error(f"Error enviando correo a {email_data.get('correo')}: {str(e)}")
+
+        logger.info(f"Correos de bienvenida enviados en background: {sent}/{total_to_send}")
+
+    threading.Thread(target=_worker, daemon=True, name="import-welcome-emails").start()
+    logger.info(f"Envio de correos programado en background: {total_to_send}/{len(passwords_for_emails)}")
+    return total_to_send
+
+
+def _send_bulk_enrollment_emails_async(enrollments_for_emails):
+    """Envia correos de matricula en segundo plano para no bloquear la respuesta HTTP."""
+    if not enrollments_for_emails:
+        return 0
+
+    def _worker():
+        sent = 0
+        for item in enrollments_for_emails:
+            try:
+                estudiante_nombre = item.get("estudiante_nombre") or "Estudiante"
+                estudiante_correo = item.get("estudiante_correo")
+                if not estudiante_correo:
+                    continue
+
+                asignatura_nombre = item.get("asignatura_nombre") or "Asignatura"
+                asignatura_codigo = item.get("asignatura_codigo") or "N/A"
+                grupo = item.get("grupo") or "N/A"
+                periodo = item.get("periodo") or "N/A"
+                programa = item.get("programa") or "N/A"
+                docente = item.get("docente") or "N/A"
+
+                subject = f"Matrícula confirmada en {asignatura_nombre}"
+                message = (
+                    f"Hola {estudiante_nombre},\n\n"
+                    f"Has sido matriculado en la asignatura {asignatura_nombre}.\n\n"
+                    f"Código: {asignatura_codigo}\n"
+                    f"Grupo: {grupo}\n"
+                    f"Periodo académico: {periodo}\n"
+                    f"Programa: {programa}\n"
+                    f"Docente: {docente}\n\n"
+                    f"Puedes consultar esta asignatura en tu perfil del sistema.\n\n"
+                    f"Saludos,\n"
+                    f"Sistema de Gestión Académica"
+                )
+
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[estudiante_correo],
+                    fail_silently=True,
+                )
+                sent += 1
+            except Exception as e:
+                logger.error(f"Error enviando correo de matricula a {item.get('estudiante_correo')}: {str(e)}")
+
+        logger.info(f"Correos de matricula enviados en background: {sent}/{len(enrollments_for_emails)}")
+
+    threading.Thread(target=_worker, daemon=True, name="import-enrollment-emails").start()
+    logger.info(f"Envio de correos de matricula programado en background: {len(enrollments_for_emails)}")
+    return len(enrollments_for_emails)
+
 def _read_imported_file(file_obj):
     """
     Lee un archivo CSV o Excel y retorna un DataFrame de pandas.
@@ -160,52 +295,61 @@ def _read_imported_file(file_obj):
     filename = getattr(file_obj, 'name', '').lower()
     logger.info(f"Intentando leer archivo: {filename}, tamaño: {getattr(file_obj, 'size', 'desconocido')} bytes")
     
-    file_obj.seek(0)
-    
+    # Leer bytes una vez y reutilizar BytesIO evita problemas de stream con UploadedFile.
     try:
-        # Detectar el tipo de archivo por extensión
+        file_obj.seek(0)
+        file_bytes = file_obj.read()
+    except Exception as e:
+        logger.error(f"Error leyendo bytes del archivo: {e}")
+        return None
+
+    try:
         if filename.endswith('.xlsx') or filename.endswith('.xls'):
-            # Leer archivo Excel
-            df = pd.read_excel(file_obj, engine='openpyxl' if filename.endswith('.xlsx') else None)
-            # Normalizar nombres de columnas: minúsculas y sin espacios
-            df.columns = df.columns.str.strip().str.lower()
-            logger.info(f"✓ Archivo Excel leído exitosamente: {len(df)} filas")
-            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
-            return df
+            with io.BytesIO(file_bytes) as bio:
+                df = pd.read_excel(bio, engine='openpyxl' if filename.endswith('.xlsx') else 'xlrd')
+                df.columns = df.columns.str.strip().str.lower()
+                logger.info(f"Archivo Excel leido exitosamente: {len(df)} filas")
+                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                return df
         else:
-            # Intentar leer como CSV con múltiples encodings y delimitadores
             encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
             delimiters_to_try = [',', ';', '\t', '|']
-            
+
             for encoding in encodings_to_try:
                 for delimiter in delimiters_to_try:
                     try:
-                        file_obj.seek(0)
-                        # Leer CSV con configuración tolerante a errores
-                        df = pd.read_csv(
-                            file_obj, 
-                            encoding=encoding,
-                            sep=delimiter,
-                            on_bad_lines='skip',  # Saltar líneas mal formateadas
-                            engine='python',  # Motor más tolerante
-                            skipinitialspace=True,  # Ignorar espacios después del delimitador
-                            quotechar='"'  # Carácter de comillas
-                        )
-                        # Verificar que se leyeron columnas válidas
-                        if len(df.columns) > 1 and len(df) > 0:
-                            # Normalizar nombres de columnas: minúsculas y sin espacios
-                            df.columns = df.columns.str.strip().str.lower()
-                            logger.info(f"✓ Archivo CSV leído exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
-                            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
-                            return df
-                    except UnicodeDecodeError:
+                        with io.BytesIO(file_bytes) as bio:
+                            df = pd.read_csv(
+                                bio,
+                                encoding=encoding,
+                                sep=delimiter,
+                                on_bad_lines='skip',
+                                engine='python',
+                                skipinitialspace=True,
+                                quotechar='"'
+                            )
+
+                            # Quitar filas/columnas completamente vacías para validar estructura real.
+                            df = df.dropna(how='all', axis=1)
+                            df = df.dropna(how='all', axis=0)
+
+                            cols_count = len(df.columns)
+                            if cols_count >= 1 and len(df) > 0:
+                                df.columns = df.columns.str.strip().str.lower()
+
+                                if cols_count == 1 and delimiter in [',', ';', '\t']:
+                                    logger.warning(f"[CSV WARNING] Lectura con {encoding}|'{delimiter}' -> 1 columna. Probablemente incorrecto.")
+                                    continue
+
+                                logger.info(f"Archivo CSV leido exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
+                                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                                return df
+                    except (UnicodeDecodeError, Exception):
                         continue
-                    except Exception as e:
-                        continue
-            
+
             logger.error("No se pudo leer el archivo CSV con ninguna codificación/delimitador soportado")
             return None
-            
+
     except Exception as e:
         logger.error(f"Error leyendo archivo: {type(e).__name__} - {str(e)}")
         return None
@@ -478,8 +622,39 @@ def coordinador_estudiantes_view(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Buscar tipo de documento
-        tipo_doc = TipoDocumento.objects.filter(descripcion__iexact=tipo_doc_desc).first()
+        # Buscar tipo de documento (tolerante a tildes y alias como CC/TI)
+        tipo_doc = None
+        tipos_documento_map_desc_norm = {}
+        for td in TipoDocumento.objects.all():
+            tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
+
+        aliases_norm = {
+            "cc": "cedula de ciudadania",
+            "c.c": "cedula de ciudadania",
+            "c.c.": "cedula de ciudadania",
+            "ce": "cedula de extranjeria",
+            "c.e": "cedula de extranjeria",
+            "c.e.": "cedula de extranjeria",
+            "ti": "tarjeta de identidad",
+            "t.i": "tarjeta de identidad",
+            "t.i.": "tarjeta de identidad",
+            "pas": "pasaporte",
+            "pasaporte": "pasaporte",
+            "rc": "registro civil",
+            "nuip": "nuip",
+        }
+
+        input_norm = _normalize_text(tipo_doc_desc)
+        mapped_norm = aliases_norm.get(input_norm, input_norm)
+        tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
+
+        if not tipo_doc:
+            # Fallback por coincidencia parcial para textos equivalentes
+            for key_norm, td in tipos_documento_map_desc_norm.items():
+                if mapped_norm in key_norm or key_norm in mapped_norm:
+                    tipo_doc = td
+                    break
+
         if not tipo_doc:
             return Response(
                 {"detail": f"Tipo de documento no válido: {tipo_doc_desc}"},
@@ -539,6 +714,339 @@ def coordinador_estudiantes_view(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiantes_para_matricula_view(request):
+    """
+    Lista candidatos de estudiantes para matrícula, priorizando quienes ya están
+    matriculados en asignaturas del mismo programa que la asignatura objetivo.
+
+    Query params:
+      - codigo_asignatura (requerido)
+            - grupo (opcional)
+            - id_asignatura (opcional)
+      - search (opcional)
+      - include_all_when_empty (opcional, default=1)
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    codigo_asignatura = (request.query_params.get("codigo_asignatura") or "").strip()
+    grupo = (request.query_params.get("grupo") or "").strip()
+    id_asignatura = request.query_params.get("id_asignatura")
+    search = (request.query_params.get("search") or "").strip()
+    include_all_when_empty = (request.query_params.get("include_all_when_empty") or "1").strip() == "1"
+
+    if not codigo_asignatura:
+        return Response({"detail": "codigo_asignatura requerido"}, status=status.HTTP_400_BAD_REQUEST)
+
+    asig_qs = Asignatura.objects.select_related("programa").filter(codigo_asignatura=codigo_asignatura)
+    if grupo:
+        asig_qs = asig_qs.filter(grupo=grupo)
+    if id_asignatura:
+        asig_qs = asig_qs.filter(id_asignatura=id_asignatura)
+    asig = asig_qs.order_by("id_asignatura").first()
+    if not asig:
+        return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    programa = getattr(asig, "programa", None)
+
+    # Estudiantes que ya tienen matrículas en asignaturas del mismo programa.
+    candidatos_qs = Estudiante.objects.none()
+    if programa:
+        candidatos_qs = Estudiante.objects.filter(
+            matricula__asignatura__programa=programa
+        ).select_related("tipo_documento").distinct()
+
+    used_fallback_all = False
+    if include_all_when_empty and not candidatos_qs.exists():
+        used_fallback_all = True
+        candidatos_qs = Estudiante.objects.select_related("tipo_documento").all()
+
+    if search:
+        candidatos_qs = candidatos_qs.filter(
+            Q(codigo_estudiante__icontains=search) |
+            Q(nombre__icontains=search) |
+            Q(apellido__icontains=search) |
+            Q(correo__icontains=search) |
+            Q(num_documento__icontains=search)
+        )
+
+    candidatos_qs = candidatos_qs.order_by("apellido", "nombre")
+
+    data = []
+    for est in candidatos_qs:
+        data.append({
+            "id_estudiante": est.id_estudiante,
+            "codigo_estudiante": est.codigo_estudiante,
+            "nombre": est.nombre,
+            "apellido": est.apellido,
+            "correo": est.correo,
+            "tipo_documento": est.tipo_documento.descripcion if est.tipo_documento else None,
+            "num_documento": est.num_documento,
+            "jornada": est.jornada,
+        })
+
+    return Response({
+        "id_asignatura": asig.id_asignatura,
+        "codigo_asignatura": codigo_asignatura,
+        "grupo": asig.grupo,
+        "programa_codigo": getattr(programa, "codigo_programa", None),
+        "programa_nombre": getattr(programa, "nombre", None),
+        "used_fallback_all": used_fallback_all,
+        "total": len(data),
+        "results": data,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_periodos_view(request):
+    """Lista todos los periodos académicos para uso administrativo del coordinador."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    qs = PeriodoAcademico.objects.order_by("-fecha_inicio", "-id_periodo")
+    return Response([
+        {
+            "id_periodo": p.id_periodo,
+            "descripcion": p.descripcion,
+            "fecha_inicio": p.fecha_inicio,
+            "fecha_finalizacion": p.fecha_finalizacion,
+        }
+        for p in qs
+    ], status=status.HTTP_200_OK)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_docentes_view(request):
+    """
+    GET: Lista docentes (filtro opcional por código, nombre, correo o documento)
+    POST: Crea un docente individual.
+    Solo coordinador.
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    if request.method == "GET":
+        docentes = Docente.objects.select_related('tipo_documento').all()
+
+        search = request.query_params.get('search', '').strip()
+        if search:
+            docentes = docentes.filter(
+                Q(codigo_docente__icontains=search) |
+                Q(nombre__icontains=search) |
+                Q(apellido__icontains=search) |
+                Q(correo__icontains=search) |
+                Q(num_documento__icontains=search)
+            )
+
+        docentes = docentes.order_by('apellido', 'nombre')
+
+        data = []
+        for doc in docentes:
+            data.append({
+                "id_docente": doc.id_docente,
+                "codigo_docente": doc.codigo_docente,
+                "nombre": doc.nombre,
+                "apellido": doc.apellido,
+                "correo": doc.correo,
+                "tipo_documento": doc.tipo_documento.descripcion if doc.tipo_documento else None,
+                "num_documento": doc.num_documento,
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    data = request.data
+    required = ['codigo_docente', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return Response(
+            {"detail": f"Faltan campos requeridos: {', '.join(missing)}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    codigo = str(data['codigo_docente']).strip()
+    nombre = str(data['nombre']).strip()
+    apellido = str(data['apellido']).strip()
+    correo = str(data['correo']).strip().lower()
+    tipo_doc_desc = str(data['tipo_documento']).strip()
+    num_documento = str(data['num_documento']).strip()
+
+    if Docente.objects.filter(codigo_docente=codigo).exists():
+        return Response(
+            {"detail": f"Ya existe un docente con código {codigo}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if Docente.objects.filter(correo=correo).exists():
+        return Response(
+            {"detail": f"Ya existe un docente con correo {correo}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if Docente.objects.filter(num_documento=num_documento).exists():
+        return Response(
+            {"detail": f"Ya existe un docente con documento {num_documento}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    tipo_doc = None
+    tipos_documento_map_desc_norm = {}
+    for td in TipoDocumento.objects.all():
+        tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
+
+    aliases_norm = {
+        "cc": "cedula de ciudadania",
+        "c.c": "cedula de ciudadania",
+        "c.c.": "cedula de ciudadania",
+        "ce": "cedula de extranjeria",
+        "c.e": "cedula de extranjeria",
+        "c.e.": "cedula de extranjeria",
+        "ti": "tarjeta de identidad",
+        "t.i": "tarjeta de identidad",
+        "t.i.": "tarjeta de identidad",
+        "pas": "pasaporte",
+        "pasaporte": "pasaporte",
+        "rc": "registro civil",
+        "nuip": "nuip",
+    }
+
+    input_norm = _normalize_text(tipo_doc_desc)
+    mapped_norm = aliases_norm.get(input_norm, input_norm)
+    tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
+
+    if not tipo_doc:
+        for key_norm, td in tipos_documento_map_desc_norm.items():
+            if mapped_norm in key_norm or key_norm in mapped_norm:
+                tipo_doc = td
+                break
+
+    if not tipo_doc:
+        return Response(
+            {"detail": f"Tipo de documento no válido: {tipo_doc_desc}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    password_provisional = secrets.token_urlsafe(8)
+    hashed_password = make_password(password_provisional)
+
+    try:
+        docente = Docente.objects.create(
+            nombre=nombre,
+            apellido=apellido,
+            codigo_docente=codigo,
+            contrasenia_docente=hashed_password,
+            correo=correo,
+            tipo_documento=tipo_doc,
+            num_documento=num_documento,
+        )
+
+        _send_welcome_email_docente(docente, password_provisional)
+
+        try:
+            ImportAudit.objects.create(
+                coordinador=coord,
+                kind="docentes",
+                filename=f"individual_{codigo}",
+                created_count=1,
+                existing_count=0,
+                errors_count=0,
+            )
+        except Exception:
+            pass
+
+        logger.info(f"Docente creado: {codigo} por coordinador {coord.codigo_coordinador}")
+
+        return Response({
+            "detail": "Docente creado exitosamente. Se envió un correo de bienvenida.",
+            "docente": {
+                "id_docente": docente.id_docente,
+                "codigo_docente": docente.codigo_docente,
+                "nombre": docente.nombre,
+                "apellido": docente.apellido,
+                "correo": docente.correo,
+                "tipo_documento": docente.tipo_documento.descripcion if docente.tipo_documento else None,
+                "num_documento": docente.num_documento,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        logger.error(f"Error creando docente: {str(e)}")
+        return Response(
+            {"detail": f"Error al crear docente: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_docente_perfil_view(request, id_docente: int):
+    """
+    Vista detallada del docente para el coordinador.
+    Devuelve información personal, estadísticas y asignaturas asociadas.
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    try:
+        docente = Docente.objects.select_related('tipo_documento').get(id_docente=id_docente)
+    except Docente.DoesNotExist:
+        return Response({"detail": "Docente no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    asignaturas = Asignatura.objects.filter(docente=docente).select_related('programa').order_by('codigo_asignatura')
+
+    asignaturas_data = []
+    total_estudiantes = 0
+    total_ras = 0
+
+    for asig in asignaturas:
+        count_est = Matricula.objects.filter(asignatura=asig).values('estudiante_id').distinct().count()
+        count_ras = ResultadoDeAprendizaje.objects.filter(asignatura=asig).count()
+        total_estudiantes += count_est
+        total_ras += count_ras
+
+        asignaturas_data.append({
+            "id_asignatura": asig.id_asignatura,
+            "codigo_asignatura": asig.codigo_asignatura,
+            "nombre": asig.nombre,
+            "grupo": asig.grupo,
+            "programa": asig.programa.nombre if asig.programa else None,
+            "total_estudiantes": count_est,
+            "total_ras": count_ras,
+        })
+
+    return Response({
+        "docente": {
+            "id_docente": docente.id_docente,
+            "codigo_docente": docente.codigo_docente,
+            "nombre": docente.nombre,
+            "apellido": docente.apellido,
+            "nombre_completo": f"{docente.nombre} {docente.apellido}",
+            "correo": docente.correo,
+            "tipo_documento": docente.tipo_documento.descripcion if docente.tipo_documento else None,
+            "num_documento": docente.num_documento,
+            "num_telefono": docente.num_telefono,
+        },
+        "estadisticas": {
+            "total_asignaturas": len(asignaturas_data),
+            "total_estudiantes": total_estudiantes,
+            "total_ras": total_ras,
+        },
+        "asignaturas": asignaturas_data,
+    }, status=status.HTTP_200_OK)
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -591,10 +1099,36 @@ def coordinador_import_estudiantes_view(request):
     df.columns = df.columns.str.strip().str.lower()
     
     # OPTIMIZACIÓN: Pre-cargar datos existentes
-    tipos_documento_map_desc = {td.descripcion.lower(): td for td in TipoDocumento.objects.all()}
     tipos_documento_map_id = {td.id_tipo_documento: td for td in TipoDocumento.objects.all()}
-    logger.info(f"[DEBUG] Tipos de documento disponibles (por descripción): {list(tipos_documento_map_desc.keys())}")
-    logger.info(f"[DEBUG] Tipos de documento disponibles (por ID): {list(tipos_documento_map_id.keys())}")
+    
+    # Mapeo por descripción normalizada (sin tildes, minúsculas) para búsqueda flexible
+    tipos_documento_map_desc_norm = {}
+    for td in TipoDocumento.objects.all():
+        # Normaliza: "Cédula de Ciudadanía" -> "cedula de ciudadania"
+        norm = _normalize_text(td.descripcion)
+        tipos_documento_map_desc_norm[norm] = td
+        # También guardar tal cual minúsculas por si acaso
+        tipos_documento_map_desc_norm[td.descripcion.lower().strip()] = td
+
+    # Alias comunes para mapear abreviaturas a descripciones normalizadas
+    # Ajustar según los valores reales en la BD (inserts.sql)
+    aliases_norm = {
+        "cc": "cedula de ciudadania",
+        "c.c": "cedula de ciudadania",
+        "c.c.": "cedula de ciudadania",
+        "ce": "cedula de extranjeria",
+        "c.e": "cedula de extranjeria",
+        "c.e.": "cedula de extranjeria",
+        "ti": "tarjeta de identidad",
+        "t.i": "tarjeta de identidad",
+        "t.i.": "tarjeta de identidad",
+        "pas": "pasaporte",
+        "pasaporte": "pasaporte",
+        "rc": "registro civil",
+        "nuip": "nuip"
+    }
+
+    logger.info(f"[DEBUG] Tipos de documento disponibles (normalizados): {list(tipos_documento_map_desc_norm.keys())}")
     existing_estudiantes_codigos = set(Estudiante.objects.values_list('codigo_estudiante', flat=True))
     existing_estudiantes_correos = set(Estudiante.objects.values_list('correo', flat=True))
     existing_estudiantes_docs = set(Estudiante.objects.values_list('num_documento', flat=True))
@@ -602,6 +1136,7 @@ def coordinador_import_estudiantes_view(request):
     created = 0
     existing = 0
     errors = []
+    imported_students = []
     max_rows = 5000
     to_create = []
     passwords_for_emails = []  # Lista paralela: (correo, nombre, apellido, codigo, password)
@@ -626,30 +1161,42 @@ def coordinador_import_estudiantes_view(request):
         if idx == 0:
             logger.info(f"[DEBUG] Primera fila (dict): {row.to_dict()}")
         
-        # Extraer campos con sinónimos utilizando la función helper
-        codigo = get_col(row, "codigo_estudiante", "estudiante", "codigo")
-        nombre = get_col(row, "nombre", "first_name")
-        apellido = get_col(row, "apellido", "last_name")
-        correo = get_col(row, "correo", "email")
-        tipo_doc_desc = get_col(row, "tipo_documento", "tipo_doc", "doc_type")
-        tipo_doc_id = get_col(row, "tipo_documento_id", "tipo_doc_id")
-        num_documento = get_col(row, "num_documento", "documento", "doc_number")
-        jornada = get_col(row, "jornada", "turno")
-        raw_pass = get_col(row, "password", "contrasena_estudiante")
+        # Extraer campos con sinónimos utilizando la función helper y variantes comunes (espacios vs guiones bajos)
+        codigo = get_col(row, "codigo_estudiante", "estudiante", "codigo", "code", "id", "codigo estudiante", "student_code")
+        nombre = get_col(row, "nombre", "first_name", "nombres", "name", "nombre estudiante")
+        apellido = get_col(row, "apellido", "last_name", "apellidos", "surname", "apellido estudiante")
+        correo = get_col(row, "correo", "email", "mail", "correo electronico", "e-mail", "correo institucional")
+        tipo_doc_desc = get_col(row, "tipo_documento", "tipo_doc", "doc_type", "tipo documento", "t.doc", "tdoc", "identificacion tipo")
+        tipo_doc_id = get_col(row, "tipo_documento_id", "tipo_doc_id", "id tipo documento")
+        num_documento = get_col(row, "num_documento", "documento", "doc_number", "numero documento", "nro documento", "cedula", "identificacion", "id number", "no. documento")
+        jornada = get_col(row, "jornada", "turno", "shift")
+        raw_pass = get_col(row, "password", "contrasena_estudiante", "contraseña", "clave", "pass", "password estudiante")
         
         # Log de debug para primera fila - valores extraídos
         if idx == 0:
             logger.info(f"[DEBUG] Valores extraídos - codigo:{codigo}, nombre:{nombre}, apellido:{apellido}, correo:{correo}, tipo_doc_id:{tipo_doc_id}, tipo_doc_desc:{tipo_doc_desc}, num_doc:{num_documento}, jornada:{jornada}")
         
+
+        # Helper limpieza Excel
+        def clean_val(v, max_len=None):
+            if v is None: return None
+            s = str(v).strip()
+            if s.endswith(".0"): s = s[:-2]
+            return s[:max_len] if max_len else s
+
         # Limpiar strings
-        if codigo: codigo = str(codigo).strip()[:50]
-        if nombre: nombre = str(nombre).strip()[:50]
-        if apellido: apellido = str(apellido).strip()[:50]
-        if correo: correo = str(correo).strip()[:100]
-        if tipo_doc_desc: tipo_doc_desc = str(tipo_doc_desc).strip()
-        if num_documento: num_documento = str(num_documento).strip()[:20]
-        if jornada: jornada = str(jornada).strip()[:50]
-        if raw_pass: raw_pass = str(raw_pass).strip()
+        codigo = clean_val(codigo, 50)
+        nombre = clean_val(nombre, 50)
+        apellido = clean_val(apellido, 50)
+        correo = clean_val(correo, 100)
+        tipo_doc_desc = clean_val(tipo_doc_desc)
+        num_documento = clean_val(num_documento, 20)
+        jornada = clean_val(jornada, 50)
+        raw_pass = clean_val(raw_pass)
+        
+        # Debug específico para primera fila después de limpieza
+        if idx == 0:
+            logger.info(f"[DEBUG] Valores limpios: {codigo}, {nombre}, {correo}, {tipo_doc_desc}, {num_documento}")
         
         if not (codigo and nombre and apellido and correo and (tipo_doc_desc or tipo_doc_id) and num_documento):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
@@ -663,9 +1210,31 @@ def coordinador_import_estudiantes_view(request):
                 pass
         
         if not tipo_doc and tipo_doc_desc:
-            tipo_doc = tipos_documento_map_desc.get(tipo_doc_desc.lower())
+            desc_str = str(tipo_doc_desc).strip()
+            # 1. Búsqueda exacta normalizada (sin tildes, minúsculas)
+            norm_input = _normalize_text(desc_str)
+            tipo_doc = tipos_documento_map_desc_norm.get(norm_input)
+            
+            # 2. Si no encuentra, buscar en alias (CC -> cedula de ciudadania)
+            if not tipo_doc:
+                # "cc" -> "cedula de ciudadania"
+                mapped_full = aliases_norm.get(norm_input)
+                if mapped_full:
+                    # Aplicar normalización al texto mapeado por si acaso
+                    mapped_norm = _normalize_text(mapped_full)
+                    # "cedula de ciudadania" -> Object
+                    tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
+                    # Si falla, intentar buscar substring
+                    if not tipo_doc:
+                        # Buscar si alguna descripción contiene 'cedula de ciudadania'
+                        for k, v in tipos_documento_map_desc_norm.items():
+                            if mapped_norm in k:
+                                tipo_doc = v
+                                break
+
             if idx == 0:
-                logger.info(f"[DEBUG] Buscando tipo_doc_desc: '{tipo_doc_desc}' -> lower: '{tipo_doc_desc.lower()}' -> encontrado: {tipo_doc}")
+                logger.info(f"[DEBUG] Buscando tipo: '{tipo_doc_desc}' -> Norm: '{norm_input}' -> Encontrado: {tipo_doc}")
+
         
         if not tipo_doc:
             errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: {tipo_doc_id or tipo_doc_desc}"}); continue
@@ -696,6 +1265,14 @@ def coordinador_import_estudiantes_view(request):
             num_documento=num_documento,
             jornada=jornada or None
         ))
+
+        imported_students.append({
+            "nombre": nombre,
+            "apellido": apellido,
+            "codigo_estudiante": codigo,
+            "num_documento": num_documento,
+            "correo": correo,
+        })
         
         # Guardar información para envío de correos (solo si es contraseña generada)
         if not raw_pass:  # Solo enviamos correo si se generó la contraseña
@@ -721,32 +1298,22 @@ def coordinador_import_estudiantes_view(request):
             with transaction.atomic():
                 Estudiante.objects.bulk_create(to_create, batch_size=500)
             
-            logger.info(f"[DEBUG] Bulk_create completado. Iniciando envío de {len(passwords_for_emails)} correos...")
-            
-            # Enviar correos de bienvenida solo a los primeros 10 (para evitar timeout en imports masivos)
-            # En producción, esto debería hacerse de forma asíncrona con Celery o similar
-            emails_sent = 0
-            max_emails = min(10, len(passwords_for_emails))  # Limitar a 10 correos para evitar timeout
-            for email_data in passwords_for_emails[:max_emails]:
-                try:
-                    # Buscar el estudiante recién creado para obtener el objeto completo
-                    estudiante = Estudiante.objects.get(codigo_estudiante=email_data['codigo'])
-                    _send_welcome_email(estudiante, email_data['password'])
-                    emails_sent += 1
-                except Estudiante.DoesNotExist:
-                    logger.warning(f"Estudiante {email_data['codigo']} no encontrado después de bulk_create")
-                except Exception as e:
-                    logger.error(f"Error enviando correo a {email_data['correo']}: {str(e)}")
-            
-            logger.info(f"Correos de bienvenida enviados: {emails_sent}/{len(passwords_for_emails)}")
+            logger.info(f"[DEBUG] Bulk_create completado. Programando envio de {len(passwords_for_emails)} correos...")
+            _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10)
             
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva: {str(e)}"})
             created = 0
+            imported_students = []
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
-    payload = {"created": created, "existing": existing, "errors": errors}
+    payload = {
+        "created": created,
+        "existing": existing,
+        "errors": errors,
+        "imported_students": imported_students,
+    }
     try:
         logger.info("import_estudiantes: %s", {
             "coordinador": getattr(coord, "codigo_coordinador", None),
@@ -801,9 +1368,11 @@ def coordinador_asignaturas_view(request):
     rows = []
     for a in qs.order_by("nombre")[offset:offset+page_size]:
         rows.append({
+            "id_asignatura": a.id_asignatura,
             "codigo": a.codigo_asignatura,
             "nombre": a.nombre,
             "grupo": a.grupo,
+            "creditos": getattr(a, "creditos", 0),
             "programa": getattr(a.programa, "nombre", None),
             "programa_codigo": getattr(a.programa, "codigo_programa", None),
             "docente": getattr(a.docente, "nombre", None),
@@ -872,6 +1441,331 @@ def coordinador_asignatura_ras_view(request):
         "total_ras": len(out),
     })
 
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_crear_asignatura_ra_view(request):
+    """Crea o actualiza una asignatura y agrega uno o varios RAs en una sola transacción.
+
+    Body esperado:
+            {
+        "codigo_asignatura": str,
+        "nombre_asignatura": str,
+        "codigo_docente": str,
+        "codigo_programa": str,
+                "grupo": str,
+        "ras": [
+                    {
+                        "descripcion": str,
+                        "porcentaje_ra": number,
+                        "indicadores": [
+                            { "descripcion": str, "porcentaje_ind": number },
+                            ...
+                        ]
+                    },
+          ...
+        ]
+      }
+    """
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    data = request.data if isinstance(request.data, dict) else {}
+
+    codigo_asignatura = str(data.get("codigo_asignatura") or "").strip()
+    nombre_asignatura = str(data.get("nombre_asignatura") or "").strip()
+    codigo_docente = str(data.get("codigo_docente") or "").strip()
+    codigo_programa = str(data.get("codigo_programa") or "").strip()
+    grupo = str(data.get("grupo") or "").strip()
+    ras_input = data.get("ras") or []
+
+    if not (codigo_asignatura and nombre_asignatura and codigo_docente and codigo_programa and grupo):
+        return Response(
+            {"detail": "codigo_asignatura, nombre_asignatura, codigo_docente, codigo_programa y grupo son obligatorios"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(ras_input, list):
+        return Response({"detail": "ras debe ser una lista"}, status=status.HTTP_400_BAD_REQUEST)
+
+    docente = Docente.objects.filter(codigo_docente=codigo_docente).first()
+    if not docente:
+        return Response({"detail": f"Docente no encontrado: {codigo_docente}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    programa = Programa.objects.filter(codigo_programa=codigo_programa).first()
+    if not programa:
+        return Response({"detail": f"Programa no encontrado: {codigo_programa}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Normalizar y validar RAs entrantes
+    ras_normalizados = []
+    suma_nuevos = 0.0
+    descripciones_limpias = set()
+    for idx, item in enumerate(ras_input):
+        if not isinstance(item, dict):
+            return Response({"detail": f"RA en posición {idx + 1} inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        descripcion = str(item.get("descripcion") or "").strip()
+        raw_pct = item.get("porcentaje_ra")
+        indicadores_input = item.get("indicadores") or []
+
+        if not descripcion and (raw_pct is None or str(raw_pct).strip() == ""):
+            continue
+
+        if not descripcion:
+            return Response({"detail": f"La descripción es obligatoria para el RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if raw_pct is None or str(raw_pct).strip() == "":
+            return Response({"detail": f"El porcentaje es obligatorio para el RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            porcentaje = float(raw_pct)
+        except (TypeError, ValueError):
+            return Response({"detail": f"porcentaje_ra inválido en RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if porcentaje <= 0 or porcentaje > 100:
+            return Response(
+                {"detail": f"El porcentaje del RA {idx + 1} debe ser mayor que 0 y no exceder 100"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        desc_key = descripcion.lower()
+        if desc_key in descripciones_limpias:
+            return Response(
+                {"detail": f"La descripción '{descripcion}' está repetida en los RAs nuevos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        descripciones_limpias.add(desc_key)
+
+        if not isinstance(indicadores_input, list):
+            return Response(
+                {"detail": f"indicadores debe ser una lista en RA {idx + 1}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        indicadores_normalizados = []
+        indicadores_desc = set()
+        suma_indicadores = 0.0
+        for ind_idx, ind_item in enumerate(indicadores_input):
+            if not isinstance(ind_item, dict):
+                return Response(
+                    {"detail": f"Indicador inválido en RA {idx + 1}, posición {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            ind_descripcion = str(ind_item.get("descripcion") or "").strip()
+            raw_pct_ind = ind_item.get("porcentaje_ind")
+
+            if not ind_descripcion and (raw_pct_ind is None or str(raw_pct_ind).strip() == ""):
+                continue
+
+            if not ind_descripcion:
+                return Response(
+                    {"detail": f"La descripción del indicador es obligatoria en RA {idx + 1}, indicador {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if raw_pct_ind is None or str(raw_pct_ind).strip() == "":
+                return Response(
+                    {"detail": f"El porcentaje del indicador es obligatorio en RA {idx + 1}, indicador {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                porcentaje_ind = float(raw_pct_ind)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": f"porcentaje_ind inválido en RA {idx + 1}, indicador {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if porcentaje_ind <= 0 or porcentaje_ind > 100:
+                return Response(
+                    {"detail": f"El porcentaje del indicador en RA {idx + 1}, indicador {ind_idx + 1} debe ser mayor que 0 y no exceder 100"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            ind_desc_key = ind_descripcion.lower()
+            if ind_desc_key in indicadores_desc:
+                return Response(
+                    {"detail": f"La descripción del indicador '{ind_descripcion}' está repetida en RA {idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            indicadores_desc.add(ind_desc_key)
+
+            indicadores_normalizados.append({
+                "descripcion": ind_descripcion,
+                "porcentaje_ind": porcentaje_ind,
+            })
+            suma_indicadores += porcentaje_ind
+
+        if not indicadores_normalizados:
+            return Response(
+                {"detail": f"Cada RA debe tener al menos un indicador de logro. RA {idx + 1} no tiene indicadores válidos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if suma_indicadores > 100:
+            return Response(
+                {"detail": f"La suma de indicadores del RA {idx + 1} excede 100% ({suma_indicadores:.2f}%)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ras_normalizados.append({
+            "descripcion": descripcion[:255],
+            "porcentaje_ra": porcentaje,
+            "indicadores": indicadores_normalizados,
+        })
+        suma_nuevos += porcentaje
+
+    with transaction.atomic():
+        asignatura = Asignatura.objects.select_related("docente", "programa").filter(
+            codigo_asignatura=codigo_asignatura,
+            grupo=grupo,
+        ).first()
+        asignatura_creada = False
+        asignatura_actualizada = False
+
+        if not asignatura:
+            asignatura = Asignatura.objects.create(
+                codigo_asignatura=codigo_asignatura,
+                nombre=nombre_asignatura,
+                docente=docente,
+                programa=programa,
+                grupo=grupo,
+            )
+            asignatura_creada = True
+        else:
+            updates = {}
+            if asignatura.nombre != nombre_asignatura:
+                updates["nombre"] = nombre_asignatura
+            if asignatura.docente_id != docente.id_docente:
+                updates["docente"] = docente
+            if asignatura.programa_id != programa.id_programa:
+                updates["programa"] = programa
+            if asignatura.grupo != grupo:
+                updates["grupo"] = grupo
+
+            if updates:
+                for field, value in updates.items():
+                    setattr(asignatura, field, value)
+                asignatura.save(update_fields=list(updates.keys()))
+                asignatura_actualizada = True
+
+        suma_existente = float(
+            ResultadoDeAprendizaje.objects.filter(asignatura=asignatura).aggregate(v=Sum("porcentaje_ra"))["v"] or 0
+        )
+
+        if (suma_existente + suma_nuevos) > 100.0:
+            return Response(
+                {
+                    "detail": (
+                        f"La suma de porcentajes de RA excede 100% "
+                        f"({suma_existente + suma_nuevos:.2f}%). Actual: {suma_existente:.2f}%, nuevos: {suma_nuevos:.2f}%"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existentes_desc = set(
+            (
+                ResultadoDeAprendizaje.objects.filter(asignatura=asignatura)
+                .exclude(descripcion__isnull=True)
+                .exclude(descripcion__exact="")
+                .values_list("descripcion", flat=True)
+            )
+        )
+        existentes_desc_lc = {str(d).strip().lower() for d in existentes_desc if d is not None}
+
+        ras_to_create = []
+        ras_to_create_payload = []
+        ras_omitidos = []
+        for ra in ras_normalizados:
+            if ra["descripcion"].lower() in existentes_desc_lc:
+                ras_omitidos.append({"descripcion": ra["descripcion"], "motivo": "RA ya existe"})
+                continue
+            ras_to_create.append(
+                ResultadoDeAprendizaje(
+                    asignatura=asignatura,
+                    descripcion=ra["descripcion"],
+                    porcentaje_ra=ra["porcentaje_ra"],
+                )
+            )
+            ras_to_create_payload.append(ra)
+
+        ras_creados = ResultadoDeAprendizaje.objects.bulk_create(ras_to_create, batch_size=200) if ras_to_create else []
+        indicadores_to_create = []
+        if ras_creados:
+            for ra_creado, ra_payload in zip(ras_creados, ras_to_create_payload):
+                for indicador in ra_payload["indicadores"]:
+                    indicadores_to_create.append(
+                        IndicadoresDeLogro(
+                            ra=ra_creado,
+                            descripcion=indicador["descripcion"],
+                            porcentaje_ind=indicador["porcentaje_ind"],
+                        )
+                    )
+
+        indicadores_creados = (
+            IndicadoresDeLogro.objects.bulk_create(indicadores_to_create, batch_size=500)
+            if indicadores_to_create
+            else []
+        )
+
+        indicadores_por_ra = {}
+        for ind in indicadores_creados:
+            indicadores_por_ra.setdefault(ind.ra_id, []).append({
+                "id_ind": ind.id_ind,
+                "descripcion": ind.descripcion,
+                "porcentaje_ind": float(ind.porcentaje_ind),
+            })
+
+    try:
+        logger.info(
+            "crear_asignatura_ra: %s",
+            {
+                "coordinador": getattr(coord, "codigo_coordinador", None),
+                "codigo_asignatura": codigo_asignatura,
+                "asignatura_creada": asignatura_creada,
+                "asignatura_actualizada": asignatura_actualizada,
+                "ras_creados": len(ras_creados),
+                "indicadores_creados": len(indicadores_creados),
+                "ras_omitidos": len(ras_omitidos),
+            },
+        )
+    except Exception:
+        pass
+
+    return Response(
+        {
+            "detail": "Asignatura procesada correctamente",
+            "asignatura": {
+                "codigo": asignatura.codigo_asignatura,
+                "nombre": asignatura.nombre,
+                "grupo": asignatura.grupo,
+                "programa_codigo": getattr(asignatura.programa, "codigo_programa", None),
+                "docente_codigo": getattr(asignatura.docente, "codigo_docente", None),
+            },
+            "asignatura_creada": asignatura_creada,
+            "asignatura_actualizada": asignatura_actualizada,
+            "ras_creados": [
+                {
+                    "id_ra": r.id_ra,
+                    "descripcion": r.descripcion,
+                    "porcentaje_ra": float(r.porcentaje_ra),
+                    "indicadores": indicadores_por_ra.get(r.id_ra, []),
+                }
+                for r in ras_creados
+            ],
+            "ras_omitidos": ras_omitidos,
+            "total_ra_asignatura": float(
+                ResultadoDeAprendizaje.objects.filter(asignatura=asignatura).aggregate(v=Sum("porcentaje_ra"))["v"] or 0
+            ),
+        },
+        status=status.HTTP_201_CREATED if asignatura_creada else status.HTTP_200_OK,
+    )
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -881,10 +1775,17 @@ def coordinador_asignatura_estudiantes_view(request):
     if err:
         return err
     codigo = request.query_params.get("codigo_asignatura")
+    grupo = (request.query_params.get("grupo") or "").strip()
+    id_asignatura = request.query_params.get("id_asignatura")
     if not codigo:
         return Response({"detail": "codigo_asignatura requerido"}, status=status.HTTP_400_BAD_REQUEST)
     periodo_desc = request.query_params.get("periodo")
-    asig = Asignatura.objects.filter(codigo_asignatura=codigo).first()
+    asig_qs = Asignatura.objects.filter(codigo_asignatura=codigo)
+    if grupo:
+        asig_qs = asig_qs.filter(grupo=grupo)
+    if id_asignatura:
+        asig_qs = asig_qs.filter(id_asignatura=id_asignatura)
+    asig = asig_qs.order_by("id_asignatura").first()
     if not asig:
         return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
     mats = Matricula.objects.filter(asignatura=asig).select_related("estudiante", "periodo")
@@ -1233,10 +2134,12 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
 def coordinador_import_matriculados_view(request):
     """Importa matriculados desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
     Columnas mínimas requeridas: codigo_estudiante, codigo_asignatura, periodo
+    Recomendado: incluir grupo para desambiguar asignaturas con mismo código.
     Soporta: .csv, .xlsx, .xls
     Campos aceptados (sinónimos):
       - codigo_estudiante | estudiante | code
       - codigo_asignatura | asignatura | curso
+            - grupo
       - periodo | periodo_academico
     """
     coord, err = _require_coordinador(request)
@@ -1268,7 +2171,10 @@ def coordinador_import_matriculados_view(request):
     
     # OPTIMIZACIÓN: Pre-cargar todos los datos en memoria
     estudiantes_map = {e.codigo_estudiante: e for e in Estudiante.objects.all()}
-    asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.all()}
+    asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.all()}
+    asignaturas_por_codigo = {}
+    for a in Asignatura.objects.all():
+        asignaturas_por_codigo.setdefault(a.codigo_asignatura, []).append(a)
     periodos_map = {p.descripcion: p for p in PeriodoAcademico.objects.all()}
     
     # Pre-cargar matrículas existentes para evitar duplicados
@@ -1281,6 +2187,7 @@ def coordinador_import_matriculados_view(request):
     errors = []
     max_rows = 5000
     to_create = []
+    enrollments_for_emails = []
     
     # Helper function para acceder a columnas de pandas de forma segura
     def get_col(row, *col_names):
@@ -1301,11 +2208,13 @@ def coordinador_import_matriculados_view(request):
         # Extraer campos con sinónimos
         cod_est = get_col(row, "codigo_estudiante", "estudiante", "code")
         cod_asig = get_col(row, "codigo_asignatura", "asignatura", "curso")
+        grupo = get_col(row, "grupo")
         periodo_desc = get_col(row, "periodo", "periodo_academico")
         
         # Limpiar strings
         if cod_est: cod_est = str(cod_est).strip()[:50]
         if cod_asig: cod_asig = str(cod_asig).strip()[:50]
+        if grupo: grupo = str(grupo).strip()[:20]
         if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
         
         if not (cod_est and cod_asig and periodo_desc):
@@ -1317,9 +2226,19 @@ def coordinador_import_matriculados_view(request):
             errors.append({"row": row_num, "error": f"Estudiante no encontrado: {cod_est}"})
             continue
         
-        asig = asignaturas_map.get(cod_asig)
+        asig = None
+        if grupo:
+            asig = asignaturas_map.get((cod_asig, grupo))
+        else:
+            candidatos = asignaturas_por_codigo.get(cod_asig, [])
+            if len(candidatos) == 1:
+                asig = candidatos[0]
+            elif len(candidatos) > 1:
+                errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo."})
+                continue
         if not asig:
-            errors.append({"row": row_num, "error": f"Asignatura no encontrada: {cod_asig}"})
+            detalle = f"{cod_asig} grupo {grupo}" if grupo else cod_asig
+            errors.append({"row": row_num, "error": f"Asignatura no encontrada: {detalle}"})
             continue
         
         per = periodos_map.get(periodo_desc)
@@ -1340,6 +2259,16 @@ def coordinador_import_matriculados_view(request):
             asignatura=asig,
             nota_final=None
         ))
+        enrollments_for_emails.append({
+            "estudiante_nombre": f"{est.nombre} {est.apellido}".strip(),
+            "estudiante_correo": est.correo,
+            "asignatura_nombre": asig.nombre,
+            "asignatura_codigo": asig.codigo_asignatura,
+            "grupo": asig.grupo,
+            "periodo": per.descripcion,
+            "programa": getattr(asig.programa, "nombre", None),
+            "docente": f"{getattr(asig.docente, 'nombre', '')} {getattr(asig.docente, 'apellido', '')}".strip(),
+        })
         existing_matriculas.add(key)
         created += 1
     
@@ -1354,7 +2283,14 @@ def coordinador_import_matriculados_view(request):
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
-    payload = {"created": created, "existing": existing, "errors": errors}
+    notified = 0
+    if created > 0 and enrollments_for_emails:
+        try:
+            notified = _send_bulk_enrollment_emails_async(enrollments_for_emails)
+        except Exception as e:
+            logger.error(f"No fue posible programar correos de matricula: {str(e)}")
+
+    payload = {"created": created, "existing": existing, "errors": errors, "notified": notified}
     try:
         logger.info("import_matriculados: %s", {
             "coordinador": getattr(coord, "codigo_coordinador", None),
@@ -1897,9 +2833,8 @@ def coordinador_import_docentes_view(request):
 @authentication_classes([])
 def coordinador_import_asignaturas_ras_view(request):
     """Importa asignaturas y RAs desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
-    Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa
+    Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa, grupo
     Columnas RA opcionales (si presentes se crea RA): ra_descripcion, ra_porcentaje
-    Grupo opcional: grupo
     Soporta: .csv, .xlsx, .xls
     Sinónimos aceptados:
       - codigo_asignatura | asignatura | codigo
@@ -1940,12 +2875,12 @@ def coordinador_import_asignaturas_ras_view(request):
     # OPTIMIZACIÓN: Pre-cargar datos existentes
     docentes_map = {d.codigo_docente: d for d in Docente.objects.all()}
     programas_map = {p.codigo_programa: p for p in Programa.objects.all()}
-    asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+    asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.select_related('docente', 'programa').all()}
     
     # Calcular sumas de porcentajes de RAs por asignatura
     ra_sumas = {}
-    for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura').annotate(suma=Sum('porcentaje_ra')):
-        ra_sumas[ra['asignatura__codigo_asignatura']] = float(ra['suma'] or 0)
+    for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura', 'asignatura__grupo').annotate(suma=Sum('porcentaje_ra')):
+        ra_sumas[(ra['asignatura__codigo_asignatura'], ra['asignatura__grupo'])] = float(ra['suma'] or 0)
     
     created_asig = 0
     existing_asig = 0
@@ -1987,10 +2922,10 @@ def coordinador_import_asignaturas_ras_view(request):
         if nombre: nombre = str(nombre).strip()[:200]
         if codigo_doc: codigo_doc = str(codigo_doc).strip()[:50]
         if codigo_prog: codigo_prog = str(codigo_prog).strip()[:50]
-        if grupo: grupo = str(grupo).strip()[:50]
+        if grupo: grupo = str(grupo).strip()[:20]
         if ra_desc: ra_desc = str(ra_desc).strip()[:255]
         
-        if not (codigo and nombre and codigo_doc and codigo_prog):
+        if not (codigo and nombre and codigo_doc and codigo_prog and grupo):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas asignatura"}); continue
         
         docente = docentes_map.get(codigo_doc)
@@ -2002,10 +2937,11 @@ def coordinador_import_asignaturas_ras_view(request):
             errors.append({"row": row_num, "error": f"Programa no encontrado: {codigo_prog}"}); continue
         
         # Verificar si asignatura existe
-        asign = asignaturas_map.get(codigo)
+        asig_key = (codigo, grupo)
+        asign = asignaturas_map.get(asig_key)
         if not asign:
             # Verificar si ya la vamos a crear en este batch
-            if codigo not in [a.codigo_asignatura for a in asignaturas_to_create]:
+            if asig_key not in [(a.codigo_asignatura, a.grupo) for a in asignaturas_to_create]:
                 asignaturas_to_create.append(Asignatura(
                     nombre=nombre,
                     codigo_asignatura=codigo,
@@ -2013,10 +2949,10 @@ def coordinador_import_asignaturas_ras_view(request):
                     grupo=grupo,
                     programa=programa
                 ))
-                asignaturas_map[codigo] = None  # Marcador temporal
+                asignaturas_map[asig_key] = None  # Marcador temporal
                 created_asig += 1
         else:
-            if codigo not in asignaturas_to_update:
+            if asig_key not in asignaturas_to_update:
                 existing_asig += 1
             # Actualizar nombre/grupo si difiere
             changed = False
@@ -2024,11 +2960,8 @@ def coordinador_import_asignaturas_ras_view(request):
             if nombre and asign.nombre != nombre:
                 updates['nombre'] = nombre
                 changed = True
-            if grupo and asign.grupo != grupo:
-                updates['grupo'] = grupo
-                changed = True
             if changed:
-                asignaturas_to_update[codigo] = updates
+                asignaturas_to_update[asig_key] = updates
         
         # Procesar RA si columnas presentes
         if ra_desc and raw_pct is not None and raw_pct != "":
@@ -2040,17 +2973,18 @@ def coordinador_import_asignaturas_ras_view(request):
                 errors.append({"row": idx, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
             
             # Validar suma de porcentajes
-            suma_actual = ra_sumas.get(codigo, 0)
+            suma_actual = ra_sumas.get(asig_key, 0)
             if float(suma_actual) + pct > 100.0:
                 errors.append({"row": idx, "error": f"Suma RA excede 100% ({float(suma_actual)+pct:.2f})"}); continue
             
             # Guardar para crear después
             ras_pendientes.append({
                 'codigo_asignatura': codigo,
+                'grupo': grupo,
                 'descripcion': ra_desc,
                 'porcentaje': pct
             })
-            ra_sumas[codigo] = suma_actual + pct
+            ra_sumas[asig_key] = suma_actual + pct
             created_ras += 1
     
     # BULK INSERT de asignaturas nuevas
@@ -2059,7 +2993,7 @@ def coordinador_import_asignaturas_ras_view(request):
             with transaction.atomic():
                 Asignatura.objects.bulk_create(asignaturas_to_create, batch_size=500)
                 # Recargar mapa de asignaturas con las recién creadas
-                asignaturas_map = {a.codigo_asignatura: a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+                asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.select_related('docente', 'programa').all()}
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva de asignaturas: {str(e)}"})
             created_asig = 0
@@ -2068,8 +3002,8 @@ def coordinador_import_asignaturas_ras_view(request):
     # Actualizar asignaturas existentes
     if asignaturas_to_update:
         try:
-            for codigo, updates in asignaturas_to_update.items():
-                Asignatura.objects.filter(codigo_asignatura=codigo).update(**updates)
+            for (codigo, grupo), updates in asignaturas_to_update.items():
+                Asignatura.objects.filter(codigo_asignatura=codigo, grupo=grupo).update(**updates)
         except Exception:
             pass
     
@@ -2077,7 +3011,7 @@ def coordinador_import_asignaturas_ras_view(request):
     if ras_pendientes:
         try:
             for ra_data in ras_pendientes:
-                asign = asignaturas_map.get(ra_data['codigo_asignatura'])
+                asign = asignaturas_map.get((ra_data['codigo_asignatura'], ra_data['grupo']))
                 if asign:
                     ras_to_create.append(ResultadoDeAprendizaje(
                         asignatura=asign,
@@ -2554,6 +3488,32 @@ class AsignaturaViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
         return qs
+
+    def get_object(self):
+        """Resuelve asignatura por codigo_asignatura permitiendo múltiples grupos.
+
+        Con el nuevo modelo (codigo + grupo), el código por sí solo puede no ser único.
+        Este resolver evita MultipleObjectsReturned y permite desambiguar por:
+        - query param grupo
+        - query param id_asignatura
+        """
+        codigo = self.kwargs.get(self.lookup_field)
+        qs = self.filter_queryset(self.get_queryset()).filter(codigo_asignatura=codigo)
+
+        grupo = (self.request.query_params.get("grupo") or "").strip()
+        if grupo:
+            qs = qs.filter(grupo=grupo)
+
+        id_asignatura = self.request.query_params.get("id_asignatura")
+        if id_asignatura:
+            qs = qs.filter(id_asignatura=id_asignatura)
+
+        obj = qs.order_by("id_asignatura").first()
+        if not obj:
+            raise NotFound("Asignatura no encontrada")
+
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     @action(detail=True, methods=["get"])
     def estudiantes(self, request, codigo_asignatura=None):

@@ -14,6 +14,9 @@ export const endpoints = {
   catalogos: {
     tiposActividad: '/tipos-actividad/',
   },
+  programas: {
+    list: '/programas/',
+  },
   asignaturas: {
     list: '/asignaturas/',
     ras: (id: string) => `/asignaturas/${id}/ras/`,
@@ -46,7 +49,11 @@ export const endpoints = {
   },
   coordinador: {
     estudiantes: '/coordinador/estudiantes',  // GET: listar, POST: crear individual
+    periodos: '/coordinador/periodos',
+    estudiantesParaMatricula: '/coordinador/estudiantes-para-matricula',
+    docentes: '/coordinador/docentes',  // GET: listar, POST: crear individual
     asignaturas: '/coordinador/asignaturas',
+    crearAsignaturaRA: '/coordinador/asignaturas/crear-ra',
     asignaturaEstudiantes: '/coordinador/asignaturas/estudiantes',
     asignaturaRAs: '/coordinador/asignaturas/ras',
     asignaturaAvance: '/coordinador/asignaturas/avance',

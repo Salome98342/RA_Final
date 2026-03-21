@@ -15,6 +15,9 @@ import CoordinadorAsignatura from '@/pages/coordinador/Asignatura'
 import CoordinadorImports from '@/pages/coordinador/Imports'
 import CoordinadorMaterias from '@/pages/coordinador/Materias'
 import CoordinadorEstudiantes from '@/pages/coordinador/Estudiantes'
+import CoordinadorDocentes from '@/pages/coordinador/Docentes'
+import CoordinadorMatriculados from '@/pages/coordinador/Matriculados'
+import CoordinadorAsignaturasRA from '@/pages/coordinador/AsignaturasRA'
 import CoordinadorAsignaturaAnalisis from '@/pages/coordinador/AsignaturaAnalisis'
 import EstudianteMateriaDetalle from '@/pages/estudiante/MateriaDetalle'
 import { useSession } from '@/state/SessionContext'
@@ -98,7 +101,10 @@ const App: React.FC = () => {
   <Route path="/coordinador" element={<CoordinatorRoute><CoordinadorDashboard /></CoordinatorRoute>} />
   <Route path="/coordinador/materias" element={<CoordinatorRoute><CoordinadorMaterias /></CoordinatorRoute>} />
   <Route path="/coordinador/materias/:codigo/analitica" element={<CoordinatorRoute><CoordinadorAsignaturaAnalisis /></CoordinatorRoute>} />
+  <Route path="/coordinador/docentes" element={<CoordinatorRoute><CoordinadorDocentes /></CoordinatorRoute>} />
   <Route path="/coordinador/estudiantes" element={<CoordinatorRoute><CoordinadorEstudiantes /></CoordinatorRoute>} />
+  <Route path="/coordinador/matriculados" element={<CoordinatorRoute><CoordinadorMatriculados /></CoordinatorRoute>} />
+  <Route path="/coordinador/asignaturas-ra" element={<CoordinatorRoute><CoordinadorAsignaturasRA /></CoordinatorRoute>} />
   <Route path="/coordinador/asignatura/:codigo" element={<CoordinatorRoute><CoordinadorAsignatura /></CoordinatorRoute>} />
   <Route path="/coordinador/imports" element={<CoordinatorRoute><CoordinadorImports /></CoordinatorRoute>} />
       {/* Fallback */}

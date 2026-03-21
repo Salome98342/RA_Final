@@ -6,11 +6,27 @@ from django.conf import settings
 from django.core import signing
 import logging
 import pandas as pd
+import unicodedata
+import io
 
 from ..models.models import Docente, Estudiante, Coordinador, Notificacion
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 días
 logger = logging.getLogger("api")
+
+
+def _normalize_text(text):
+    """
+    Normaliza texto para búsquedas:
+    - Minúsculas
+    - Sin espacios extremos
+    - Sin tildes/diacríticos
+    """
+    if not text:
+        return ""
+    text = str(text).lower().strip()
+    # Eliminar diacríticos (á -> a, ñ -> n, etc)
+    return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
 
 
 def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
@@ -118,15 +134,23 @@ def _read_imported_file(file_obj):
     filename = getattr(file_obj, 'name', '').lower()
     logger.info(f"Intentando leer archivo: {filename}, tamaño: {getattr(file_obj, 'size', 'desconocido')} bytes")
     
-    file_obj.seek(0)
+    # Leer el contenido a memoria para evitar problemas con seek en FileWrapper
+    try:
+        file_obj.seek(0)
+        file_bytes = file_obj.read()
+    except Exception as e:
+        logger.error(f"Error leyendo bytes del archivo: {e}")
+        return None
     
     try:
         if filename.endswith('.xlsx') or filename.endswith('.xls'):
-            df = pd.read_excel(file_obj, engine='openpyxl' if filename.endswith('.xlsx') else None)
-            df.columns = df.columns.str.strip().str.lower()
-            logger.info(f"✓ Archivo Excel leído exitosamente: {len(df)} filas")
-            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
-            return df
+            # Usar BytesIO para Excel
+            with io.BytesIO(file_bytes) as bio:
+                df = pd.read_excel(bio, engine='openpyxl' if filename.endswith('.xlsx') else 'xlrd')
+                df.columns = df.columns.str.strip().str.lower()
+                logger.info(f"Archivo Excel leido exitosamente: {len(df)} filas")
+                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                return df
         else:
             encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
             delimiters_to_try = [',', ';', '\t', '|']
@@ -134,22 +158,41 @@ def _read_imported_file(file_obj):
             for encoding in encodings_to_try:
                 for delimiter in delimiters_to_try:
                     try:
-                        file_obj.seek(0)
-                        df = pd.read_csv(
-                            file_obj, 
-                            encoding=encoding,
-                            sep=delimiter,
-                            on_bad_lines='skip',
-                            engine='python',
-                            skipinitialspace=True,
-                            quotechar='"'
-                        )
-                        if len(df.columns) > 1 and len(df) > 0:
-                            df.columns = df.columns.str.strip().str.lower()
-                            logger.info(f"✓ Archivo CSV leído exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
-                            logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
-                            return df
-                    except (UnicodeDecodeError, Exception):
+                        # Usar BytesIO para cada intento para asegurar stream limpio
+                        with io.BytesIO(file_bytes) as bio:
+                            # Leer CSV con configuración tolerante a errores
+                            # engine='python' es más flexible pero más lento.
+                            # on_bad_lines='skip' ignora líneas con diferente número de campos
+                            df = pd.read_csv(
+                                bio, 
+                                encoding=encoding,
+                                sep=delimiter,
+                                on_bad_lines='skip',
+                                engine='python',
+                                skipinitialspace=True,
+                                quotechar='"'
+                            )
+                            
+                            # Limpieza básica de columnas vacías
+                            df = df.dropna(how='all', axis=1) # Eliminar columnas totalmente vacías
+                            df = df.dropna(how='all', axis=0) # Eliminar filas totalmente vacías
+                            
+                            cols_count = len(df.columns)
+                            if cols_count >= 1 and len(df) > 0:
+                                # Normalizar nombres de columnas: minúsculas y sin espacios
+                                df.columns = df.columns.str.strip().str.lower()
+                                
+                                # Si solo detecta 1 columna y usamos un delimitador común, probablemente falló
+                                if cols_count == 1 and delimiter in [',', ';', '\t']:
+                                    logger.warning(f"[CSV WARNING] Lectura con {encoding}|'{delimiter}' -> 1 columna. Probablemente incorrecto.")
+                                    # No retornamos, seguimos probando
+                                    continue
+                                
+                                logger.info(f"Archivo CSV leido exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
+                                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                                return df
+                    except (UnicodeDecodeError, Exception) as e:
+                        # logger.warning(f"[CSV DEBUG] Falló lectura con {encoding}|{delimiter}: {e}")
                         continue
             
             logger.error("No se pudo leer el archivo CSV con ninguna codificación/delimitador soportado")
