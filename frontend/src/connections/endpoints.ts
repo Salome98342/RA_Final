@@ -61,6 +61,7 @@ export const endpoints = {
     importMatriculados: '/coordinador/import/matriculados',
     importDocentes: '/coordinador/import/docentes',
     importAsignaturasRAs: '/coordinador/import/asignaturas-ras',
+    importTemplate: (filename: string) => `/coordinador/import/templates/${filename}`,
   },
   tiposDocumento: '/tipos-documento/',
 }

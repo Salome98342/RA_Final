@@ -184,24 +184,35 @@ canvas {
 
 /* Marca a la izquierda: “ladrillo” rojo y título */
 .brand-icon {
-  width: 55px; height: 55px;
+  height: 36px;
   border-radius: 8px;
-  display: inline-grid; place-items: center;
-  background: #fff;
-  border: 1px solid rgba(255,255,255,.35);
-  box-shadow: 0 4px 10px rgba(0,0,0,.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   text-decoration: none;
   margin-right: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 .brand-icon:hover { filter: brightness(1.02); transform: translateY(-1px); transition: all .15s ease; }
 
 .brand-logo {
-  width: 100%;
-  height: 100%;
+  width: 50px;
+  max-width: 42vw;
+  height: auto;
   object-fit: contain;
   display: block;
-  padding: 4px;
+  padding: 0;
+}
+
+.profile-modal-logo {
+  width: 84px;
+  max-width: 42vw;
+  height: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-title {
@@ -520,10 +531,13 @@ canvas {
 
 @media (max-width: 576px) {
   .brand-icon {
-    width: 44px;
-    height: 44px;
+    height: 30px;
     margin-right: 8px;
   }
+
+  .brand-logo { width: 84px; }
+
+  .profile-modal-logo { width: 68px; }
 
   .brand-title {
     margin-left: 6px;
@@ -647,13 +661,9 @@ canvas {
 
 /* Marca */
 .brand-logo {
-  width: 50px;
-  height: 50px;
-  border-radius: 6px;
-  object-fit: contain;
-  background: rgba(255,255,255,.15);
-  /* padding: 4px; */
-  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 0;
+  background: transparent;
+  border: none;
 }
 
 

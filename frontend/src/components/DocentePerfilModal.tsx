@@ -32,9 +32,9 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
       <div className="modal-dialog modal-xl modal-dialog-scrollable">
         <div className="modal-content">
           <div className="modal-header bg-primary text-white">
-            <h5 className="modal-title">
-              <i className="bi bi-person-badge me-2"></i>
-              Perfil del Docente
+            <h5 className="modal-title d-flex align-items-center gap-2 mb-0">
+              <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="profile-modal-logo" />
+              <span>Perfil del Docente</span>
             </h5>
             <button type="button" className="btn-close btn-close-white" onClick={onClose} aria-label="Cerrar"></button>
           </div>

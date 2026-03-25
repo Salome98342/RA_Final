@@ -43,6 +43,7 @@ from django.utils.text import get_valid_filename
 from django.utils import timezone
 from django.db.models import Avg, Sum, Q
 from django.db import transaction, DatabaseError, IntegrityError
+from django.http import FileResponse
 import datetime
 
 from ..models.models import (
@@ -64,6 +65,14 @@ from ..utils.security import (
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
 logger = logging.getLogger("ra_manager.coordinador")
+
+ALLOWED_IMPORT_TEMPLATES = {
+    "plantilla_estudiantes.xlsx",
+    "plantilla_importacion_estudiantes_con_datos.csv",
+    "plantilla_matriculados.xlsx",
+    "plantilla_docentes.xlsx",
+    "plantilla_asignaturas_ras.xlsx",
+}
 
 
 def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
@@ -2133,7 +2142,8 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
 @authentication_classes([])
 def coordinador_import_matriculados_view(request):
     """Importa matriculados desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
-    Columnas mínimas requeridas: codigo_estudiante, codigo_asignatura, periodo
+    Columnas mínimas requeridas: codigo_estudiante, periodo
+    Si no se envían asignaturas seleccionadas en el formulario, también requiere codigo_asignatura.
     Recomendado: incluir grupo para desambiguar asignaturas con mismo código.
     Soporta: .csv, .xlsx, .xls
     Campos aceptados (sinónimos):
@@ -2176,6 +2186,24 @@ def coordinador_import_matriculados_view(request):
     for a in Asignatura.objects.all():
         asignaturas_por_codigo.setdefault(a.codigo_asignatura, []).append(a)
     periodos_map = {p.descripcion: p for p in PeriodoAcademico.objects.all()}
+
+    # Asignaturas seleccionadas desde el cliente para aplicar la importación a una o varias materias
+    selected_asignaturas = []
+    selected_ids_raw = request.POST.getlist("id_asignaturas[]") or request.POST.getlist("id_asignaturas")
+    if selected_ids_raw:
+        selected_ids = []
+        for raw_id in selected_ids_raw:
+            try:
+                selected_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
+
+        if not selected_ids:
+            return Response({"detail": "No se recibieron asignaturas válidas para la importación"}, status=status.HTTP_400_BAD_REQUEST)
+
+        selected_asignaturas = list(Asignatura.objects.filter(id_asignatura__in=selected_ids))
+        if not selected_asignaturas:
+            return Response({"detail": "Las asignaturas seleccionadas no existen"}, status=status.HTTP_400_BAD_REQUEST)
     
     # Pre-cargar matrículas existentes para evitar duplicados
     existing_matriculas = set(
@@ -2217,8 +2245,12 @@ def coordinador_import_matriculados_view(request):
         if grupo: grupo = str(grupo).strip()[:20]
         if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
         
-        if not (cod_est and cod_asig and periodo_desc):
-            errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura, periodo)"})
+        requires_asignatura_in_file = not selected_asignaturas
+        if not cod_est or not periodo_desc or (requires_asignatura_in_file and not cod_asig):
+            if requires_asignatura_in_file:
+                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura, periodo)"})
+            else:
+                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, periodo)"})
             continue
         
         est = estudiantes_map.get(cod_est)
@@ -2226,51 +2258,57 @@ def coordinador_import_matriculados_view(request):
             errors.append({"row": row_num, "error": f"Estudiante no encontrado: {cod_est}"})
             continue
         
-        asig = None
-        if grupo:
-            asig = asignaturas_map.get((cod_asig, grupo))
+        row_asignaturas = []
+        if selected_asignaturas:
+            row_asignaturas = selected_asignaturas
         else:
-            candidatos = asignaturas_por_codigo.get(cod_asig, [])
-            if len(candidatos) == 1:
-                asig = candidatos[0]
-            elif len(candidatos) > 1:
-                errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo."})
+            asig = None
+            if grupo:
+                asig = asignaturas_map.get((cod_asig, grupo))
+            else:
+                candidatos = asignaturas_por_codigo.get(cod_asig, [])
+                if len(candidatos) == 1:
+                    asig = candidatos[0]
+                elif len(candidatos) > 1:
+                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo."})
+                    continue
+            if not asig:
+                detalle = f"{cod_asig} grupo {grupo}" if grupo else cod_asig
+                errors.append({"row": row_num, "error": f"Asignatura no encontrada: {detalle}"})
                 continue
-        if not asig:
-            detalle = f"{cod_asig} grupo {grupo}" if grupo else cod_asig
-            errors.append({"row": row_num, "error": f"Asignatura no encontrada: {detalle}"})
-            continue
+            row_asignaturas = [asig]
         
         per = periodos_map.get(periodo_desc)
         if not per:
             errors.append({"row": row_num, "error": f"Periodo no encontrado: {periodo_desc}"})
             continue
         
-        # Verificar si ya existe
-        key = (est.id_estudiante, per.id_periodo, asig.id_asignatura)
-        if key in existing_matriculas:
-            existing += 1
-            continue
-        
-        # Agregar a lista de creación y marcar como existente para evitar duplicados en el mismo archivo
-        to_create.append(Matricula(
-            estudiante=est,
-            periodo=per,
-            asignatura=asig,
-            nota_final=None
-        ))
-        enrollments_for_emails.append({
-            "estudiante_nombre": f"{est.nombre} {est.apellido}".strip(),
-            "estudiante_correo": est.correo,
-            "asignatura_nombre": asig.nombre,
-            "asignatura_codigo": asig.codigo_asignatura,
-            "grupo": asig.grupo,
-            "periodo": per.descripcion,
-            "programa": getattr(asig.programa, "nombre", None),
-            "docente": f"{getattr(asig.docente, 'nombre', '')} {getattr(asig.docente, 'apellido', '')}".strip(),
-        })
-        existing_matriculas.add(key)
-        created += 1
+        for asig in row_asignaturas:
+            # Verificar si ya existe
+            key = (est.id_estudiante, per.id_periodo, asig.id_asignatura)
+            if key in existing_matriculas:
+                existing += 1
+                continue
+
+            # Agregar a lista de creación y marcar como existente para evitar duplicados en el mismo archivo
+            to_create.append(Matricula(
+                estudiante=est,
+                periodo=per,
+                asignatura=asig,
+                nota_final=None
+            ))
+            enrollments_for_emails.append({
+                "estudiante_nombre": f"{est.nombre} {est.apellido}".strip(),
+                "estudiante_correo": est.correo,
+                "asignatura_nombre": asig.nombre,
+                "asignatura_codigo": asig.codigo_asignatura,
+                "grupo": asig.grupo,
+                "periodo": per.descripcion,
+                "programa": getattr(asig.programa, "nombre", None),
+                "docente": f"{getattr(asig.docente, 'nombre', '')} {getattr(asig.docente, 'apellido', '')}".strip(),
+            })
+            existing_matriculas.add(key)
+            created += 1
     
     # BULK INSERT con transacción atómica
     if to_create:
@@ -2310,6 +2348,35 @@ def coordinador_import_matriculados_view(request):
     except Exception:
         pass
     return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_download_template_view(request, filename: str):
+    """Descarga de plantillas de importación para coordinador."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    safe_name = os.path.basename(str(filename or "")).strip()
+    if safe_name not in ALLOWED_IMPORT_TEMPLATES:
+        return Response({"detail": "Plantilla no permitida"}, status=status.HTTP_404_NOT_FOUND)
+
+    template_path = settings.BASE_DIR / "plantillas" / safe_name
+    if not template_path.exists() or not template_path.is_file():
+        return Response({"detail": "Plantilla no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        response = FileResponse(open(template_path, "rb"), as_attachment=True, filename=safe_name)
+        response["Cache-Control"] = "no-store"
+        logger.info("download_template: %s", {
+            "coordinador": getattr(coord, "codigo_coordinador", None),
+            "filename": safe_name,
+        })
+        return response
+    except Exception:
+        return Response({"detail": "No se pudo descargar la plantilla"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -3465,6 +3532,7 @@ class AsignaturaViewSet(viewsets.ModelViewSet):
     ).order_by('codigo_asignatura')
     serializer_class = AsignaturaSerializer
     lookup_field = "codigo_asignatura"
+    pagination_class = None
 
     def get_queryset(self):
         qs = super().get_queryset()

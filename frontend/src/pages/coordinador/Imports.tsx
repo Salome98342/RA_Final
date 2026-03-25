@@ -1,11 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { importAsignaturasRAs, importDocentes, importEstudiantes, importMatriculados } from '@/services/coordinador'
+import {
+  fetchAsignaturas,
+  importAsignaturasRAs,
+  importDocentes,
+  importEstudiantes,
+  importMatriculados,
+  type AsignaturaRow,
+} from '@/services/coordinador'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Alert from '@/utils/alert'
-import { getAuthToken } from '@/connections/http'
+import { api } from '@/connections/http'
+import { endpoints } from '@/connections/endpoints'
 import Swal from 'sweetalert2'
 
 export type ImportKind = 'est' | 'mat' | 'doc' | 'asig'
@@ -115,10 +123,10 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-clipboard-check-fill',
     accentClass: 'text-success',
     description: 'Relaciona estudiantes con asignaturas y periodo académico de matrícula.',
-    acceptedColumns: 'codigo_estudiante, codigo_asignatura, periodo',
+    acceptedColumns: 'codigo_estudiante, periodo (codigo_asignatura opcional si seleccionas materias en la alerta)',
     templateCandidates: [{ fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' }],
     headerRule: {
-      required: ['codigo_estudiante', 'codigo_asignatura', 'periodo'],
+      required: ['codigo_estudiante', 'periodo'],
     },
     importAction: importMatriculados,
   },
@@ -274,11 +282,6 @@ const validateHeaders = (headers: string[], rule: HeaderRule): string[] => {
   return missing
 }
 
-const deriveBackendRoot = (): string => {
-  const baseApi = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').trim()
-  return baseApi.replace(/\/?api\/?$/, '')
-}
-
 const extractErrorMessage = (error: unknown): string => {
   if (typeof error === 'string') {
     return error
@@ -422,6 +425,8 @@ const Imports: React.FC<ImportsProps> = ({
   })
   const [activeImport, setActiveImport] = useState<ImportKind | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState<ImportKind | null>(null)
+  const [matriculadosAsignaturas, setMatriculadosAsignaturas] = useState<AsignaturaRow[]>([])
+  const [loadingMatriculadosAsignaturas, setLoadingMatriculadosAsignaturas] = useState(false)
   const inputRefs = {
     est: useRef<HTMLInputElement | null>(null),
     mat: useRef<HTMLInputElement | null>(null),
@@ -562,25 +567,21 @@ const Imports: React.FC<ImportsProps> = ({
 
   const downloadTemplate = async (kind: ImportKind) => {
     const config = configByKind[kind]
-    const backendRoot = deriveBackendRoot()
 
     setDownloadingTemplate(kind)
     try {
-      const token = getAuthToken()
       let success = false
 
       for (const candidate of config.templateCandidates) {
-        const templateUrl = `${backendRoot}/plantillas/${candidate.fileName}`
-        const response = await fetch(templateUrl, {
-          method: 'GET',
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        const response = await api.get(endpoints.coordinador.importTemplate(candidate.fileName), {
+          responseType: 'blob',
         })
 
-        if (!response.ok) {
+        if (!response.data) {
           continue
         }
 
-        const blob = await response.blob()
+        const blob = response.data as Blob
         const objectUrl = window.URL.createObjectURL(blob)
         const anchor = document.createElement('a')
         anchor.href = objectUrl
@@ -606,6 +607,60 @@ const Imports: React.FC<ImportsProps> = ({
     }
   }
 
+  const requestMatriculadosAsignaturas = async (): Promise<number[] | null> => {
+    if (!matriculadosAsignaturas.length) {
+      Alert.toast.warning('No hay materias disponibles para seleccionar en la importación de matriculados.')
+      return null
+    }
+
+    const optionsHtml = matriculadosAsignaturas
+      .map((asignatura) => {
+        const label = `${asignatura.codigo} - ${asignatura.nombre} - Grupo ${asignatura.grupo}`
+        return `
+          <label class="d-flex align-items-start gap-2 py-1 text-start" style="cursor:pointer;">
+            <input class="form-check-input mt-1 js-mat-asig" type="checkbox" value="${asignatura.id_asignatura}" />
+            <span>${escapeHtml(label)}</span>
+          </label>
+        `
+      })
+      .join('')
+
+    const result = await Swal.fire<{ selectedIds: number[] }>({
+      icon: 'warning',
+      title: 'Selecciona materia(s) para matricular',
+      html: `
+        <div class="text-start small text-muted mb-2">
+          El archivo se cargará en las materias seleccionadas. Puedes elegir una o varias antes de continuar.
+        </div>
+        <div style="max-height:280px; overflow:auto; border:1px solid #dee2e6; border-radius:8px; padding:8px;">
+          ${optionsHtml}
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Continuar importación',
+      cancelButtonText: 'Cancelar',
+      focusConfirm: false,
+      preConfirm: () => {
+        const selected = Array.from(document.querySelectorAll<HTMLInputElement>('.js-mat-asig:checked'))
+          .map((node) => Number(node.value))
+          .filter((id) => Number.isFinite(id))
+
+        if (!selected.length) {
+          Swal.showValidationMessage('Debes seleccionar al menos una materia para continuar.')
+          return undefined
+        }
+
+        return { selectedIds: selected }
+      },
+    })
+
+    if (!result.isConfirmed) {
+      return null
+    }
+
+    return result.value?.selectedIds || null
+  }
+
   const runImport = async (kind: ImportKind) => {
     const config = configByKind[kind]
     const current = cardState[kind]
@@ -620,7 +675,26 @@ const Imports: React.FC<ImportsProps> = ({
 
     const startedAt = performance.now()
     try {
-      const response = await config.importAction(current.file)
+      let response: ImportApiResponse
+
+      if (kind === 'mat') {
+        if (loadingMatriculadosAsignaturas) {
+          Alert.toast.info('Cargando materias disponibles. Intenta nuevamente en unos segundos.')
+          setSingleCardState(kind, { status: 'ready', validationError: null, result: null })
+          return
+        }
+
+        const selectedAsignaturaIds = await requestMatriculadosAsignaturas()
+        if (!selectedAsignaturaIds?.length) {
+          setSingleCardState(kind, { status: 'ready', validationError: null, result: null })
+          return
+        }
+
+        response = await importMatriculados(current.file, selectedAsignaturaIds)
+      } else {
+        response = await config.importAction(current.file)
+      }
+
       const durationMs = Math.round(performance.now() - startedAt)
       const result = buildResult(kind, response, durationMs)
 
@@ -693,6 +767,22 @@ const Imports: React.FC<ImportsProps> = ({
     if (!target) return
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [highlightedModule])
+
+  useEffect(() => {
+    const loadAsignaturasForMatriculados = async () => {
+      setLoadingMatriculadosAsignaturas(true)
+      try {
+        const data = await fetchAsignaturas({ page: 1, page_size: 1000 })
+        setMatriculadosAsignaturas(data.results || [])
+      } catch {
+        setMatriculadosAsignaturas([])
+      } finally {
+        setLoadingMatriculadosAsignaturas(false)
+      }
+    }
+
+    void loadAsignaturasForMatriculados()
+  }, [])
 
   return (
     <div className="dashboard-body min-vh-100">

@@ -40,7 +40,7 @@ const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl,
               else if (role === 'estudiante') navigate('/estudiante')
             }}
           >
-            <img src="/logopng.png" alt="Logo Universidad del Valle" className="brand-logo" />
+            <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="brand-logo" />
           </a>
           <div className="brand-title">
             {title}

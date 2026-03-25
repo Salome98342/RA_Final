@@ -12,6 +12,7 @@ from ..views.views import (
     coordinador_asignaturas_view, coordinador_asignatura_estudiantes_view, coordinador_import_matriculados_view, coordinador_asignatura_ras_view,
     coordinador_crear_asignatura_ra_view,
     coordinador_import_docentes_view, coordinador_import_asignaturas_ras_view, coordinador_import_estudiantes_view, coordinador_estudiantes_view,
+    coordinador_download_template_view,
     coordinador_periodos_view,
     coordinador_estudiantes_para_matricula_view,
     coordinador_docentes_view,
@@ -66,6 +67,7 @@ urlpatterns = [
     path("coordinador/import/docentes", coordinador_import_docentes_view),
     path("coordinador/import/estudiantes", coordinador_import_estudiantes_view),
     path("coordinador/import/asignaturas-ras", coordinador_import_asignaturas_ras_view),
+    path("coordinador/import/templates/<str:filename>", coordinador_download_template_view),
     # Consolidado de calificaciones por asignatura y estudiante
     path(
         "asignaturas/<str:codigo_asignatura>/calificaciones/<int:id_estudiante>/",

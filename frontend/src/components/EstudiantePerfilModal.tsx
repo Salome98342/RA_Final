@@ -7,10 +7,11 @@ interface EstudiantePerfilModalProps {
 }
 
 const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudiante, onClose }) => {
+  const ALL_PERIODS_VALUE = 'all'
   const [data, setData] = useState<EstudiantePerfilCompleto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<number | null>(null)
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<string>(ALL_PERIODS_VALUE)
 
   useEffect(() => {
     const loadData = async () => {
@@ -19,10 +20,8 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
       try {
         const result = await fetchEstudiantePerfil(id_estudiante)
         setData(result)
-        // Seleccionar el período más reciente por defecto
-        if (result.periodos.length > 0) {
-          setPeriodoSeleccionado(result.periodos[0].id_periodo)
-        }
+        // Mostrar todas las asignaturas por defecto para evitar ocultar periodos.
+        setPeriodoSeleccionado(ALL_PERIODS_VALUE)
       } catch (err: any) {
         setError(err?.response?.data?.detail || 'Error al cargar el perfil del estudiante')
       } finally {
@@ -32,7 +31,22 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
     loadData()
   }, [id_estudiante])
 
-  const periodo = data?.periodos.find(p => p.id_periodo === periodoSeleccionado)
+  const periodo = data?.periodos.find(p => String(p.id_periodo) === periodoSeleccionado)
+  const asignaturasMostradas = data
+    ? (periodoSeleccionado === ALL_PERIODS_VALUE
+        ? data.periodos.flatMap(p =>
+            p.asignaturas.map((asig) => ({
+              ...asig,
+              _periodoId: p.id_periodo,
+              _periodoDescripcion: p.descripcion,
+            }))
+          )
+        : (periodo?.asignaturas || []).map((asig) => ({
+            ...asig,
+            _periodoId: periodo?.id_periodo,
+            _periodoDescripcion: periodo?.descripcion,
+          })))
+    : []
 
   const getEstadoColor = (estado: string) => {
     switch (estado) {
@@ -64,9 +78,9 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
         <div className="modal-content">
           {/* Header */}
           <div className="modal-header bg-primary text-white">
-            <h5 className="modal-title">
-              <i className="bi bi-person-circle me-2"></i>
-              Perfil del Estudiante
+            <h5 className="modal-title d-flex align-items-center gap-2 mb-0">
+              <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="profile-modal-logo" />
+              <span>Perfil del Estudiante</span>
             </h5>
             <button type="button" className="btn-close btn-close-white" onClick={onClose} aria-label="Cerrar"></button>
           </div>
@@ -186,12 +200,15 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                     </label>
                     <select 
                       className="form-select"
-                      value={periodoSeleccionado || ''}
-                      onChange={(e) => setPeriodoSeleccionado(Number(e.target.value))}
+                      value={periodoSeleccionado}
+                      onChange={(e) => setPeriodoSeleccionado(e.target.value)}
                       aria-label="Seleccionar período académico"
                     >
+                      <option value={ALL_PERIODS_VALUE}>
+                        Todos los períodos ({data.estadisticas.total_asignaturas} asignaturas)
+                      </option>
                       {data.periodos.map(p => (
-                        <option key={p.id_periodo} value={p.id_periodo}>
+                        <option key={p.id_periodo} value={String(p.id_periodo)}>
                           {p.descripcion} ({p.asignaturas.length} asignaturas)
                         </option>
                       ))}
@@ -200,25 +217,29 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                 )}
 
                 {/* Asignaturas del Período Seleccionado */}
-                {periodo && (
+                {asignaturasMostradas.length > 0 && (
                   <div className="card shadow-sm">
                     <div className="card-header bg-light">
                       <h6 className="mb-0">
                         <i className="bi bi-book me-2"></i>
-                        Asignaturas - {periodo.descripcion}
+                        {periodoSeleccionado === ALL_PERIODS_VALUE
+                          ? 'Asignaturas - Todos los períodos'
+                          : `Asignaturas - ${periodo?.descripcion}`}
                       </h6>
                     </div>
                     <div className="card-body p-0">
                       <div className="accordion" id="accordionAsignaturas">
-                        {periodo.asignaturas.map((asig, idx) => (
-                          <div className="accordion-item" key={asig.id_asignatura}>
+                        {asignaturasMostradas.map((asig, idx) => {
+                          const collapseId = `collapse-${String(asig._periodoId)}-${String(asig.id_asignatura)}-${idx}`
+                          return (
+                          <div className="accordion-item" key={`${String(asig._periodoId)}-${String(asig.id_asignatura)}-${idx}`}>
                             <h2 className="accordion-header">
                               {/* eslint-disable-next-line axe/aria */}
                               <button
                                 className={`accordion-button ${idx !== 0 ? 'collapsed' : ''}`}
                                 type="button"
                                 data-bs-toggle="collapse"
-                                data-bs-target={`#collapse${asig.id_asignatura}`}
+                                data-bs-target={`#${collapseId}`}
                                 aria-expanded={idx === 0 ? 'true' : 'false'}
                               >
                                 <div className="d-flex w-100 justify-content-between align-items-center me-3">
@@ -227,6 +248,8 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                                     <strong>{asig.nombre}</strong>
                                     <br />
                                     <small className="text-muted">Docente: {asig.docente}</small>
+                                    <br />
+                                    <small className="text-muted">Período: {asig._periodoDescripcion}</small>
                                   </div>
                                   <div className="text-end">
                                     <span className={`badge bg-${getEstadoColor(asig.estado)} me-2`}>
@@ -240,7 +263,7 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                               </button>
                             </h2>
                             <div
-                              id={`collapse${asig.id_asignatura}`}
+                              id={collapseId}
                               className={`accordion-collapse collapse ${idx === 0 ? 'show' : ''}`}
                               data-bs-parent="#accordionAsignaturas"
                             >
@@ -321,7 +344,8 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                               </div>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   </div>

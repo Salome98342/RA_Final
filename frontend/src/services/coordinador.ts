@@ -199,9 +199,18 @@ export async function fetchAsignaturaAvance(params: { codigo_asignatura: string;
 }
 
 // ========== FUNCIONES API - IMPORTACIONES CSV ==========
-function uploadCsv(url: string, file: File) {
+function uploadCsv(url: string, file: File, extraFields?: Record<string, string | number | Array<string | number>>) {
   const fd = new FormData()
   fd.append('file', file)
+  if (extraFields) {
+    Object.entries(extraFields).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => fd.append(key, String(item)))
+        return
+      }
+      fd.append(key, String(value))
+    })
+  }
   return api.post(url, fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 0,
@@ -224,8 +233,10 @@ export async function importEstudiantes(file: File) {
   }
 }
 
-export async function importMatriculados(file: File) {
-  const { data } = await uploadCsv(endpoints.coordinador.importMatriculados, file)
+export async function importMatriculados(file: File, selectedAsignaturaIds: number[] = []) {
+  const { data } = await uploadCsv(endpoints.coordinador.importMatriculados, file, {
+    'id_asignaturas[]': selectedAsignaturaIds,
+  })
   return data as { created: number; existing: number; errors: Array<{ row: number; error: string }> }
 }
 
