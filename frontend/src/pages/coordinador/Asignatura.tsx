@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import Alert from '@/utils/alert'
 import { getPeriodosByCourse } from '@/services/api'
 import {
   fetchAsignaturas,
@@ -36,7 +37,6 @@ const AsignaturaDetalle: React.FC = () => {
   const [loadingRAs, setLoadingRAs] = useState(false)
   const [loadingAvance, setLoadingAvance] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState('')
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -53,6 +53,7 @@ const AsignaturaDetalle: React.FC = () => {
             : 'materias'
 
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -98,7 +99,6 @@ const AsignaturaDetalle: React.FC = () => {
   const loadEstudiantes = useCallback(async () => {
     if (!selectedCodigo) return
     setLoadingEst(true)
-    setError('')
     try {
       const data = await fetchAsignaturaEstudiantes({
         codigo_asignatura: selectedCodigo,
@@ -109,7 +109,7 @@ const AsignaturaDetalle: React.FC = () => {
       setEstRows(data.results)
       setEstTotal(data.total)
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de estudiantes.')
+      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de estudiantes.')
     } finally {
       setLoadingEst(false)
     }
@@ -202,7 +202,8 @@ const AsignaturaDetalle: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -222,13 +223,6 @@ const AsignaturaDetalle: React.FC = () => {
               Volver a Materias
             </button>
           </div>
-
-          {error && (
-            <div className="alert alert-danger" role="alert">
-              <i className="bi bi-exclamation-triangle me-2"></i>
-              {error}
-            </div>
-          )}
 
           <div className="card mb-4">
             <div className="card-header">

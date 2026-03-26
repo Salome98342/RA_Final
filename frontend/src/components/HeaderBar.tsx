@@ -36,8 +36,8 @@ const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl,
               e.preventDefault()
               // Navegación rápida según rol
               if (role === 'coordinador') navigate('/coordinador')
-              else if (role === 'docente') navigate('/docente')
-              else if (role === 'estudiante') navigate('/estudiante')
+              else if (role === 'docente') navigate('/docente/inicio')
+              else if (role === 'estudiante') navigate('/estudiante/inicio')
             }}
           >
             <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="brand-logo" />

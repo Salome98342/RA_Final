@@ -201,13 +201,15 @@ const DocenteRAs: React.FC = () => {
         <Sidebar
           active="crear"
           onClick={(k)=>{
-            if(k==='cursos') navigate('/docente')
+            if(k==='inicio') navigate('/docente/inicio')
+            if(k==='cursos') navigate('/docente/cursos')
             if(k==='recursos' && curso) navigate(`/docente/${curso}/recursos`)
             if(k==='calificar') {
               if (curso) navigate(`/docente/${curso}/calificar`)
             }
           }}
           items={[
+            {key:'inicio',icon:'bi-house-door',title:'Inicio'},
             {key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},
             {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
             {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
@@ -425,7 +427,7 @@ const DocenteRAs: React.FC = () => {
             </div>
           )}
 
-          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={() => navigate('/docente')}>
+          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={() => navigate('/docente/cursos')}>
             <i className="bi bi-arrow-left me-2"></i>
             Volver a cursos
           </button>

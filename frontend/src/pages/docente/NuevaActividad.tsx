@@ -4,8 +4,16 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import { Alert } from '@/utils/alert'
 import { useSession } from '@/state/SessionContext'
-import { createActivityMulti, getRAsByCourse, getRAValidation, getTiposActividad, getIndicatorsByRA } from '@/services/api'
+import { createActivityMulti, getRAsByCourse, getRAValidation, getTiposActividad, getIndicatorsByRA, uploadRecurso } from '@/services/api'
 import type { Indicator } from '@/types'
+
+const GUIDE_EXTENSIONS = new Set(['.pdf', '.docx', '.xlsx', '.pptx'])
+
+const isAllowedGuideFile = (file: File) => {
+  const dot = file.name.lastIndexOf('.')
+  const ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : ''
+  return GUIDE_EXTENSIONS.has(ext)
+}
 
 const NuevaActividadCurso: React.FC = () => {
   const { curso } = useParams<{ curso: string }>()
@@ -23,6 +31,7 @@ const NuevaActividadCurso: React.FC = () => {
   const [raIndMap, setRaIndMap] = useState<Record<string, Indicator[]>>({})
   const [raIndSel, setRaIndSel] = useState<Record<string, (string | number)[]>>({})
   const [raIndFilter, setRaIndFilter] = useState<Record<string, string>>({})
+  const [guideFile, setGuideFile] = useState<File | null>(null)
 
   const fmtPct = (n: number | undefined | null) => {
     const v = typeof n === 'number' && isFinite(n) ? n : 0
@@ -115,13 +124,52 @@ const NuevaActividadCurso: React.FC = () => {
       }
     } catch { /* ignore precheck errors */ }
 
+    // Precheck: cada RA seleccionado debe tener al menos un indicador válido.
+    for (const rid of selectedIds) {
+      let available = raIndMap[rid]
+      if (!available) {
+        try {
+          available = await getIndicatorsByRA(rid)
+          setRaIndMap((m) => ({ ...m, [rid]: available || [] }))
+        } catch {
+          available = []
+          setRaIndMap((m) => ({ ...m, [rid]: [] }))
+        }
+      }
+
+      if (!available || available.length === 0) {
+        const raTitle = ras.find((r) => r.id === rid)?.titulo || `RA ${rid}`
+        Alert.toast.error(`${raTitle} no tiene indicadores definidos. No se puede crear la actividad sin indicadores.`)
+        return
+      }
+
+      const allowed = new Set((available || []).map((ind) => String(ind.id)))
+      const selected = (raIndSel[rid] || []).map((id) => String(id)).filter((id) => allowed.has(id))
+      if (selected.length === 0) {
+        const raTitle = ras.find((r) => r.id === rid)?.titulo || `RA ${rid}`
+        Alert.toast.error(`Debes asignar al menos un indicador para ${raTitle}.`)
+        return
+      }
+    }
+
+    const confirmed = await Alert.confirmCreate('actividad')
+    if (!confirmed) return
+
     setSaving(true)
     try {
-      const rasPayload = selectedIds.map((rid) => ({
-        ra_id: Number(rid),
-        porcentaje_ra_actividad: Number(aporteRA[rid] || 0) || 0,
-        indicadores: (raIndSel[rid] || []).map(Number),
-      }))
+      const rasPayload = selectedIds.map((rid) => {
+        const allowed = new Set((raIndMap[rid] || []).map((ind) => String(ind.id)))
+        const indicadores = (raIndSel[rid] || [])
+          .map((id) => String(id))
+          .filter((id) => allowed.has(id))
+          .map((id) => Number(id))
+
+        return {
+          ra_id: Number(rid),
+          porcentaje_ra_actividad: Number(aporteRA[rid] || 0) || 0,
+          indicadores,
+        }
+      })
       await createActivityMulti({
         nombre_actividad: form.nombre.trim(),
         id_tipo_actividad: Number(form.tipo),
@@ -129,8 +177,17 @@ const NuevaActividadCurso: React.FC = () => {
         fecha_cierre: form.cierre || undefined,
         ras: rasPayload,
       })
-      Alert.toast.success('Actividad creada con éxito')
-      setTimeout(() => navigate(`/docente/${curso}/ras`), 1200)
+      if (guideFile) {
+        try {
+          await uploadRecurso(curso, guideFile, `Guia - ${form.nombre.trim()}`)
+          await Alert.success('Actividad creada con éxito y guía adjunta.')
+        } catch {
+          await Alert.warning('La actividad se creó, pero no se pudo adjuntar la guía. Puedes subirla luego en Recursos.')
+        }
+      } else {
+        await Alert.success('Actividad creada con éxito')
+      }
+      navigate(`/docente/${curso}/ras`)
     } catch (err: unknown) {
       let msg: string = 'No se pudo crear la actividad'
       const data = (err as { response?: { data?: unknown } })?.response?.data
@@ -151,8 +208,12 @@ const NuevaActividadCurso: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar
           active="crear"
-          onClick={(k) => { if (k === 'cursos') navigate('/docente') }}
+          onClick={(k) => {
+            if (k === 'inicio') navigate('/docente/inicio')
+            if (k === 'cursos') navigate('/docente/cursos')
+          }}
           items={[
+            { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
             { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
             { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' }
           ]}
@@ -225,6 +286,31 @@ const NuevaActividadCurso: React.FC = () => {
               ></textarea>
             </div>
 
+            <div className="col-md-8">
+              <label className="ra-small d-block mb-1" htmlFor="guiaActividad">Guía de la actividad (opcional)</label>
+              <input
+                id="guiaActividad"
+                className="form-control"
+                type="file"
+                accept=".pdf,.docx,.xlsx,.pptx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  if (!file) {
+                    setGuideFile(null)
+                    return
+                  }
+                  if (!isAllowedGuideFile(file)) {
+                    Alert.toast.warning('Formato no permitido. Solo se aceptan: PDF, DOCX, XLSX, PPTX.')
+                    e.currentTarget.value = ''
+                    setGuideFile(null)
+                    return
+                  }
+                  setGuideFile(file)
+                }}
+              />
+              <div className="form-text">Formatos permitidos: PDF, DOCX, XLSX, PPTX.</div>
+            </div>
+
             <div className="col-12">
               <div className="fw-bold mb-3 d-flex align-items-center">
                 <i className="bi bi-diagram-3-fill text-primary me-2 fs-5"></i>
@@ -240,7 +326,7 @@ const NuevaActividadCurso: React.FC = () => {
                   <table className="table table-sm align-middle mb-0">
                     <thead className="table-light">
                       <tr>
-                        <th className="w-60px"><span className="visually-hidden">Seleccionar RA</span></th>
+                        <th className="w-120px"><span className="visually-hidden">Seleccionar RA</span>Acción</th>
                         <th className="fw-bold"><i className="bi bi-bullseye me-1"></i>RA</th>
                         <th className="w-160px fw-bold"><i className="bi bi-percent me-1"></i>Aporte al RA (%)</th>
                         <th className="w-220px fw-bold"><i className="bi bi-graph-up me-1"></i>Total actividades actual</th>
@@ -253,6 +339,11 @@ const NuevaActividadCurso: React.FC = () => {
                         const checked = !!sel[r.id]
                         const suma = Number(totals[r.id] ?? 0)
                         const aporte = Number(aporteRA[r.id] || 0)
+                        const availableIndicators = raIndMap[r.id] || []
+                        const allowedIndicators = new Set(availableIndicators.map((ind) => String(ind.id)))
+                        const selectedIndicatorCount = (raIndSel[r.id] || []).map((id) => String(id)).filter((id) => allowedIndicators.has(id)).length
+                        const missingIndicator = checked && availableIndicators.length > 0 && selectedIndicatorCount === 0
+                        const noIndicatorsDefined = checked && availableIndicators.length === 0
                         const quedariaRaw = !Number.isNaN(aporte) ? suma + aporte : suma
                         const quedaria = Math.max(0, Math.min(100, quedariaRaw))
                         const excede = quedaria > 100 + 1e-6
@@ -260,13 +351,16 @@ const NuevaActividadCurso: React.FC = () => {
                           <React.Fragment key={r.id}>
                             <tr className={excede && checked ? 'table-danger' : ''}>
                               <td>
-                                <input
-                                  type="checkbox"
-                                  className="form-check-input"
-                                  aria-label={`Seleccionar ${r.titulo}`}
-                                  checked={checked}
-                                  onChange={async (e) => {
-                                    const on = e.target.checked
+                                <button
+                                  type="button"
+                                  className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
+                                  aria-label={`${checked ? 'Quitar' : 'Añadir'} ${r.titulo}`}
+                                  onClick={async () => {
+                                    const on = !checked
+                                    if (on && suma >= 100 - 1e-6) {
+                                      Alert.toast.warning(`No puedes añadir ${r.titulo}: este RA ya alcanzó 100% en actividades.`)
+                                      return
+                                    }
                                     setSel(s => ({ ...s, [r.id]: on }))
                                     if (on && !raIndMap[r.id]) {
                                       try {
@@ -278,7 +372,9 @@ const NuevaActividadCurso: React.FC = () => {
                                       }
                                     }
                                   }}
-                                />
+                                >
+                                  {checked ? 'Quitar' : 'Añadir'}
+                                </button>
                               </td>
                               <td>{r.titulo}</td>
                               <td>
@@ -328,6 +424,15 @@ const NuevaActividadCurso: React.FC = () => {
                                 >
                                   {open[r.id] ? 'Ocultar' : 'Indicadores'}
                                 </button>
+                                {missingIndicator && (
+                                  <div className="small text-danger mt-1 fw-semibold">Falta añadir un indicador</div>
+                                )}
+                                {noIndicatorsDefined && (
+                                  <div className="small text-danger mt-1 fw-semibold">RA sin indicadores definidos</div>
+                                )}
+                                {checked && !missingIndicator && !noIndicatorsDefined && (
+                                  <div className="small text-success mt-1 fw-semibold">Indicadores: {selectedIndicatorCount}</div>
+                                )}
                               </td>
                             </tr>
                             {open[r.id] && (
@@ -360,29 +465,24 @@ const NuevaActividadCurso: React.FC = () => {
                                                 <div className="p-2 d-flex flex-wrap gap-2">
                                                   {items.map((ind) => {
                                                     const selected = (raIndSel[r.id] || []).includes(ind.id)
-                                                    const cid = `ind-${r.id}-${ind.id}`
                                                     return (
-                                                      <span key={ind.id} className="ra-chip-item">
-                                                        <input
-                                                          className="btn-check"
-                                                          type="checkbox"
-                                                          id={cid}
-                                                          autoComplete="off"
-                                                          checked={selected}
-                                                          onChange={(e) => {
-                                                            const on = e.target.checked
+                                                      <div key={ind.id} className="d-flex align-items-center gap-2 border rounded p-2 bg-white">
+                                                        <button
+                                                          type="button"
+                                                          className={`btn btn-sm ${selected ? 'btn-danger' : 'btn-outline-success'}`}
+                                                          onClick={() => {
                                                             setRaIndSel((s) => {
                                                               const curr = new Set(s[r.id] || [])
-                                                              if (on) curr.add(ind.id)
-                                                              else curr.delete(ind.id)
+                                                              if (selected) curr.delete(ind.id)
+                                                              else curr.add(ind.id)
                                                               return { ...s, [r.id]: Array.from(curr) }
                                                             })
                                                           }}
-                                                        />
-                                                        <label className={`btn btn-sm ${selected ? 'btn-secondary' : 'btn-outline-secondary'}`} htmlFor={cid}>
-                                                          {ind.descripcion}
-                                                        </label>
-                                                      </span>
+                                                        >
+                                                          {selected ? 'Quitar' : 'Añadir'}
+                                                        </button>
+                                                        <span className="small">{ind.descripcion}</span>
+                                                      </div>
                                                     )
                                                   })}
                                                 </div>

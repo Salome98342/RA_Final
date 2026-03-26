@@ -84,6 +84,7 @@ const AsignaturasRA: React.FC = () => {
             : 'materias'
 
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -94,8 +95,6 @@ const AsignaturasRA: React.FC = () => {
 
   const [loadingCatalogs, setLoadingCatalogs] = useState(false)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   const [docentes, setDocentes] = useState<DocenteListItem[]>([])
   const [detectedPrograma, setDetectedPrograma] = useState<ProgramaItem | null>(null)
@@ -268,7 +267,6 @@ const AsignaturasRA: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       setLoadingCatalogs(true)
-      setError('')
       try {
         const [docentesData, programasData, profile] = await Promise.all([
           fetchDocentes(),
@@ -280,10 +278,10 @@ const AsignaturasRA: React.FC = () => {
         setDetectedPrograma(detected)
         setCoordinatorLabel(`${profile.nombre || 'Coordinador'}${profile.code ? ` (${profile.code})` : ''}`)
         if (!detected) {
-          setError('No se pudo detectar automáticamente el programa del coordinador. Contacta al administrador para configurar este perfil.')
+          Alert.warning('No se pudo detectar automáticamente el programa del coordinador. Contacta al administrador para configurar este perfil.')
         }
       } catch (e: any) {
-        setError(e?.response?.data?.detail || e.message || 'No fue posible cargar docentes, programas o perfil.')
+        Alert.error(e?.response?.data?.detail || e.message || 'No fue posible cargar docentes, programas o perfil.')
       } finally {
         setLoadingCatalogs(false)
       }
@@ -351,32 +349,28 @@ const AsignaturasRA: React.FC = () => {
       grupo: '',
     })
     setRaList([createEmptyRA()])
-    setError('')
-    setSuccess('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
 
     if (!requiredValid) {
-      setError('Completa codigo_asignatura, nombre_asignatura, docente y grupo. El programa se asigna desde el perfil del coordinador.')
+      Alert.toast.warning('Completa codigo_asignatura, nombre_asignatura, docente y grupo. El programa se asigna desde el perfil del coordinador.')
       return
     }
 
     if (hasDuplicateDescription) {
-      setError('Hay RAs con descripción repetida. Ajusta las descripciones antes de guardar.')
+      Alert.toast.warning('Hay RAs con descripción repetida. Ajusta las descripciones antes de guardar.')
       return
     }
 
     if (hasInvalidRA) {
-      setError('Verifica los RAs e indicadores: cada RA debe tener descripción, porcentaje válido y al menos un indicador con porcentaje válido. La suma de indicadores por RA no puede exceder 100%.')
+      Alert.error('Verifica los RAs e indicadores: cada RA debe tener descripción, porcentaje válido y al menos un indicador con porcentaje válido. La suma de indicadores por RA no puede exceder 100%.')
       return
     }
 
     if (sumPct > 100) {
-      setError('La suma de porcentajes RA supera 100%. Ajusta los valores para continuar.')
+      Alert.toast.error('La suma de porcentajes RA supera 100%. Ajusta los valores para continuar.')
       return
     }
 
@@ -426,8 +420,7 @@ const AsignaturasRA: React.FC = () => {
         .filter(Boolean)
         .join(' ')
 
-      setSuccess(msg)
-      setError('')
+      Alert.success(msg)
 
       setRaList([createEmptyRA()])
       setFormData((prev) => ({
@@ -437,7 +430,7 @@ const AsignaturasRA: React.FC = () => {
         grupo: '',
       }))
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e.message || 'No fue posible guardar la asignatura con sus RAs.')
+      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible guardar la asignatura con sus RAs.')
     } finally {
       setLoadingSubmit(false)
     }
@@ -451,7 +444,8 @@ const AsignaturasRA: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -475,14 +469,6 @@ const AsignaturasRA: React.FC = () => {
               Carga masiva (CSV/Excel)
             </button>
           </div>
-
-          {success && (
-            <div className="alert alert-success alert-dismissible fade show" role="alert">
-              <i className="bi bi-check-circle me-2"></i>
-              {success}
-              <button type="button" className="btn-close" onClick={() => setSuccess('')} aria-label="Cerrar"></button>
-            </div>
-          )}
 
           <section className="ra-card mb-3 coordinator-individual-hero">
             <div className="ra-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -521,13 +507,6 @@ const AsignaturasRA: React.FC = () => {
                   Usa este formulario para operación individual. La carga masiva se mantiene en el módulo de imports.
                 </div>
               </div>
-
-              {error && (
-                <div className="alert alert-danger">
-                  <i className="bi bi-exclamation-triangle me-2"></i>
-                  {error}
-                </div>
-              )}
 
               {loadingCatalogs && (
                 <div className="alert alert-secondary d-flex align-items-center" role="status" aria-live="polite">

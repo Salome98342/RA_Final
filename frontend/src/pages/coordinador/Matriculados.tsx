@@ -35,6 +35,7 @@ const Matriculados: React.FC = () => {
             : 'materias'
 
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -46,8 +47,6 @@ const Matriculados: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [loadingOptions, setLoadingOptions] = useState(false)
   const [loadingStudents, setLoadingStudents] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [formSuccess, setFormSuccess] = useState('')
   const [asignaturas, setAsignaturas] = useState<AsignaturaRow[]>([])
   const [periodos, setPeriodos] = useState<Array<{ id_periodo: number; descripcion: string }>>([])
   const [students, setStudents] = useState<EstudianteListItem[]>([])
@@ -105,7 +104,7 @@ const Matriculados: React.FC = () => {
         setFormData((prev) => ({ ...prev, id_asignatura: String(data.results[0].id_asignatura) }))
       }
     } catch (e: any) {
-      setFormError(e?.response?.data?.detail || e.message || 'No se pudieron cargar las asignaturas registradas.')
+      Alert.error(e?.response?.data?.detail || e.message || 'No se pudieron cargar las asignaturas registradas.')
     } finally {
       setLoadingOptions(false)
     }
@@ -175,7 +174,7 @@ const Matriculados: React.FC = () => {
       setStudents([])
       setSelectedStudents({})
       setAlreadyEnrolledCodes(new Set())
-      setFormError(e?.response?.data?.detail || e.message || 'No se pudo cargar el listado de estudiantes.')
+      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo cargar el listado de estudiantes.')
     } finally {
       setLoadingStudents(false)
     }
@@ -215,11 +214,9 @@ const Matriculados: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setFormError('')
-    setFormSuccess('')
 
     if (!isFormValid) {
-      setFormError('Debes seleccionar asignatura, periodo y al menos un estudiante.')
+      Alert.toast.warning('Debes seleccionar asignatura, periodo y al menos un estudiante.')
       return
     }
 
@@ -256,7 +253,7 @@ const Matriculados: React.FC = () => {
     setLoading(true)
     try {
       if (!selectedAsignatura) {
-        setFormError('Debes seleccionar una asignatura válida.')
+        Alert.error('Debes seleccionar una asignatura válida.')
         return
       }
 
@@ -276,23 +273,23 @@ const Matriculados: React.FC = () => {
       const result = await importMatriculados(file)
 
       if (result.errors?.length) {
-        setFormError(result.errors[0]?.error || 'No fue posible procesar el registro.')
+        Alert.error(result.errors[0]?.error || 'No fue posible procesar el registro.')
         return
       }
 
       if ((result.created || 0) > 0) {
-        setFormSuccess(`Matrículas creadas: ${result.created}. Ya existentes: ${result.existing || 0}.`)
+        Alert.success(`Matrículas creadas: ${result.created}. Ya existentes: ${result.existing || 0}.`)
       } else if ((result.existing || 0) > 0) {
-        setFormSuccess('Todos los estudiantes seleccionados ya estaban matriculados en este periodo.')
+        Alert.info('Todos los estudiantes seleccionados ya estaban matriculados en este periodo.')
       } else {
-        setFormSuccess('Registro procesado.')
+        Alert.info('Registro procesado.')
       }
 
       clearSelection()
       await loadStudents(selectedAsignatura, formData.periodo)
     } catch (e: any) {
       const msg = e?.response?.data?.detail || e.message || 'Error al registrar matrícula'
-      setFormError(msg)
+      Alert.error(msg)
     } finally {
       setLoading(false)
     }
@@ -306,7 +303,8 @@ const Matriculados: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -330,14 +328,6 @@ const Matriculados: React.FC = () => {
             </button>
           </div>
 
-          {formSuccess && (
-            <div className="alert alert-success alert-dismissible fade show" role="alert">
-              <i className="bi bi-check-circle me-2"></i>
-              {formSuccess}
-              <button type="button" className="btn-close" onClick={() => setFormSuccess('')} aria-label="Cerrar"></button>
-            </div>
-          )}
-
           <div className="card mb-4">
             <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
               <span>
@@ -351,13 +341,6 @@ const Matriculados: React.FC = () => {
                 <i className="bi bi-info-circle me-2"></i>
                 Selecciona asignatura y periodo, luego marca uno o varios estudiantes del listado para matricular.
               </div>
-
-              {formError && (
-                <div className="alert alert-danger">
-                  <i className="bi bi-exclamation-triangle me-2"></i>
-                  {formError}
-                </div>
-              )}
 
               <form onSubmit={handleSubmit}>
                 <div className="row g-3 mb-3">
@@ -442,7 +425,7 @@ const Matriculados: React.FC = () => {
                         <table className="table table-sm align-middle mb-0">
                           <thead className="table-light">
                             <tr>
-                              <th className="matriculados-col-select">Sel.</th>
+                              <th className="matriculados-col-select">Acción</th>
                               <th>Código</th>
                               <th>Nombre</th>
                               <th>Correo</th>
@@ -457,14 +440,15 @@ const Matriculados: React.FC = () => {
                               return (
                                 <tr key={s.codigo_estudiante}>
                                   <td>
-                                    <input
-                                      type="checkbox"
-                                      className="form-check-input"
-                                      checked={checked}
+                                    <button
+                                      type="button"
+                                      className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
                                       disabled={already || loading}
-                                      onChange={(e) => toggleStudent(s.codigo_estudiante, e.target.checked)}
-                                      aria-label={`Seleccionar ${s.codigo_estudiante}`}
-                                    />
+                                      onClick={() => toggleStudent(s.codigo_estudiante, !checked)}
+                                      aria-label={`${checked ? 'Quitar' : 'Añadir'} ${s.codigo_estudiante}`}
+                                    >
+                                      {checked ? 'Quitar' : 'Añadir'}
+                                    </button>
                                   </td>
                                   <td><span className="badge bg-secondary">{s.codigo_estudiante}</span></td>
                                   <td>{s.nombre} {s.apellido}</td>
@@ -496,8 +480,6 @@ const Matriculados: React.FC = () => {
                       type="button"
                       className="btn btn-outline-secondary"
                       onClick={() => {
-                        setFormError('')
-                        setFormSuccess('')
                         clearSelection()
                       }}
                       disabled={loading}

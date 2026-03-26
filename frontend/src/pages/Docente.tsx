@@ -160,6 +160,8 @@ const Docente: React.FC = () => {
     // Validaciones rápidas en front
     if (!nombre_actividad) { setNewActError('Ingresa un nombre para la actividad.'); return }
     if (Number.isNaN(pctRA) || pctRA <= 0 || pctRA > 100) { setNewActError('"% en RA" debe estar entre 0 y 100.'); return }
+    const confirmed = await Alert.confirmCreate('actividad')
+    if (!confirmed) return
     try {
       setSavingNewAct(true)
       await createActivityForRA(selectedRA.id, {
@@ -236,6 +238,7 @@ const Docente: React.FC = () => {
   }
 
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
     { key: 'crear', icon: 'bi-pencil-square', title: 'Gestionar RAs' },
     { key: 'listar', icon: 'bi-list-ul', title: 'Estudiantes' },
@@ -243,7 +246,8 @@ const Docente: React.FC = () => {
   ]
 
   const onSidebarClick = async (key: string) => {
-    if (key === 'cursos') { setView('cursos'); setSelectedRA(null) }
+    if (key === 'inicio') { setView('cursos'); setSelectedRA(null); return }
+    else if (key === 'cursos') { setView('cursos'); setSelectedRA(null) }
     else if (key === 'crear') {
       if (!selectedCurso) { setView('cursos'); return }
       setView('ra')
@@ -263,7 +267,7 @@ const Docente: React.FC = () => {
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
-        <Sidebar active={view === 'cursos' ? 'cursos' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
+        <Sidebar active={view === 'cursos' ? 'inicio' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
         <main className="dash-content">
           {errorMsg && (
             <div className="alert alert-danger d-flex justify-content-between align-items-center mb-3" role="alert">

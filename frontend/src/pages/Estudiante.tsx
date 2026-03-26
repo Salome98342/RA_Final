@@ -4,15 +4,18 @@ import Sidebar from '@/components/Sidebar'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { Course, GroupedActivity, ProfilePeriodo, ProfileDetails } from '@/types'
 import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeSummary, type Anuncio } from '@/services/api'
 import GradeSummary from '@/components/GradeSummary'
 import { getProfile, getFullProfile } from '@/services/auth'
 import { SkeletonCard } from '@/components/Skeleton'
+import { useSession } from '@/state/SessionContext'
 
 const Estudiante: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { state } = useSession()
   const [courses, setCourses] = useState<Course[]>([])
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Course | null>(null)
@@ -40,7 +43,12 @@ const Estudiante: React.FC = () => {
   // 'peso' option removed (visual only)
   const [sortBy, setSortBy] = useState<'fecha'|'nombre'>('fecha')
 
-  const [studentId, setStudentId] = useState<string | null>(null)
+  useEffect(() => {
+    const qView = searchParams.get('view')
+    if (qView === 'cursos' || qView === 'tareas' || qView === 'recursos') {
+      setView(qView)
+    }
+  }, [searchParams])
 
   // Función para navegar al detalle de curso
   const openCourseDetail = (course: Course) => {
@@ -101,7 +109,6 @@ const Estudiante: React.FC = () => {
           const prof = await getProfile()
           studentId = prof.id
           if (mounted) {
-            setStudentId(studentId)
             // Guardar en sessionStorage para la página de detalle
             sessionStorage.setItem('studentId', studentId)
           }
@@ -323,11 +330,12 @@ const Estudiante: React.FC = () => {
           active={view}
           onClick={(key) => {
             setSelected(null); setSelectedGroupedActivity(null)
-            if (key === 'cursos') { setView('cursos'); return }
-            if (key === 'tareas') { setView('tareas'); return }
-            if (key === 'recursos') { setView('recursos'); return }
+            if (key === 'inicio') { navigate('/estudiante/inicio'); return }
+            if (key === 'cursos') { setView('cursos'); setSearchParams({ view: 'cursos' }); return }
+            if (key === 'tareas') { setView('tareas'); setSearchParams({ view: 'tareas' }); return }
+            if (key === 'recursos') { setView('recursos'); setSearchParams({ view: 'recursos' }); return }
           }}
-          items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Mis cursos'},{key:'tareas',icon:'bi-journal-text',title:'Tareas'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
+          items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Mis cursos'},{key:'tareas',icon:'bi-journal-text',title:'Tareas'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
         />
         <main className="dash-content">
           <div className="content-title">
@@ -350,6 +358,17 @@ const Estudiante: React.FC = () => {
           {/* Cursos */}
           {!selected && !selectedGroupedActivity && view === 'cursos' && (
             <section className="panel shown">
+              <section className="card shadow-sm border-0 mb-3">
+                <div className="card-body">
+                  <h5 className="mb-2">Bienvenido, {state.name || 'Estudiante'}! 👋</h5>
+                  <p className="text-muted mb-3">En tu módulo puedes revisar tus cursos, tareas pendientes y los recursos compartidos por tus docentes.</p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <span className="badge text-bg-light border"><i className="bi bi-grid-3x3-gap me-1"></i>Explorar tus cursos por periodo</span>
+                    <span className="badge text-bg-light border"><i className="bi bi-journal-text me-1"></i>Ver tareas y fechas límite</span>
+                    <span className="badge text-bg-light border"><i className="bi bi-paperclip me-1"></i>Acceder a recursos y anuncios</span>
+                  </div>
+                </div>
+              </section>
               <SearchPill icon="bi-search" placeholder="Filtrar por código de carrera" value={filter} onChange={setFilter} />
               {err && (
                 <div className="alert alert-danger d-flex align-items-center">

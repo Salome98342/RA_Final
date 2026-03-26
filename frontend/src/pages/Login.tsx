@@ -36,7 +36,7 @@ export default function Login() {
       setName(profile.nombre)
       setRole(profile.rol)
       setCode(profile.code ?? usuario)
-      navigate(profile.rol === 'docente' ? '/docente' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante'))
+      navigate(profile.rol === 'docente' ? '/docente/inicio' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante/inicio'))
     } catch (err: unknown) {
       const data = (err as { response?: { data?: unknown } })?.response?.data
       const statusCode = (err as { response?: { status?: number } })?.response?.status

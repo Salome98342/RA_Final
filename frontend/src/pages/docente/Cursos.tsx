@@ -79,7 +79,8 @@ const DocenteCursos: React.FC = () => {
         <Sidebar
           active={view}
           onClick={(k)=>{
-            if (k === 'cursos') setView('cursos')
+            if (k === 'inicio') navigate('/docente/inicio')
+            else if (k === 'cursos') setView('cursos')
             else if (k === 'recursos') {
               // Si el filtro deja 1 curso, abrimos directamente sus recursos
               const list = filtered
@@ -90,7 +91,7 @@ const DocenteCursos: React.FC = () => {
               }
             }
           }}
-          items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
+          items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
         />
         <main className="dash-content">
           {view === 'cursos' && (
@@ -111,6 +112,16 @@ const DocenteCursos: React.FC = () => {
                   </button>
                 )}
               </div>
+              <section className="card shadow-sm border-0 mb-3">
+                <div className="card-body">
+                  <h5 className="mb-2">Bienvenido, {state.name || 'Docente'}! 👋</h5>
+                  <p className="text-muted mb-3">En tu módulo puedes gestionar tus cursos y publicar material para tus estudiantes.</p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <span className="badge text-bg-light border"><i className="bi bi-grid-3x3-gap me-1"></i>Ver cursos y entrar a RA/Actividades</span>
+                    <span className="badge text-bg-light border"><i className="bi bi-paperclip me-1"></i>Administrar recursos del curso</span>
+                  </div>
+                </div>
+              </section>
               <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
               {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
               {loading ? (

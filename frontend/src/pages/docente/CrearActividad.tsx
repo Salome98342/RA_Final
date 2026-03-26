@@ -2,9 +2,17 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
-import { createActivityForRA, createActivityMulti, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse } from '@/services/api'
+import { createActivityForRA, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse, uploadRecurso } from '@/services/api'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
+
+const GUIDE_EXTENSIONS = new Set(['.pdf', '.docx', '.xlsx', '.pptx'])
+
+const isAllowedGuideFile = (file: File) => {
+  const dot = file.name.lastIndexOf('.')
+  const ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : ''
+  return GUIDE_EXTENSIONS.has(ext)
+}
 
 const DocenteCrearActividad: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId: string}>()
@@ -21,6 +29,7 @@ const DocenteCrearActividad: React.FC = () => {
   const [selectedRAs, setSelectedRAs] = useState<string[]>([])
   const [raPct, setRaPct] = useState<Record<string, string>>({})
   const [raTotals, setRaTotals] = useState<Record<string, number>>({})
+  const [guideFile, setGuideFile] = useState<File | null>(null)
 
   const pctRANum = Number(form.pctRA)
   const sumaActActual = raVal?.actividades?.suma ?? null
@@ -104,6 +113,11 @@ const DocenteCrearActividad: React.FC = () => {
   if (allIndicators.length === 0) { Alert.toast.error('Este RA no tiene indicadores definidos. No puedes crear la actividad sin indicadores.'); return }
   if (!hasIndicators) { Alert.toast.error('Debes seleccionar al menos un indicador del RA.'); return }
     if (!allAportesPositive) { Alert.toast.error('El aporte al RA (%) debe ser mayor que 0 para cada RA seleccionado.'); return }
+    // Esta vista maneja indicadores del RA actual; para multi-RA usar la vista por curso.
+    if (selectedRAs.some((rid) => rid !== String(raId))) {
+      Alert.toast.error('Para crear actividades en múltiples RA usa "Nueva actividad" desde el curso (permite asignar indicadores por cada RA).')
+      return
+    }
     // Validación rápida de fecha: no permitir fecha de cierre en el pasado
     const todayStr = new Date().toISOString().slice(0,10)
     if (form.cierre < todayStr) {
@@ -135,36 +149,32 @@ const DocenteCrearActividad: React.FC = () => {
     } catch {
       // Si el pre-chequeo falla por red, continuamos y dejaremos que el backend valide
     }
+
+    const confirmed = await Alert.confirmCreate('actividad')
+    if (!confirmed) return
+
     setSaving(true)
     try {
-      const others = selectedRAs.filter(id => id !== String(raId))
-      if (others.length === 0) {
-        // Flujo existente: solo un RA
-        await createActivityForRA(raId, {
-          nombre_actividad: form.nombre.trim(),
-          id_tipo_actividad: Number(form.tipo),
-          porcentaje_ra_actividad: Number(raPct[raId] ?? form.pctRA),
-          descripcion: form.desc || undefined,
-          fecha_cierre: form.cierre || undefined,
-          indicadores: selIndicators.map(id => Number(id)),
-        })
+      await createActivityForRA(raId, {
+        nombre_actividad: form.nombre.trim(),
+        id_tipo_actividad: Number(form.tipo),
+        porcentaje_ra_actividad: Number(raPct[raId] ?? form.pctRA),
+        descripcion: form.desc || undefined,
+        fecha_cierre: form.cierre || undefined,
+        indicadores: selIndicators.map(id => Number(id)),
+      })
+
+      if (guideFile && curso) {
+        try {
+          await uploadRecurso(curso, guideFile, `Guia - ${form.nombre.trim()}`)
+          await Alert.success('Actividad creada con éxito y guía adjunta.')
+        } catch {
+          await Alert.warning('La actividad se creó, pero no se pudo adjuntar la guía. Puedes subirla luego en Recursos.')
+        }
       } else {
-        // Nuevo flujo: crear una sola actividad en múltiples RAs
-        const rasPayload = selectedRAs.map((rid) => ({
-          ra_id: Number(rid),
-          porcentaje_ra_actividad: Number(raPct[rid] ?? form.pctRA),
-          indicadores: rid === String(raId) ? selIndicators.map(Number) : [],
-        }))
-        await createActivityMulti({
-          nombre_actividad: form.nombre.trim(),
-          id_tipo_actividad: Number(form.tipo),
-          descripcion: form.desc || undefined,
-          fecha_cierre: form.cierre || undefined,
-          ras: rasPayload,
-        })
+        await Alert.success('Actividad creada (indicadores asignados)')
       }
-      Alert.toast.success('Actividad creada (indicadores asignados)')
-      setTimeout(() => navigate(`/docente/${curso}/ras`), 1200)
+      navigate(`/docente/${curso}/ras`)
     } catch (err: unknown) {
       // Extraer mejor el mensaje de error de forma segura
       let msg: string = 'No se pudo crear la actividad'
@@ -189,7 +199,7 @@ const DocenteCrearActividad: React.FC = () => {
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
-        <Sidebar active="crear" onClick={(k)=>{ if(k==='cursos') navigate('/docente') }} items={[{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
+        <Sidebar active="crear" onClick={(k)=>{ if(k==='inicio') navigate('/docente/inicio'); if(k==='cursos') navigate('/docente/cursos') }} items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
         <main className="dash-content">
           <div className="d-flex align-items-center justify-content-between mb-4">
             <div className="content-title">
@@ -317,20 +327,38 @@ const DocenteCrearActividad: React.FC = () => {
                 <div className="row g-2">
                   {ras.map(r => (
                     <div key={r.id} className="col-md-6 d-flex align-items-center gap-2">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id={`ra-${r.id}`}
-                          checked={selectedRAs.includes(r.id)}
-                          onChange={(e) => {
-                            const checked = e.target.checked
-                            setSelectedRAs(curr => checked ? Array.from(new Set([...curr, r.id])) : curr.filter(x => x !== r.id))
-                            if (checked && !raPct[r.id]) setRaPct(m => ({ ...m, [r.id]: form.pctRA }))
-                          }}
-                        />
-                        <label className="form-check-label" htmlFor={`ra-${r.id}`}>{r.titulo}</label>
-                      </div>
+                      {(() => {
+                        const selected = selectedRAs.includes(r.id)
+                        return (
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${selected ? 'btn-danger' : 'btn-outline-success'}`}
+                            onClick={async () => {
+                              if (!selected) {
+                                let suma = Number(raTotals[r.id] ?? NaN)
+                                if (!Number.isFinite(suma)) {
+                                  try {
+                                    const v = await getRAValidation(r.id)
+                                    suma = Number(v?.actividades?.suma ?? 0)
+                                    setRaTotals((m) => ({ ...m, [r.id]: suma }))
+                                  } catch {
+                                    suma = 0
+                                  }
+                                }
+                                if (suma >= 100 - 1e-6) {
+                                  Alert.toast.warning(`No puedes añadir ${r.titulo}: este RA ya alcanzó 100% en actividades.`)
+                                  return
+                                }
+                              }
+                              setSelectedRAs(curr => selected ? curr.filter(x => x !== r.id) : Array.from(new Set([...curr, r.id])))
+                              if (!selected && !raPct[r.id]) setRaPct(m => ({ ...m, [r.id]: form.pctRA }))
+                            }}
+                          >
+                            {selected ? 'Quitar' : 'Añadir'}
+                          </button>
+                        )
+                      })()}
+                      <span className="small">{r.titulo}</span>
                       <input
                         className="form-control form-control-sm w-110px"
                         type="number"
@@ -461,6 +489,31 @@ const DocenteCrearActividad: React.FC = () => {
               <div id="descHelp" className="form-text">Añade instrucciones y criterios que ayuden al estudiante.</div>
             </div>
 
+            <div className="col-md-8">
+              <label className="ra-small d-block mb-1" htmlFor="guiaActividad">Guía de la actividad (opcional)</label>
+              <input
+                id="guiaActividad"
+                className="form-control"
+                type="file"
+                accept=".pdf,.docx,.xlsx,.pptx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  if (!file) {
+                    setGuideFile(null)
+                    return
+                  }
+                  if (!isAllowedGuideFile(file)) {
+                    Alert.toast.warning('Formato no permitido. Solo se aceptan: PDF, DOCX, XLSX, PPTX.')
+                    e.currentTarget.value = ''
+                    setGuideFile(null)
+                    return
+                  }
+                  setGuideFile(file)
+                }}
+              />
+              <div className="form-text">Formatos permitidos: PDF, DOCX, XLSX, PPTX.</div>
+            </div>
+
               {/* Checklist de indicadores de logro asociados al RA */}
               <div className="col-12">
                 <div className="fw-bold mb-3 d-flex align-items-center">
@@ -476,23 +529,30 @@ const DocenteCrearActividad: React.FC = () => {
                   <div className="row">
                     {allIndicators.map((ind) => (
                       <div key={ind.id} className="col-md-6">
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id={`ind-${ind.id}`}
-                            checked={selIndicators.includes(ind.id)}
-                            onChange={(e) => {
-                              const checked = e.target.checked
-                              setSelIndicators((curr) => checked ? [...curr, ind.id] : curr.filter((x) => x !== ind.id))
-                            }}
-                          />
-                            <label className="form-check-label" htmlFor={`ind-${ind.id}`}>
-                              {ind.descripcion}
-                            </label>
-                        </div>
+                        {(() => {
+                          const selected = selIndicators.includes(ind.id)
+                          return (
+                            <div className="d-flex align-items-center gap-2 border rounded p-2 bg-white">
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${selected ? 'btn-danger' : 'btn-outline-success'}`}
+                                onClick={() => {
+                                  setSelIndicators((curr) => selected ? curr.filter((x) => x !== ind.id) : [...curr, ind.id])
+                                }}
+                              >
+                                {selected ? 'Quitar' : 'Añadir'}
+                              </button>
+                              <span>{ind.descripcion}</span>
+                            </div>
+                          )
+                        })()}
                       </div>
                     ))}
+                  </div>
+                )}
+                {allIndicators.length > 0 && selIndicators.length === 0 && (
+                  <div className="small text-danger mt-2 fw-semibold">
+                    Falta añadir al menos un indicador para poder crear la actividad.
                   </div>
                 )}
                 <div className="form-text">Puedes asignar esta actividad a uno o varios indicadores del RA.</div>
