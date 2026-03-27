@@ -11,8 +11,6 @@ interface AlertOptions {
   text: string
   type?: AlertType
   confirmButtonText?: string
-  timer?: number
-  showConfirmButton?: boolean
 }
 
 interface ConfirmOptions {
@@ -30,18 +28,18 @@ export const showAlert = ({
   title,
   text,
   type = 'info',
-  confirmButtonText = 'Aceptar',
-  timer,
-  showConfirmButton = true
+  confirmButtonText = type === 'error' ? 'OK' : 'Aceptar'
 }: AlertOptions) => {
   return Swal.fire({
     title,
     text,
     icon: type,
+    position: 'center',
     confirmButtonText,
-    timer,
-    showConfirmButton: timer ? false : showConfirmButton,
-    timerProgressBar: !!timer,
+    showConfirmButton: true,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    allowEnterKey: true,
     customClass: {
       confirmButton: 'swal-btn-confirm',
       cancelButton: 'swal-btn-cancel'
@@ -50,24 +48,13 @@ export const showAlert = ({
 }
 
 /**
- * Muestra un toast (notificación pequeña en esquina)
+ * Muestra una notificación centrada con confirmación explícita
  */
-export const showToast = (text: string, type: AlertType = 'success', timer = 3000) => {
-  const Toast = Swal.mixin({
-    toast: true,
-    position: 'top-end',
-    showConfirmButton: false,
-    timer,
-    timerProgressBar: true,
-    didOpen: (toast) => {
-      toast.addEventListener('mouseenter', Swal.stopTimer)
-      toast.addEventListener('mouseleave', Swal.resumeTimer)
-    }
-  })
-
-  return Toast.fire({
-    icon: type,
-    title: text
+export const showToast = (text: string, type: AlertType = 'success') => {
+  return showAlert({
+    text,
+    type,
+    confirmButtonText: type === 'error' ? 'OK' : 'Aceptar',
   })
 }
 
@@ -85,10 +72,13 @@ export const showConfirm = async ({
     title,
     text,
     icon: type,
+    position: 'center',
     showCancelButton: true,
     confirmButtonText,
     cancelButtonText,
     reverseButtons: true,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
     customClass: {
       confirmButton: 'swal-btn-confirm',
       cancelButton: 'swal-btn-cancel'
@@ -108,12 +98,15 @@ export const showPasswordConfirm = async (
   const result = await Swal.fire({
     title,
     text,
+    position: 'center',
     input: 'password',
     inputPlaceholder: 'Contraseña',
     showCancelButton: true,
     confirmButtonText: 'Confirmar',
     cancelButtonText: 'Cancelar',
     reverseButtons: true,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
     inputValidator: (value) => {
       if (!value) {
         return 'Debes ingresar tu contraseña'
@@ -139,6 +132,7 @@ export const showLoading = (title: string = 'Procesando...', text?: string) => {
   Swal.fire({
     title,
     text,
+    position: 'center',
     allowOutsideClick: false,
     allowEscapeKey: false,
     didOpen: () => {
@@ -158,10 +152,10 @@ export const closeAlert = () => {
  * Shortcuts para tipos comunes
  */
 export const Alert = {
-  success: (text: string, title?: string) => showAlert({ text, title, type: 'success', timer: 3000 }),
+  success: (text: string, title?: string) => showAlert({ text, title, type: 'success', confirmButtonText: 'Aceptar' }),
   error: (text: string, title?: string) => showAlert({ text, title, type: 'error' }),
-  warning: (text: string, title?: string) => showAlert({ text, title, type: 'warning' }),
-  info: (text: string, title?: string) => showAlert({ text, title, type: 'info' }),
+  warning: (text: string, title?: string) => showAlert({ text, title, type: 'warning', confirmButtonText: 'Aceptar' }),
+  info: (text: string, title?: string) => showAlert({ text, title, type: 'info', confirmButtonText: 'Aceptar' }),
   
   toast: {
     success: (text: string) => showToast(text, 'success'),
@@ -169,6 +163,24 @@ export const Alert = {
     warning: (text: string) => showToast(text, 'warning'),
     info: (text: string) => showToast(text, 'info'),
   },
+
+  confirmCreate: (entity: string = 'registro') =>
+    showConfirm({
+      title: `¿Crear ${entity}?`,
+      text: 'Confirma para continuar con la creación.',
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      type: 'question',
+    }),
+
+  confirmDelete: (entity: string = 'registro') =>
+    showConfirm({
+      title: `¿Eliminar ${entity}?`,
+      text: 'Esta acción no se puede deshacer.',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    }),
   
   confirm: showConfirm,
   confirmPassword: showPasswordConfirm,

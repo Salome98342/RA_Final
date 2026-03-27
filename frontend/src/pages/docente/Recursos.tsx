@@ -73,6 +73,10 @@ const DocenteRecursos: React.FC = () => {
       Alert.warning('Por favor completa el título y contenido del anuncio')
       return
     }
+
+    const confirmedCreate = await Alert.confirmCreate('anuncio')
+    if (!confirmedCreate) return
+
     setCreandoAnuncio(true)
     try {
       await createAnuncio(curso, nuevoAnuncio)
@@ -88,18 +92,15 @@ const DocenteRecursos: React.FC = () => {
   }
 
   const handleDeleteAnuncio = async (id: number) => {
-    const confirmed = await Alert.confirm({
-      title: '¿Eliminar anuncio?',
-      text: 'Esta acción no se puede deshacer'
-    })
+    const confirmed = await Alert.confirmDelete('anuncio')
     if (!confirmed) return
     try {
       await deleteAnuncio(id)
       await loadAnuncios()
-      Alert.toast.success('Anuncio eliminado')
+      Alert.success('Anuncio eliminado')
     } catch (err) {
       const data = (err as { response?: { data?: { detail?: string } } })?.response?.data
-      Alert.toast.error(data?.detail || 'No se pudo eliminar el anuncio')
+      Alert.error(data?.detail || 'No se pudo eliminar el anuncio')
     }
   }
 
@@ -116,8 +117,9 @@ const DocenteRecursos: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar
           active="recursos"
-          onClick={(k) => { if (k === 'cursos') navigate('/docente') }}
+          onClick={(k) => { if (k === 'inicio') navigate('/docente/inicio'); if (k === 'cursos') navigate('/docente/cursos') }}
           items={[
+            { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
             { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
             { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
           ]}

@@ -38,6 +38,7 @@ const AsignaturaAnalisis = () => {
 
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -55,7 +56,8 @@ const AsignaturaAnalisis = () => {
             active={active}
             items={items}
             onClick={(key) => {
-              if (key === 'materias') navigate('/coordinador/materias')
+              if (key === 'inicio') navigate('/coordinador')
+              else if (key === 'materias') navigate('/coordinador/materias')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
               else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -85,7 +87,8 @@ const AsignaturaAnalisis = () => {
             active={active}
             items={items}
             onClick={(key) => {
-              if (key === 'materias') navigate('/coordinador/materias')
+              if (key === 'inicio') navigate('/coordinador')
+              else if (key === 'materias') navigate('/coordinador/materias')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
               else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -119,7 +122,8 @@ const AsignaturaAnalisis = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')

@@ -20,6 +20,7 @@ media/recursos/
 .env.local
 *.env
 !.env.example
+CREDENCIALES_LOCAL.md
 
 # IDEs
 .vscode/

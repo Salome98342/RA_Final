@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import Alert from '@/utils/alert'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { fetchAsignaturas, fetchAsignaturaAvance, type AsignaturaRow, type AvanceAsignaturaResponse } from '@/services/coordinador'
 import { getPeriodosByCourse, getIndicatorsByRA, getActivitiesByRA } from '@/services/api'
@@ -26,7 +27,6 @@ const Materias: React.FC = () => {
   const [raActivities, setRaActivities] = useState<Activity[] | null>(null)
   const [loadingRAData, setLoadingRAData] = useState(false)
   const [raDataError, setRaDataError] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   
   // Ref para manejar el timer de doble clic
   const clickTimer = useRef<NodeJS.Timeout | null>(null)
@@ -35,6 +35,7 @@ const Materias: React.FC = () => {
   const location = useLocation()
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -45,14 +46,14 @@ const Materias: React.FC = () => {
 
   // Load list of subjects for current semester
   const loadMaterias = async (p: string) => {
-    setLoadingList(true); setError(null)
+    setLoadingList(true)
     try {
       const data = await fetchAsignaturas({ page: 1, page_size: 100, periodo: p || undefined })
       setMaterias(data.results)
       // auto-select first when none selected
       setSelected((sel) => sel ?? (data.results.length ? data.results[0] : null))
     } catch (e: any) {
-      setError(String(e?.response?.data?.detail || e.message))
+      Alert.error(String(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de materias'))
     } finally { setLoadingList(false) }
   }
 
@@ -129,7 +130,9 @@ const Materias: React.FC = () => {
       } catch (e: any) {
         if (abort) return
         setRaIndicators(null); setRaActivities(null)
-        setRaDataError(String(e?.message || 'Error al cargar detalle del RA'))
+        const msg = String(e?.message || 'Error al cargar detalle del RA')
+        setRaDataError(msg)
+        Alert.toast.error(msg)
       } finally { if (!abort) setLoadingRAData(false) }
     }
     run()
@@ -168,7 +171,8 @@ const Materias: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -435,7 +439,6 @@ const Materias: React.FC = () => {
               </div>
             </div>
 
-            {error && <div className="alert alert-danger mt-3">{error}</div>}
           </section>
         </main>
       </div>

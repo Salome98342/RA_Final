@@ -9,6 +9,7 @@ import {
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import EstudiantePerfilModal from '@/components/EstudiantePerfilModal'
+import Alert from '@/utils/alert'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 const Estudiantes: React.FC = () => {
@@ -26,8 +27,6 @@ const Estudiantes: React.FC = () => {
     num_documento: '',
     jornada: ''
   })
-  const [formError, setFormError] = useState('')
-  const [formSuccess, setFormSuccess] = useState('')
   const [showPerfilModal, setShowPerfilModal] = useState(false)
   const [selectedEstudianteId, setSelectedEstudianteId] = useState<number | null>(null)
 
@@ -35,6 +34,7 @@ const Estudiantes: React.FC = () => {
   const navigate = useNavigate()
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -78,20 +78,21 @@ const Estudiantes: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setFormError('')
-    setFormSuccess('')
 
     // Validar campos requeridos
     if (!formData.codigo_estudiante || !formData.nombre || !formData.apellido || 
         !formData.correo || !formData.tipo_documento || !formData.num_documento) {
-      setFormError('Todos los campos son requeridos excepto Jornada')
+      Alert.toast.warning('Todos los campos son requeridos excepto Jornada')
       return
     }
+
+    const confirmed = await Alert.confirmCreate('estudiante')
+    if (!confirmed) return
 
     setLoading(true)
     try {
       const result = await createEstudiante(formData)
-      setFormSuccess(`Estudiante creado exitosamente. Se envió un correo de bienvenida a ${result.estudiante.correo}`)
+      Alert.success(`Estudiante creado exitosamente. Se envió un correo de bienvenida a ${result.estudiante.correo}`)
       // Limpiar formulario
       setFormData({
         codigo_estudiante: '',
@@ -107,7 +108,7 @@ const Estudiantes: React.FC = () => {
       setTimeout(() => loadEstudiantes(), 1000)
     } catch (e: any) {
       const msg = e?.response?.data?.detail || e.message || 'Error al crear estudiante'
-      setFormError(msg)
+      Alert.error(msg)
     } finally {
       setLoading(false)
     }
@@ -126,7 +127,8 @@ const Estudiantes: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -149,23 +151,12 @@ const Estudiantes: React.FC = () => {
             </button>
           </div>
 
-          {/* Alertas */}
-          {formSuccess && (
-            <div className="alert alert-success alert-dismissible fade show" role="alert">
-              <i className="bi bi-check-circle me-2"></i>
-              {formSuccess}
-              <button type="button" className="btn-close" onClick={() => setFormSuccess('')} aria-label="Cerrar"></button>
-            </div>
-          )}
-
           {/* Botón para mostrar formulario */}
           <div className="mb-4">
             <button 
               className="btn btn-primary"
               onClick={() => {
                 setShowForm(!showForm)
-                setFormError('')
-                setFormSuccess('')
               }}
             >
               <i className={`bi ${showForm ? 'bi-x-lg' : 'bi-plus-lg'} me-2`}></i>
@@ -185,13 +176,6 @@ const Estudiantes: React.FC = () => {
                   <i className="bi bi-info-circle me-2"></i>
                   Se generará una contraseña provisional automáticamente y se enviará un correo de bienvenida al estudiante.
                 </div>
-
-                {formError && (
-                  <div className="alert alert-danger">
-                    <i className="bi bi-exclamation-triangle me-2"></i>
-                    {formError}
-                  </div>
-                )}
 
                 <form onSubmit={handleSubmit}>
                   <div className="row">
@@ -299,7 +283,6 @@ const Estudiantes: React.FC = () => {
                       className="btn btn-secondary"
                       onClick={() => {
                         setShowForm(false)
-                        setFormError('')
                       }}
                     >
                       Cancelar

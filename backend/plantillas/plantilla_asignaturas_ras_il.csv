@@ -1,0 +1,5 @@
+codigo_asignatura,nombre_asignatura,codigo_docente,codigo_programa,grupo,ra_descripcion,ra_porcentaje,indicador_descripcion,indicador_porcentaje
+MAT201,Calculo Diferencial,DOC001,TDS,A,Resuelve problemas con funciones,50,Identifica tipo de funcion,40
+MAT201,Calculo Diferencial,DOC001,TDS,A,Resuelve problemas con funciones,50,Aplica derivadas correctamente,60
+MAT201,Calculo Diferencial,DOC001,TDS,A,Modela situaciones reales,50,Interpreta resultados del modelo,50
+MAT201,Calculo Diferencial,DOC001,TDS,A,Modela situaciones reales,50,Justifica procedimiento matematico,50

@@ -608,12 +608,14 @@ const DocenteCalificar: React.FC = () => {
 
   // Sidebar con lista de estudiantes incluida directamente
   const sidebarItems = useMemo(() => ([
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
     { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
   ]), [])
 
   const onSidebarClick = async (key: string) => {
-    if (key === 'cursos') { navigate('/docente'); return }
+    if (key === 'inicio') { navigate('/docente/inicio'); return }
+    if (key === 'cursos') { navigate('/docente/cursos'); return }
     if (key === 'calificar') {
       // Foco a lista estudiantes
       const el = document.getElementById('student-list-panel') as HTMLDivElement | null

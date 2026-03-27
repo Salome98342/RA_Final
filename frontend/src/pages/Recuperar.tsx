@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { requestPasswordReset, verifyOTP, resetPassword } from '@/services/auth'
+import Alert from '@/utils/alert'
 
 const Recuperar: React.FC = () => {
   const navigate = useNavigate()
@@ -10,7 +11,6 @@ const Recuperar: React.FC = () => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showRequirements, setShowRequirements] = useState(false)
 
@@ -28,15 +28,15 @@ const Recuperar: React.FC = () => {
     e.preventDefault()
     try {
       setLoading(true)
-      setError(null)
       await requestPasswordReset(email)
+      Alert.toast.success('Código enviado al correo. Revisa tu bandeja de entrada.')
       setStep('otp')
     } catch (err: unknown) {
       const data = (err as { response?: { data?: unknown } })?.response?.data
       const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
         ? String((data as Record<string, unknown>).message)
         : 'No se pudo enviar el código. Inténtalo de nuevo.'
-      setError(msg)
+      Alert.error(msg)
     } finally {
       setLoading(false)
     }
@@ -46,15 +46,15 @@ const Recuperar: React.FC = () => {
     e.preventDefault()
     try {
       setLoading(true)
-      setError(null)
       await verifyOTP(email, otpCode)
+      Alert.toast.success('Código verificado correctamente.')
       setStep('password')
     } catch (err: unknown) {
       const data = (err as { response?: { data?: unknown } })?.response?.data
       const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
         ? String((data as Record<string, unknown>).message)
         : 'Código OTP inválido. Inténtalo de nuevo.'
-      setError(msg)
+      Alert.error(msg)
     } finally {
       setLoading(false)
     }
@@ -63,36 +63,36 @@ const Recuperar: React.FC = () => {
   const onSubmitPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden')
+      Alert.toast.warning('Las contraseñas no coinciden')
       return
     }
     
     // Validar fortaleza de contraseña (debe coincidir con backend)
     if (!requirements.minLength) {
-      setError('La contraseña debe tener al menos 8 caracteres')
+      Alert.toast.warning('La contraseña debe tener al menos 8 caracteres')
       return
     }
     if (!requirements.hasUpperCase) {
-      setError('La contraseña debe contener al menos una mayúscula')
+      Alert.toast.warning('La contraseña debe contener al menos una mayúscula')
       return
     }
     if (!requirements.hasLowerCase) {
-      setError('La contraseña debe contener al menos una minúscula')
+      Alert.toast.warning('La contraseña debe contener al menos una minúscula')
       return
     }
     if (!requirements.hasNumber) {
-      setError('La contraseña debe contener al menos un número')
+      Alert.toast.warning('La contraseña debe contener al menos un número')
       return
     }
     if (!requirements.hasSpecial) {
-      setError('La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)')
+      Alert.toast.warning('La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)')
       return
     }
     
     try {
       setLoading(true)
-      setError(null)
       await resetPassword(email, otpCode, password)
+      Alert.success('Contraseña actualizada correctamente. Serás redirigido al login.')
       // Redirigir al login tras éxito
       setTimeout(() => navigate('/login'), 2000)
     } catch (err: unknown) {
@@ -100,7 +100,7 @@ const Recuperar: React.FC = () => {
       const msg = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).message === 'string')
         ? String((data as Record<string, unknown>).message)
         : 'No se pudo cambiar la contraseña. Inténtalo de nuevo.'
-      setError(msg)
+      Alert.error(msg)
     } finally {
       setLoading(false)
     }
@@ -222,11 +222,6 @@ const Recuperar: React.FC = () => {
               </form>
             </>
           )}
-
-          {error && (
-            <div className="alert alert-danger mt-3" role="alert">{error}</div>
-          )}
-          
           <div className="text-center mt-3">
             <Link to="/login">Volver al login</Link>
           </div>

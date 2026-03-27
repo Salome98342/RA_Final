@@ -36,9 +36,9 @@ const Profile: React.FC = () => {
   }, [])
 
   const goBack = () => {
-    if (data?.rol === 'docente') return navigate('/docente')
+    if (data?.rol === 'docente') return navigate('/docente/inicio')
     if (data?.rol === 'coordinador') return navigate('/coordinador')
-    return navigate('/estudiante')
+    return navigate('/estudiante/inicio')
   }
 
   // Sin edición de datos personales; sólo visualización y cambio de avatar

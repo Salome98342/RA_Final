@@ -4,6 +4,7 @@ import Login from '@/pages/Login'
 import Estudiante from '@/pages/Estudiante'
 import Recuperar from './pages/Recuperar'
 import Reset from './pages/Reset'
+import DocenteHome from '@/pages/docente/Home'
 import DocenteCursos from '@/pages/docente/Cursos'
 import DocenteRAs from '@/pages/docente/RAs'
 import NuevaActividadCurso from '@/pages/docente/NuevaActividad'
@@ -20,6 +21,7 @@ import CoordinadorMatriculados from '@/pages/coordinador/Matriculados'
 import CoordinadorAsignaturasRA from '@/pages/coordinador/AsignaturasRA'
 import CoordinadorAsignaturaAnalisis from '@/pages/coordinador/AsignaturaAnalisis'
 import EstudianteMateriaDetalle from '@/pages/estudiante/MateriaDetalle'
+import EstudianteHome from '@/pages/estudiante/Home'
 import { useSession } from '@/state/SessionContext'
 import { getAuthToken } from '@/connections/http'
 
@@ -46,7 +48,7 @@ const ProtectedRoute: React.FC<React.PropsWithChildren<{ allowedRoles: Array<'do
     if (state.role && !allowedRoles.includes(state.role)) {
       console.warn(`Rol "${state.role}" no autorizado para acceder a esta ruta. Roles permitidos: ${allowedRoles.join(', ')}`)
       // Redirigir al dashboard correcto según el rol
-      const redirectPath = state.role === 'docente' ? '/docente' : state.role === 'coordinador' ? '/coordinador/materias' : '/estudiante'
+      const redirectPath = state.role === 'docente' ? '/docente/inicio' : state.role === 'coordinador' ? '/coordinador' : '/estudiante/inicio'
       navigate(redirectPath, { replace: true })
     }
   }, [state.role, allowedRoles, navigate, location.pathname])
@@ -85,13 +87,16 @@ const App: React.FC = () => {
       <Route path="/recuperar" element={<Recuperar />} />
   <Route path="/reset" element={<Reset />} />
       {/* Rutas de Docente - Protegidas */}
-      <Route path="/docente" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteCursos /></ProtectedRoute>} />
+      <Route path="/docente" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><Navigate to="/docente/inicio" replace /></ProtectedRoute>} />
+      <Route path="/docente/inicio" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteHome /></ProtectedRoute>} />
+      <Route path="/docente/cursos" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteCursos /></ProtectedRoute>} />
       <Route path="/docente/:curso/ras" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteRAs /></ProtectedRoute>} />
       <Route path="/docente/:curso/actividades/nueva" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><NuevaActividadCurso /></ProtectedRoute>} />
       <Route path="/docente/:curso/calificar" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteCalificar /></ProtectedRoute>} />
       <Route path="/docente/:curso/recursos" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteRecursos /></ProtectedRoute>} />
       
       {/* Ruta de Estudiante - Protegida y basada en token (no en ID) */}
+      <Route path="/estudiante/inicio" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteHome /></ProtectedRoute>} />
       <Route path="/estudiante" element={<ProtectedRoute allowedRoles={['estudiante']}><Estudiante /></ProtectedRoute>} />
       <Route path="/estudiante/materias/:codigo/detalle" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteMateriaDetalle /></ProtectedRoute>} />
       

@@ -63,18 +63,19 @@ const AnunciosCard: React.FC<Props> = ({ anuncios, loading, nuevoAnuncio, onNuev
                   onChange={(e) => onNuevoAnuncioChange('contenido', e.target.value)}
                 />
               </div>
-              <div className="form-check mb-3">
-                <input 
-                  className="form-check-input" 
-                  type="checkbox" 
-                  id="esImportante"
-                  checked={nuevoAnuncio.es_importante}
-                  onChange={(e) => onNuevoAnuncioChange('es_importante', e.target.checked)}
-                />
-                <label className="form-check-label" htmlFor="esImportante">
+              <div className="mb-3 d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${nuevoAnuncio.es_importante ? 'btn-danger' : 'btn-outline-success'}`}
+                  onClick={() => onNuevoAnuncioChange('es_importante', !nuevoAnuncio.es_importante)}
+                  aria-label={nuevoAnuncio.es_importante ? 'Quitar marca de importante' : 'Añadir marca de importante'}
+                >
+                  {nuevoAnuncio.es_importante ? 'Quitar' : 'Añadir'}
+                </button>
+                <span className="small">
                   <i className="bi bi-exclamation-triangle-fill text-warning me-1"></i>
                   Marcar como importante
-                </label>
+                </span>
               </div>
               <button 
                 className="btn btn-primary shadow-sm w-100"

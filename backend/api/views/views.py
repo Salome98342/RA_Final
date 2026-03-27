@@ -72,6 +72,8 @@ ALLOWED_IMPORT_TEMPLATES = {
     "plantilla_matriculados.xlsx",
     "plantilla_docentes.xlsx",
     "plantilla_asignaturas_ras.xlsx",
+    "plantilla_asignaturas_ras_il.csv",
+    "plantilla_asignaturas_ras_il.xlsx",
 }
 
 
@@ -2902,6 +2904,7 @@ def coordinador_import_asignaturas_ras_view(request):
     """Importa asignaturas y RAs desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
     Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa, grupo
     Columnas RA opcionales (si presentes se crea RA): ra_descripcion, ra_porcentaje
+        Columnas de indicador opcionales: indicador_descripcion, indicador_porcentaje
     Soporta: .csv, .xlsx, .xls
     Sinónimos aceptados:
       - codigo_asignatura | asignatura | codigo
@@ -2910,6 +2913,8 @@ def coordinador_import_asignaturas_ras_view(request):
       - codigo_programa | programa
       - ra_descripcion | ra_desc | descripcion_ra
       - ra_porcentaje | ra_pct | porcentaje_ra
+            - indicador_descripcion | il_descripcion | descripcion_indicador | indicador
+            - indicador_porcentaje | il_porcentaje | porcentaje_indicador | porcentaje_il | porcentaje_ind
     Valida que suma de porcentajes de RA no exceda 100.
     """
     coord, err = _require_coordinador(request)
@@ -2952,12 +2957,14 @@ def coordinador_import_asignaturas_ras_view(request):
     created_asig = 0
     existing_asig = 0
     created_ras = 0
+    created_indicadores = 0
     errors = []
     max_rows = 5000
     asignaturas_to_create = []
     asignaturas_to_update = {}
     ras_to_create = []
     ras_pendientes = []  # Para procesar después de crear asignaturas
+    ra_entries = {}
     
     # Helper function para acceder a columnas de pandas de forma segura
     def get_col(row, *col_names):
@@ -2983,6 +2990,8 @@ def coordinador_import_asignaturas_ras_view(request):
         grupo = get_col(row, "grupo")
         ra_desc = get_col(row, "ra_descripcion", "ra_desc", "descripcion_ra")
         raw_pct = get_col(row, "ra_porcentaje", "ra_pct", "porcentaje_ra")
+        ind_desc = get_col(row, "indicador_descripcion", "il_descripcion", "descripcion_indicador", "indicador", "il_desc")
+        raw_ind_pct = get_col(row, "indicador_porcentaje", "il_porcentaje", "porcentaje_indicador", "porcentaje_il", "porcentaje_ind", "il_pct")
         
         # Limpiar strings
         if codigo: codigo = str(codigo).strip()[:50]
@@ -2991,6 +3000,7 @@ def coordinador_import_asignaturas_ras_view(request):
         if codigo_prog: codigo_prog = str(codigo_prog).strip()[:50]
         if grupo: grupo = str(grupo).strip()[:20]
         if ra_desc: ra_desc = str(ra_desc).strip()[:255]
+        if ind_desc: ind_desc = str(ind_desc).strip()[:255]
         
         if not (codigo and nombre and codigo_doc and codigo_prog and grupo):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas asignatura"}); continue
@@ -3038,21 +3048,73 @@ def coordinador_import_asignaturas_ras_view(request):
                 errors.append({"row": idx, "error": f"ra_porcentaje inválido: {raw_pct}"}); continue
             if pct < 0 or pct > 100:
                 errors.append({"row": idx, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
-            
-            # Validar suma de porcentajes
-            suma_actual = ra_sumas.get(asig_key, 0)
-            if float(suma_actual) + pct > 100.0:
-                errors.append({"row": idx, "error": f"Suma RA excede 100% ({float(suma_actual)+pct:.2f})"}); continue
-            
-            # Guardar para crear después
+
+            ra_key = (codigo, grupo, ra_desc.lower())
+            ra_entry = ra_entries.get(ra_key)
+
+            if not ra_entry:
+                # Validar suma de porcentajes por asignatura solo para RAs nuevos
+                suma_actual = ra_sumas.get(asig_key, 0)
+                if float(suma_actual) + pct > 100.0:
+                    errors.append({"row": idx, "error": f"Suma RA excede 100% ({float(suma_actual)+pct:.2f})"}); continue
+
+                ra_entry = {
+                    'codigo_asignatura': codigo,
+                    'grupo': grupo,
+                    'descripcion': ra_desc,
+                    'porcentaje': pct,
+                    'indicadores': [],
+                    'indicadores_desc': set(),
+                    'suma_indicadores': 0.0,
+                }
+                ra_entries[ra_key] = ra_entry
+                ra_sumas[asig_key] = suma_actual + pct
+                created_ras += 1
+            else:
+                # Mismo RA repetido con porcentaje diferente es inconsistente
+                if abs(float(ra_entry['porcentaje']) - pct) > 1e-9:
+                    errors.append({"row": row_num, "error": f"RA repetido con porcentaje distinto para '{ra_desc}'"}); continue
+
+            # Validar indicadores cuando una de las columnas venga informada
+            has_ind_desc = bool(ind_desc)
+            has_ind_pct = raw_ind_pct is not None and str(raw_ind_pct).strip() != ""
+            if has_ind_desc != has_ind_pct:
+                errors.append({"row": row_num, "error": "Para indicador debes enviar indicador_descripcion e indicador_porcentaje"}); continue
+
+            if has_ind_desc and has_ind_pct:
+                try:
+                    ind_pct = float(raw_ind_pct)
+                except (TypeError, ValueError):
+                    errors.append({"row": row_num, "error": f"indicador_porcentaje inválido: {raw_ind_pct}"}); continue
+
+                if ind_pct <= 0 or ind_pct > 100:
+                    errors.append({"row": row_num, "error": f"indicador_porcentaje fuera de rango: {ind_pct}"}); continue
+
+                ind_key = str(ind_desc).strip().lower()
+                if ind_key in ra_entry['indicadores_desc']:
+                    errors.append({"row": row_num, "error": f"Indicador repetido en RA '{ra_desc}': {ind_desc}"}); continue
+
+                new_sum = float(ra_entry['suma_indicadores']) + ind_pct
+                if new_sum > 100:
+                    errors.append({"row": row_num, "error": f"Suma de indicadores excede 100% para RA '{ra_desc}' ({new_sum:.2f})"}); continue
+
+                ra_entry['indicadores'].append({
+                    'descripcion': str(ind_desc).strip(),
+                    'porcentaje_ind': ind_pct,
+                })
+                ra_entry['indicadores_desc'].add(ind_key)
+                ra_entry['suma_indicadores'] = new_sum
+
+    # Convertir entradas consolidadas a estructura pendiente de creación
+    if ra_entries:
+        for entry in ra_entries.values():
             ras_pendientes.append({
-                'codigo_asignatura': codigo,
-                'grupo': grupo,
-                'descripcion': ra_desc,
-                'porcentaje': pct
+                'codigo_asignatura': entry['codigo_asignatura'],
+                'grupo': entry['grupo'],
+                'descripcion': entry['descripcion'],
+                'porcentaje': entry['porcentaje'],
+                'indicadores': entry['indicadores'],
             })
-            ra_sumas[asig_key] = suma_actual + pct
-            created_ras += 1
     
     # BULK INSERT de asignaturas nuevas
     if asignaturas_to_create:
@@ -3077,21 +3139,50 @@ def coordinador_import_asignaturas_ras_view(request):
     # BULK INSERT de RAs
     if ras_pendientes:
         try:
+            ra_meta = []
             for ra_data in ras_pendientes:
                 asign = asignaturas_map.get((ra_data['codigo_asignatura'], ra_data['grupo']))
                 if asign:
-                    ras_to_create.append(ResultadoDeAprendizaje(
+                    ra_obj = ResultadoDeAprendizaje(
                         asignatura=asign,
                         porcentaje_ra=ra_data['porcentaje'],
                         descripcion=ra_data['descripcion']
-                    ))
+                    )
+                    ras_to_create.append(ra_obj)
+                    ra_meta.append((ra_obj, ra_data))
             
             if ras_to_create:
                 with transaction.atomic():
                     ResultadoDeAprendizaje.objects.bulk_create(ras_to_create, batch_size=500)
+
+                    indicadores_to_create = []
+                    for ra_obj, ra_data in ra_meta:
+                        ra_pk = getattr(ra_obj, 'id_ra', None)
+                        if not ra_pk:
+                            # Fallback para entornos donde bulk_create no retorna PKs en memoria
+                            found = ResultadoDeAprendizaje.objects.filter(
+                                asignatura=ra_obj.asignatura,
+                                descripcion=ra_obj.descripcion,
+                                porcentaje_ra=ra_obj.porcentaje_ra,
+                            ).order_by('-id_ra').first()
+                            ra_pk = getattr(found, 'id_ra', None)
+                        if not ra_pk:
+                            continue
+
+                        for ind in (ra_data.get('indicadores') or []):
+                            indicadores_to_create.append(IndicadoresDeLogro(
+                                ra_id=ra_pk,
+                                descripcion=ind['descripcion'],
+                                porcentaje_ind=ind['porcentaje_ind'],
+                            ))
+
+                    if indicadores_to_create:
+                        created_inds = IndicadoresDeLogro.objects.bulk_create(indicadores_to_create, batch_size=500)
+                        created_indicadores = len(created_inds)
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva de RAs: {str(e)}"})
             created_ras = 0
+            created_indicadores = 0
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
@@ -3099,6 +3190,7 @@ def coordinador_import_asignaturas_ras_view(request):
         "created_asignaturas": created_asig,
         "existing_asignaturas": existing_asig,
         "created_ras": created_ras,
+        "created_indicadores": created_indicadores,
         "errors": errors,
     }
     try:
@@ -3108,13 +3200,14 @@ def coordinador_import_asignaturas_ras_view(request):
             "created_asignaturas": created_asig,
             "existing_asignaturas": existing_asig,
             "created_ras": created_ras,
+            "created_indicadores": created_indicadores,
             "errors_count": len(errors)
         })
         ImportAudit.objects.create(
             coordinador=coord,
             kind="asignaturas_ras",
             filename=fname,
-            created_count=(created_asig + created_ras),
+            created_count=(created_asig + created_ras + created_indicadores),
             existing_count=existing_asig,
             errors_count=len(errors),
         )

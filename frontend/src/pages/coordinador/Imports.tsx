@@ -37,6 +37,7 @@ type ImportApiResponse = {
   created_asignaturas?: number
   existing_asignaturas?: number
   created_ras?: number
+  created_indicadores?: number
   imported_students?: Array<{
     nombre?: string
     apellido?: string
@@ -102,6 +103,19 @@ const initialCardState: CardState = {
 
 const cardConfigs: ImportCardConfig[] = [
   {
+    kind: 'doc',
+    title: 'Docentes',
+    iconClass: 'bi bi-person-badge-fill',
+    accentClass: 'text-warning',
+    description: 'Importa docentes con documento, correo y datos de contacto.',
+    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento',
+    templateCandidates: [{ fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' }],
+    headerRule: {
+      required: ['codigo_docente', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'],
+    },
+    importAction: importDocentes,
+  },
+  {
     kind: 'est',
     title: 'Estudiantes',
     iconClass: 'bi bi-people-fill',
@@ -118,6 +132,24 @@ const cardConfigs: ImportCardConfig[] = [
     importAction: importEstudiantes,
   },
   {
+    kind: 'asig',
+    title: 'Asignaturas + RAs + IL',
+    iconClass: 'bi bi-journal-bookmark-fill',
+    accentClass: 'text-danger',
+    description: 'Crea o actualiza asignaturas, RAs e indicadores de logro (IL) en una sola carga.',
+    acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, grupo, ra_descripcion, ra_porcentaje, indicador_descripcion, indicador_porcentaje',
+    templateCandidates: [
+      { fileName: 'plantilla_asignaturas_ras_il.xlsx', downloadName: 'plantilla_asignaturas_ras_il.xlsx' },
+      { fileName: 'plantilla_asignaturas_ras_il.csv', downloadName: 'plantilla_asignaturas_ras_il.csv' },
+      { fileName: 'plantilla_asignaturas_ras.xlsx', downloadName: 'plantilla_asignaturas_ras.xlsx' },
+    ],
+    headerRule: {
+      required: ['codigo_asignatura', 'codigo_docente', 'codigo_programa', 'grupo'],
+      oneOfGroups: [['nombre_asignatura', 'nombre']],
+    },
+    importAction: importAsignaturasRAs,
+  },
+  {
     kind: 'mat',
     title: 'Matriculados',
     iconClass: 'bi bi-clipboard-check-fill',
@@ -129,33 +161,6 @@ const cardConfigs: ImportCardConfig[] = [
       required: ['codigo_estudiante', 'periodo'],
     },
     importAction: importMatriculados,
-  },
-  {
-    kind: 'doc',
-    title: 'Docentes',
-    iconClass: 'bi bi-person-badge-fill',
-    accentClass: 'text-warning',
-    description: 'Importa docentes con documento, correo y datos de contacto.',
-    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento',
-    templateCandidates: [{ fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' }],
-    headerRule: {
-      required: ['codigo_docente', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'],
-    },
-    importAction: importDocentes,
-  },
-  {
-    kind: 'asig',
-    title: 'Asignaturas + RAs',
-    iconClass: 'bi bi-journal-bookmark-fill',
-    accentClass: 'text-danger',
-    description: 'Crea o actualiza asignaturas y sus resultados de aprendizaje en una sola carga.',
-    acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, grupo',
-    templateCandidates: [{ fileName: 'plantilla_asignaturas_ras.xlsx', downloadName: 'plantilla_asignaturas_ras.xlsx' }],
-    headerRule: {
-      required: ['codigo_asignatura', 'codigo_docente', 'codigo_programa', 'grupo'],
-      oneOfGroups: [['nombre_asignatura', 'nombre']],
-    },
-    importAction: importAsignaturasRAs,
   },
 ]
 
@@ -311,7 +316,10 @@ const buildResult = (kind: ImportKind, response: ImportApiResponse, durationMs: 
   const importedStudents = Array.isArray(response.imported_students) ? response.imported_students : []
 
   if (kind === 'asig') {
-    const inserted = Number(response.created_asignaturas || 0) + Number(response.created_ras || 0)
+    const createdAsignaturas = Number(response.created_asignaturas || 0)
+    const createdRas = Number(response.created_ras || 0)
+    const createdIndicadores = Number(response.created_indicadores || 0)
+    const inserted = createdAsignaturas + createdRas + createdIndicadores
     const existing = Number(response.existing_asignaturas || 0)
     const failed = errors.length
     const processed = inserted + existing + failed
@@ -322,7 +330,7 @@ const buildResult = (kind: ImportKind, response: ImportApiResponse, durationMs: 
       failed,
       processed,
       durationMs,
-      details: `Asignaturas creadas: ${response.created_asignaturas || 0}, RAs creados: ${response.created_ras || 0}`,
+      details: `Asignaturas creadas: ${createdAsignaturas}, RAs creados: ${createdRas}, IL creados: ${createdIndicadores}`,
       errors,
       importedStudents,
     }
@@ -473,6 +481,7 @@ const Imports: React.FC<ImportsProps> = ({
             ? 'imports'
             : 'materias'
   const items = [
+    { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -489,6 +498,12 @@ const Imports: React.FC<ImportsProps> = ({
         ...patch,
       },
     }))
+  }
+
+  const clearFileSelection = (kind: ImportKind) => {
+    setSingleCardState(kind, {
+      ...initialCardState,
+    })
   }
 
   const validateFile = async (kind: ImportKind, file: File): Promise<string | null> => {
@@ -616,11 +631,13 @@ const Imports: React.FC<ImportsProps> = ({
     const optionsHtml = matriculadosAsignaturas
       .map((asignatura) => {
         const label = `${asignatura.codigo} - ${asignatura.nombre} - Grupo ${asignatura.grupo}`
+        const inputId = `mat-asig-${asignatura.id_asignatura}`
         return `
-          <label class="d-flex align-items-start gap-2 py-1 text-start" style="cursor:pointer;">
-            <input class="form-check-input mt-1 js-mat-asig" type="checkbox" value="${asignatura.id_asignatura}" />
-            <span>${escapeHtml(label)}</span>
-          </label>
+          <div class="d-flex align-items-start gap-2 py-1 text-start">
+            <button type="button" class="btn btn-sm btn-outline-success js-mat-toggle" data-target="${inputId}">Añadir</button>
+            <input id="${inputId}" class="d-none js-mat-asig" type="checkbox" value="${asignatura.id_asignatura}" />
+            <span class="pt-1">${escapeHtml(label)}</span>
+          </div>
         `
       })
       .join('')
@@ -640,6 +657,27 @@ const Imports: React.FC<ImportsProps> = ({
       confirmButtonText: 'Continuar importación',
       cancelButtonText: 'Cancelar',
       focusConfirm: false,
+      didOpen: () => {
+        const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>('.js-mat-toggle'))
+        toggles.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target
+            if (!targetId) return
+            const input = document.getElementById(targetId) as HTMLInputElement | null
+            if (!input) return
+            input.checked = !input.checked
+            if (input.checked) {
+              btn.classList.remove('btn-outline-success')
+              btn.classList.add('btn-danger')
+              btn.textContent = 'Quitar'
+            } else {
+              btn.classList.remove('btn-danger')
+              btn.classList.add('btn-outline-success')
+              btn.textContent = 'Añadir'
+            }
+          })
+        })
+      },
       preConfirm: () => {
         const selected = Array.from(document.querySelectorAll<HTMLInputElement>('.js-mat-asig:checked'))
           .map((node) => Number(node.value))
@@ -666,6 +704,11 @@ const Imports: React.FC<ImportsProps> = ({
     const current = cardState[kind]
     if (!current.file) {
       Alert.toast.warning('Primero selecciona un archivo válido para importar.')
+      return
+    }
+
+    const confirmed = await Alert.confirmCreate(`importación de ${config.title.toLowerCase()}`)
+    if (!confirmed) {
       return
     }
 
@@ -722,18 +765,6 @@ const Imports: React.FC<ImportsProps> = ({
         validationError: message,
         result: null,
       })
-
-      if (kind === 'est') {
-        await Swal.fire({
-          icon: 'error',
-          title: 'Error en la importacion de estudiantes',
-          text: message,
-          confirmButtonText: 'Aceptar',
-          customClass: {
-            confirmButton: 'swal-btn-confirm',
-          },
-        })
-      }
 
       Alert.toast.error(`Error del servidor: ${message}`)
     } finally {
@@ -792,7 +823,8 @@ const Imports: React.FC<ImportsProps> = ({
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'materias') navigate('/coordinador/materias')
+            if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -827,6 +859,10 @@ const Imports: React.FC<ImportsProps> = ({
               <p className="text-muted mb-2">
                 Usa las plantillas oficiales para evitar errores. El sistema valida formato, tamaño y cabeceras antes de importar.
               </p>
+              <div className="alert alert-warning py-2 mb-3" role="alert">
+                <i className="bi bi-exclamation-circle me-2" aria-hidden="true"></i>
+                <strong>Importante:</strong> se recomienda importar en el siguiente orden: docentes, estudiantes, asignaturas y matriculados.
+              </div>
               <ul className="mb-0 ps-3 text-muted small">
                 <li>Formatos permitidos: CSV, XLSX, XLS.</li>
                 <li>Tamaño máximo por archivo: 10 MB.</li>
@@ -880,15 +916,27 @@ const Imports: React.FC<ImportsProps> = ({
                         />
 
                         <div className="d-grid gap-2 mb-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={() => triggerFileSelection(config.kind)}
-                            disabled={isBusy}
-                          >
-                            <i className="bi bi-folder2-open me-1" aria-hidden="true"></i>
-                            Seleccionar archivo
-                          </button>
+                          {state.file ? (
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => clearFileSelection(config.kind)}
+                              disabled={isBusy}
+                            >
+                              <i className="bi bi-x-circle me-1" aria-hidden="true"></i>
+                              Quitar archivo
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-outline-success btn-sm"
+                              onClick={() => triggerFileSelection(config.kind)}
+                              disabled={isBusy}
+                            >
+                              <i className="bi bi-plus-circle me-1" aria-hidden="true"></i>
+                              Añadir archivo
+                            </button>
+                          )}
 
                           <button
                             type="button"
