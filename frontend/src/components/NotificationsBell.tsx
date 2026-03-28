@@ -56,9 +56,9 @@ const NotificationsBell: React.FC<Props> = ({ intervalMs = 60000 }) => {
         className="btn btn-link position-relative text-decoration-none p-2" 
         aria-label="Notificaciones" 
         onClick={onToggle}
-        style={{ fontSize: '1.25rem' }}
+        style={{ fontSize: '1.25rem', color: '#fff' }}
       >
-        <i className="bi bi-bell" style={{ color: unread > 0 ? '#dc3545' : 'inherit' }} />
+        <i className="bi bi-bell" style={{ color: '#fff' }} />
         {unread > 0 && (
           <span 
             className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" 
@@ -72,8 +72,9 @@ const NotificationsBell: React.FC<Props> = ({ intervalMs = 60000 }) => {
         <div 
           className="dropdown-menu dropdown-menu-end show shadow-lg" 
           style={{ 
-            minWidth: 340, 
-            maxWidth: 400, 
+            width: 'clamp(340px, 36vw, 400px)',
+            maxWidth: 'calc(100vw - 1rem)',
+            minWidth: 0,
             right: 0, 
             top: '100%',
             marginTop: '0.5rem',

@@ -10,45 +10,50 @@ type Props = {
   avatarUrl?: string | null
   // Backward-compat: allow older usages like <HeaderBar roleLabel="Docente" />
   roleLabel?: string
+  showWhenLoggedOut?: boolean
 }
 
 // Barra superior visible para cualquier rol autenticado (docente / estudiante / coordinador).
 // Se oculta solo si no hay sesión (role === null)
-const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl, roleLabel }) => {
+const HeaderBar: React.FC<Props> = ({ subtitle, avatarUrl, roleLabel, showWhenLoggedOut = false }) => {
   const { state } = useSession()
   const navigate = useNavigate()
   const name = state.name ?? ''
   const role = state.role
-  if (!role) return null
+  if (!role && !showWhenLoggedOut) return null
+
+  const goToHome = () => {
+    if (!role) navigate('/login')
+    else if (role === 'coordinador') navigate('/coordinador')
+    else if (role === 'docente') navigate('/docente/inicio')
+    else if (role === 'estudiante') navigate('/estudiante/inicio')
+  }
 
   // Mostrar etiqueta de rol: si se pasó roleLabel (uso legacy) úsalo, si no el rol real.
   const roleText = (roleLabel || role || 'usuario').toString().toUpperCase()
 
   return (
-    <header className="dash-header px-3" data-role={role}>
+    <header className="dash-header px-3" data-role={role || 'public'}>
       <div className="container-fluid d-flex align-items-center justify-content-between">
         <div className="d-flex align-items-center">
           <a
-            className="brand-icon"
-            aria-label="Inicio"
+            className="brand-link"
+            aria-label="Ir al inicio"
             href="#"
             onClick={(e) => {
               e.preventDefault()
-              // Navegación rápida según rol
-              if (role === 'coordinador') navigate('/coordinador')
-              else if (role === 'docente') navigate('/docente/inicio')
-              else if (role === 'estudiante') navigate('/estudiante/inicio')
+              goToHome()
             }}
           >
-            <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="brand-logo" />
+            <span className="brand-icon" aria-hidden="true">
+              <img src="/LogoBlanco.png" alt="Logo Universidad del Valle" className="brand-logo" />
+            </span>
+            <span className="brand-title">Universidad del Valle - RA Manager</span>
+            {subtitle ? <span className="brand-subtitle">· {subtitle}</span> : null}
           </a>
-          <div className="brand-title">
-            {title}
-            {subtitle ? <span className="ms-2 fw-normal">· {subtitle}</span> : null}
-          </div>
         </div>
 
-        <div className="text-end d-flex align-items-center gap-2">
+        {role && <div className="text-end d-flex align-items-center gap-2">
           {/* Notificaciones solo para estudiantes */}
           {role === 'estudiante' && <NotificationsBell intervalMs={30000} />}
           
@@ -69,7 +74,7 @@ const HeaderBar: React.FC<Props> = ({ title = 'RA Manager', subtitle, avatarUrl,
               {avatarUrl ? <img src={avatarUrl} alt="avatar" className="avatar-img" /> : <i className="bi bi-person" />}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </header>
   )

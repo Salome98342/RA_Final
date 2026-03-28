@@ -114,6 +114,7 @@ class Estudiante(models.Model):
     num_documento = models.CharField(max_length=50, unique=True)
     correo = models.EmailField(max_length=255, unique=True)
     jornada = models.CharField(max_length=50, blank=True, null=True)
+    activo = models.BooleanField(default=True, db_index=True)
 
     class Meta:
         db_table = "estudiante"
@@ -158,18 +159,20 @@ class Asignatura(models.Model):
     nombre = models.CharField(max_length=150)
     codigo_asignatura = models.CharField(max_length=50)
     docente = models.ForeignKey(Docente, on_delete=models.RESTRICT, db_column="id_docente")
+    periodo = models.ForeignKey(PeriodoAcademico, on_delete=models.RESTRICT, db_column="id_periodo", null=True, blank=True)
     grupo = models.CharField(max_length=20)
+    sede = models.CharField(max_length=80)
     creditos = models.PositiveSmallIntegerField(default=0)
     programa = models.ForeignKey(Programa, on_delete=models.RESTRICT, db_column="id_programa")
 
     class Meta:
         db_table = "asignatura"
         constraints = [
-            models.UniqueConstraint(fields=["codigo_asignatura", "grupo"], name="uq_asignatura_codigo_grupo"),
+            models.UniqueConstraint(fields=["codigo_asignatura", "grupo", "sede", "periodo"], name="uq_asignatura_codigo_grupo_sede_periodo"),
         ]
 
     def __str__(self):
-        return f"{self.nombre} ({self.codigo_asignatura} - {self.grupo})"
+        return f"{self.nombre} ({self.codigo_asignatura} - {self.grupo} - {self.sede})"
 
 
 class ResultadoDeAprendizaje(models.Model):

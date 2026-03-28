@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { getCourseDetail } from '@/services/api'
 import type { CourseDetailResponse } from '@/types'
 
@@ -50,6 +51,14 @@ const MateriaDetalle = () => {
         <HeaderBar roleLabel="Estudiante" />
         <div className="dash-wrapper">
           <main className="dash-content">
+            <ModuleBreadcrumbs
+              items={[
+                { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+                { label: 'Mis cursos', to: '/estudiante?view=cursos' },
+                { label: 'Detalle de materia' },
+              ]}
+              onNavigate={navigate}
+            />
             <div className="text-center py-5">
               <div className="spinner-border text-primary mb-3" role="status">
                 <span className="visually-hidden">Cargando...</span>
@@ -68,6 +77,14 @@ const MateriaDetalle = () => {
         <HeaderBar roleLabel="Estudiante" />
         <div className="dash-wrapper">
           <main className="dash-content">
+            <ModuleBreadcrumbs
+              items={[
+                { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+                { label: 'Mis cursos', to: '/estudiante?view=cursos' },
+                { label: 'Detalle de materia' },
+              ]}
+              onNavigate={navigate}
+            />
             <div className="content-title">Error</div>
             <div className="alert alert-danger">
               <i className="bi bi-exclamation-triangle me-2"></i>
@@ -90,6 +107,14 @@ const MateriaDetalle = () => {
       <HeaderBar roleLabel="Estudiante" />
       <div className="dash-wrapper">
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+              { label: 'Mis cursos', to: '/estudiante?view=cursos' },
+              { label: asignatura.nombre },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div className="content-title">
               <i className="bi bi-book me-2"></i>
@@ -125,6 +150,10 @@ const MateriaDetalle = () => {
                   <div className="col-md-4">
                     <small className="text-muted d-block">Grupo</small>
                     <strong>{asignatura.grupo || 'N/A'}</strong>
+                  </div>
+                  <div className="col-md-4">
+                    <small className="text-muted d-block">Sede</small>
+                    <strong>{asignatura.sede || 'N/A'}</strong>
                   </div>
                   <div className="col-md-4">
                     <small className="text-muted d-block">Créditos</small>
@@ -229,13 +258,13 @@ const MateriaDetalle = () => {
                           </td>
                           <td>
                             <div className="d-flex align-items-center gap-2">
-                              <div className="progress flex-grow-1" style={{ height: '8px', minWidth: '60px' }}>
+                              <div className="progress flex-grow-1 progress-min-60" style={{ height: '8px' }}>
                                 <div 
                                   className={`progress-bar bg-${ra.coverage >= 70 ? 'success' : ra.coverage >= 40 ? 'warning' : 'danger'}`}
                                   style={{ width: `${ra.coverage}%` }}
                                 ></div>
                               </div>
-                              <small className="text-muted" style={{ minWidth: '40px' }}>{ra.coverage}%</small>
+                              <small className="text-muted minw-40">{ra.coverage}%</small>
                             </div>
                           </td>
                         </tr>

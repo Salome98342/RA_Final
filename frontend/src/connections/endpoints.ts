@@ -49,6 +49,8 @@ export const endpoints = {
   },
   coordinador: {
     estudiantes: '/coordinador/estudiantes',  // GET: listar, POST: crear individual
+    estudianteDesactivar: (id: number | string) => `/coordinador/estudiantes/${id}/desactivar`,
+    estudianteActivar: (id: number | string) => `/coordinador/estudiantes/${id}/activar`,
     periodos: '/coordinador/periodos',
     estudiantesParaMatricula: '/coordinador/estudiantes-para-matricula',
     docentes: '/coordinador/docentes',  // GET: listar, POST: crear individual
@@ -57,6 +59,7 @@ export const endpoints = {
     asignaturaEstudiantes: '/coordinador/asignaturas/estudiantes',
     asignaturaRAs: '/coordinador/asignaturas/ras',
     asignaturaAvance: '/coordinador/asignaturas/avance',
+    dashboardDesempenio: '/coordinador/dashboard/desempenio/',
     importEstudiantes: '/coordinador/import/estudiantes',
     importMatriculados: '/coordinador/import/matriculados',
     importDocentes: '/coordinador/import/docentes',

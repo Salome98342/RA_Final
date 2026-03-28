@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react'
 import { 
   fetchEstudiantes, 
   createEstudiante, 
+  deactivateEstudiante,
+  activateEstudiante,
   fetchTiposDocumento,
   type EstudianteListItem,
   type TipoDocumento
 } from '@/services/coordinador'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import EstudiantePerfilModal from '@/components/EstudiantePerfilModal'
 import Alert from '@/utils/alert'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -29,12 +32,15 @@ const Estudiantes: React.FC = () => {
   })
   const [showPerfilModal, setShowPerfilModal] = useState(false)
   const [selectedEstudianteId, setSelectedEstudianteId] = useState<number | null>(null)
+  const [deactivatingId, setDeactivatingId] = useState<number | null>(null)
+  const [activatingId, setActivatingId] = useState<number | null>(null)
 
   const location = useLocation()
   const navigate = useNavigate()
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -119,6 +125,55 @@ const Estudiantes: React.FC = () => {
     setShowPerfilModal(true)
   }
 
+  const estudiantesActivos = estudiantes.filter(est => est.activo !== false)
+  const estudiantesDesactivados = estudiantes.filter(est => est.activo === false)
+
+  const handleDesactivarPerfil = async (estudiante: EstudianteListItem) => {
+    const confirmed = await Alert.confirm({
+      title: '¿Desactivar perfil de estudiante?',
+      text: `Se desactivará el acceso de ${estudiante.nombre} ${estudiante.apellido}. Esta acción bloquea su inicio de sesión.`,
+      confirmButtonText: 'Sí, desactivar',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    })
+    if (!confirmed) return
+
+    setDeactivatingId(estudiante.id_estudiante)
+    try {
+      const result = await deactivateEstudiante(estudiante.id_estudiante)
+      Alert.success(result.detail)
+      await loadEstudiantes()
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'No se pudo desactivar el perfil del estudiante'
+      Alert.error(msg)
+    } finally {
+      setDeactivatingId(null)
+    }
+  }
+
+  const handleActivarPerfil = async (estudiante: EstudianteListItem) => {
+    const confirmed = await Alert.confirm({
+      title: '¿Reactivar perfil de estudiante?',
+      text: `Se reactivará el acceso de ${estudiante.nombre} ${estudiante.apellido}.`,
+      confirmButtonText: 'Sí, reactivar',
+      cancelButtonText: 'Cancelar',
+      type: 'question',
+    })
+    if (!confirmed) return
+
+    setActivatingId(estudiante.id_estudiante)
+    try {
+      const result = await activateEstudiante(estudiante.id_estudiante)
+      Alert.success(result.detail)
+      await loadEstudiantes()
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'No se pudo reactivar el perfil del estudiante'
+      Alert.error(msg)
+    } finally {
+      setActivatingId(null)
+    }
+  }
+
   return (
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Coordinador" />
@@ -128,6 +183,7 @@ const Estudiantes: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -149,6 +205,19 @@ const Estudiantes: React.FC = () => {
               <i className="bi bi-upload me-1"></i>
               Carga masiva (CSV)
             </button>
+          </div>
+
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Estudiantes' },
+            ]}
+            onNavigate={(to) => navigate(to)}
+          />
+
+          <div className="alert alert-info d-flex align-items-center py-2" role="note">
+            <i className="bi bi-mouse2 me-2"></i>
+            Doble clic sobre una fila para abrir el perfil completo del estudiante.
           </div>
 
           {/* Botón para mostrar formulario */}
@@ -267,13 +336,16 @@ const Estudiantes: React.FC = () => {
                       <label className="form-label">
                         Jornada
                       </label>
-                      <input
-                        type="text"
-                        className="form-control"
+                      <select
+                        className="form-select"
                         value={formData.jornada}
                         onChange={(e) => setFormData({...formData, jornada: e.target.value})}
-                        placeholder="Diurna / Nocturna"
-                      />
+                        aria-label="Seleccionar jornada"
+                      >
+                        <option value="">Seleccione...</option>
+                        <option value="Diurna">Diurna</option>
+                        <option value="Nocturna">Nocturna</option>
+                      </select>
                     </div>
                   </div>
 
@@ -310,14 +382,14 @@ const Estudiantes: React.FC = () => {
             </div>
           )}
 
-          {/* Buscador y lista de estudiantes */}
-          <div className="card">
+          {/* Buscador */}
+          <div className="card mb-4">
             <div className="card-header">
               <div className="row align-items-center">
                 <div className="col-md-6">
                   <h5 className="mb-0">
-                    <i className="bi bi-list-ul me-2"></i>
-                    Lista de Estudiantes ({estudiantes.length})
+                    <i className="bi bi-search me-2"></i>
+                    Buscar estudiantes
                   </h5>
                 </div>
                 <div className="col-md-6">
@@ -336,6 +408,16 @@ const Estudiantes: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Lista de estudiantes activos */}
+          <div className="card mb-4">
+            <div className="card-header">
+              <h5 className="mb-0">
+                <i className="bi bi-list-ul me-2"></i>
+                Lista de Estudiantes ({estudiantesActivos.length})
+              </h5>
+            </div>
             <div className="card-body p-0">
               {loading && (
                 <div className="text-center py-5">
@@ -345,14 +427,14 @@ const Estudiantes: React.FC = () => {
                 </div>
               )}
 
-              {!loading && estudiantes.length === 0 && (
+              {!loading && estudiantesActivos.length === 0 && (
                 <div className="text-center text-muted py-5">
                   <i className="bi bi-inbox display-4 d-block mb-3"></i>
-                  {searchTerm ? 'No se encontraron estudiantes con ese criterio' : 'No hay estudiantes registrados'}
+                  {searchTerm ? 'No se encontraron estudiantes activos con ese criterio' : 'No hay estudiantes activos'}
                 </div>
               )}
 
-              {!loading && estudiantes.length > 0 && (
+              {!loading && estudiantesActivos.length > 0 && (
                 <div className="table-responsive">
                   <table className="table table-hover mb-0">
                     <thead className="table-light">
@@ -362,10 +444,12 @@ const Estudiantes: React.FC = () => {
                         <th>Correo</th>
                         <th>Documento</th>
                         <th>Jornada</th>
+                        <th>Estado</th>
+                        <th className="text-end">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {estudiantes.map(est => (
+                      {estudiantesActivos.map(est => (
                         <tr 
                           key={est.id_estudiante}
                           onDoubleClick={() => handleEstudianteDoubleClick(est.id_estudiante)}
@@ -394,6 +478,142 @@ const Estudiantes: React.FC = () => {
                             ) : (
                               <span className="text-muted">-</span>
                             )}
+                          </td>
+                          <td>
+                            {est.activo === false ? (
+                              <span className="badge bg-secondary">Desactivado</span>
+                            ) : (
+                              <span className="badge bg-success">Activo</span>
+                            )}
+                          </td>
+                          <td className="text-end">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              disabled={est.activo === false || deactivatingId === est.id_estudiante}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDesactivarPerfil(est)
+                              }}
+                              title={est.activo === false ? 'Perfil ya desactivado' : 'Desactivar perfil'}
+                            >
+                              {deactivatingId === est.id_estudiante ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                                  Desactivando...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-person-x me-1"></i>
+                                  Desactivar
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Lista de estudiantes desactivados */}
+          <div className="card">
+            <div className="card-header">
+              <h5 className="mb-0">
+                <i className="bi bi-person-x me-2"></i>
+                Lista de Estudiantes desactivados ({estudiantesDesactivados.length})
+              </h5>
+            </div>
+            <div className="card-body p-0">
+              {loading && (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-secondary" role="status">
+                    <span className="visually-hidden">Cargando...</span>
+                  </div>
+                </div>
+              )}
+
+              {!loading && estudiantesDesactivados.length === 0 && (
+                <div className="text-center text-muted py-5">
+                  <i className="bi bi-check2-circle display-4 d-block mb-3"></i>
+                  {searchTerm ? 'No se encontraron estudiantes desactivados con ese criterio' : 'No hay estudiantes desactivados'}
+                </div>
+              )}
+
+              {!loading && estudiantesDesactivados.length > 0 && (
+                <div className="table-responsive">
+                  <table className="table table-hover mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Código</th>
+                        <th>Nombre Completo</th>
+                        <th>Correo</th>
+                        <th>Documento</th>
+                        <th>Jornada</th>
+                        <th>Estado</th>
+                        <th className="text-end">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {estudiantesDesactivados.map(est => (
+                        <tr 
+                          key={est.id_estudiante}
+                          onDoubleClick={() => handleEstudianteDoubleClick(est.id_estudiante)}
+                          style={{ cursor: 'pointer' }}
+                          title="Doble clic para ver perfil completo"
+                        >
+                          <td>
+                            <span className="badge bg-secondary">{est.codigo_estudiante}</span>
+                          </td>
+                          <td>
+                            <i className="bi bi-person me-2 text-muted"></i>
+                            {est.nombre} {est.apellido}
+                          </td>
+                          <td>
+                            <i className="bi bi-envelope me-2 text-muted"></i>
+                            {est.correo}
+                          </td>
+                          <td>
+                            <span className="text-muted small">
+                              {est.tipo_documento}: {est.num_documento}
+                            </span>
+                          </td>
+                          <td>
+                            {est.jornada ? (
+                              <span className="badge bg-info">{est.jornada}</span>
+                            ) : (
+                              <span className="text-muted">-</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className="badge bg-secondary">Desactivado</span>
+                          </td>
+                          <td className="text-end">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              disabled={activatingId === est.id_estudiante}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleActivarPerfil(est)
+                              }}
+                              title="Reactivar perfil"
+                            >
+                              {activatingId === est.id_estudiante ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                                  Reactivando...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-person-check me-1"></i>
+                                  Reactivar
+                                </>
+                              )}
+                            </button>
                           </td>
                         </tr>
                       ))}

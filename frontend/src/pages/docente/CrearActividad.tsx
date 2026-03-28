@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { createActivityForRA, getTiposActividad, getIndicatorsByRA, getRAValidation, getRAsByCourse, uploadRecurso } from '@/services/api'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
@@ -199,8 +200,33 @@ const DocenteCrearActividad: React.FC = () => {
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
-        <Sidebar active="crear" onClick={(k)=>{ if(k==='inicio') navigate('/docente/inicio'); if(k==='cursos') navigate('/docente/cursos') }} items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'}]} />
+        <Sidebar
+          active="crear"
+          onClick={(k)=>{
+            if(k==='inicio') navigate('/docente/inicio')
+            if(k==='cursos') navigate('/docente/cursos')
+            if(k==='crear' && curso) navigate(`/docente/${curso}/actividades/nueva`)
+            if(k==='calificar' && curso) navigate(`/docente/${curso}/calificar`)
+            if(k==='recursos' && curso) navigate(`/docente/${curso}/recursos`)
+          }}
+          items={[
+            {key:'inicio',icon:'bi-house-door',title:'Inicio'},
+            {key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},
+            {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
+            {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
+            {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
+          ]}
+        />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Inicio Docente', to: '/docente/inicio' },
+              { label: 'Cursos', to: '/docente/cursos' },
+              { label: 'RA/Actividades', to: `/docente/${curso}/ras` },
+              { label: `RA ${raId ?? ''}` },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="d-flex align-items-center justify-content-between mb-4">
             <div className="content-title">
               <i className="bi bi-plus-circle-fill text-success me-2"></i>

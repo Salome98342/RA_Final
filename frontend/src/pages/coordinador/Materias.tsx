@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { fetchAsignaturas, fetchAsignaturaAvance, type AsignaturaRow, type AvanceAsignaturaResponse } from '@/services/coordinador'
-import { getPeriodosByCourse, getIndicatorsByRA, getActivitiesByRA } from '@/services/api'
+import { fetchAsignaturas, fetchAsignaturaAvance, fetchPeriodosCoordinador, type AsignaturaRow, type AvanceAsignaturaResponse } from '@/services/coordinador'
+import { getIndicatorsByRA, getActivitiesByRA } from '@/services/api'
 import type { Indicator, Activity } from '@/types'
+import { isPeriodoAtLeast2024I, sortPeriodoDescriptionsDesc } from '@/utils/periodos'
 
 // Simple helper to compute traffic-light by percentage (0-100)
 function toneByPct(pct: number): 'success' | 'warning' | 'danger' {
@@ -36,6 +38,7 @@ const Materias: React.FC = () => {
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -44,57 +47,56 @@ const Materias: React.FC = () => {
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
-  // Load list of subjects for current semester
+  // Load list of subjects for selected period.
   const loadMaterias = async (p: string) => {
     setLoadingList(true)
     try {
       const data = await fetchAsignaturas({ page: 1, page_size: 100, periodo: p || undefined })
       setMaterias(data.results)
-      // auto-select first when none selected
-      setSelected((sel) => sel ?? (data.results.length ? data.results[0] : null))
+      // Keep current selection only if it still exists after filtering.
+      setSelected((sel) => {
+        if (!data.results.length) return null
+        if (!sel) return data.results[0]
+        const exists = data.results.some((r) => r.id_asignatura === sel.id_asignatura)
+        return exists ? sel : data.results[0]
+      })
     } catch (e: any) {
       Alert.error(String(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de materias'))
     } finally { setLoadingList(false) }
   }
 
-  // Find available semesters by sampling courses (best effort when no global endpoint)
+  // Load periods from coordinator catalog and default to latest period >= 2024-I.
   useEffect(() => {
     let mounted = true
     const run = async () => {
       try {
-        // Load some materias first (without filtro) to discover periods
-        const data = await fetchAsignaturas({ page: 1, page_size: 50 })
+        const data = await fetchPeriodosCoordinador()
         if (!mounted) return
-        setMaterias((m) => m.length ? m : data.results)
-        const codes = data.results.map((r) => r.codigo).slice(0, 25)
-        const set = new Set<string>()
-        for (const code of codes) {
-          try {
-            const ps = await getPeriodosByCourse(code)
-            ps.forEach((p) => set.add(p.descripcion))
-          } catch { /* ignore individual errors */ }
-        }
-        const list = Array.from(set)
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b))
-        if (!mounted) return
+        const list = sortPeriodoDescriptionsDesc(
+          (Array.isArray(data) ? data : [])
+            .map((p) => String(p.descripcion || '').trim())
+            .filter((d) => d && isPeriodoAtLeast2024I(d))
+        )
         setPeriodos(list)
+        setPeriodo((prev) => prev || list[0] || '')
       } catch {
         if (!mounted) return
         setPeriodos([])
+        setPeriodo('')
       }
     }
     run()
     return () => { mounted = false }
   }, [])
 
-  // When semester changes, refresh list and clear avance until subject selected
+  // When period changes, refresh subject list and avance.
   useEffect(() => {
+    if (!periodo) return
     loadMaterias(periodo)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo])
 
-  // Load RA progress for selected subject & semester
+  // Load RA progress for selected subject & period.
   useEffect(() => {
     const run = async () => {
       if (!selected) { setAvance(null); return }
@@ -110,7 +112,9 @@ const Materias: React.FC = () => {
   }, [selected, periodo])
 
   const rightTitle = useMemo(() => (
-    selected ? `${selected.nombre} (${selected.codigo})` : 'Selecciona una materia'
+    selected
+      ? `${selected.codigo} - ${selected.nombre} - Grupo ${selected.grupo || 'N/A'} - Sede ${selected.sede || 'N/A'}`
+      : 'Selecciona una materia'
   ), [selected])
 
   // Fetch indicators + activities for selected RA
@@ -160,7 +164,14 @@ const Materias: React.FC = () => {
       clickTimer.current = null
     }
     // Navegar a la página de análisis
-    navigate(`/coordinador/materias/${m.codigo}/analitica`, { state: { returnTo: '/coordinador/materias' } })
+    navigate(`/coordinador/materias/${m.codigo}/analitica`, {
+      state: {
+        returnTo: '/coordinador/materias',
+        id_asignatura: m.id_asignatura,
+        grupo: m.grupo,
+        sede: m.sede,
+      }
+    })
   }
 
   return (
@@ -172,6 +183,7 @@ const Materias: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -181,18 +193,29 @@ const Materias: React.FC = () => {
           }}
         />
         <main className="dash-content">
-          <div className="content-title">Vista de Materias por semestre</div>
+          <div className="content-title">Vista de Materias por Periodo</div>
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Materias' },
+            ]}
+            onNavigate={(to) => navigate(to)}
+          />
           <section className="panel shown">
+            <div className="alert alert-info d-flex align-items-center py-2" role="note">
+              <i className="bi bi-mouse2 me-2"></i>
+              Clic para seleccionar una materia. Doble clic sobre una materia para abrir su Analisis General.
+            </div>
             {/* Controls */}
             <div className="row g-2 mb-3 align-items-end">
               <div className="col-md-4">
-                <label htmlFor="periodoSelect" className="form-label">Semestre</label>
+                <label htmlFor="periodoSelect" className="form-label">Periodo</label>
                 <select id="periodoSelect" className="form-select" value={periodo} onChange={(e)=>setPeriodo(e.target.value)}>
-                  <option value="">Todos</option>
+                  {!periodos.length && <option value="">Sin periodos desde 2024-I</option>}
                   {periodos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <div className="col-md-8 d-none d-md-block"><div className="text-muted small">Selecciona un semestre para listar sus materias y ver sus RA a la derecha.</div></div>
+              <div className="col-md-8 d-none d-md-block"><div className="text-muted small">Selecciona un periodo para listar sus materias y ver sus RA a la derecha.</div></div>
             </div>
 
             {/* Two-panel layout */}
@@ -200,33 +223,33 @@ const Materias: React.FC = () => {
               <div className="col-md-4">
                 <div className="ra-card h-100 shadow-sm">
                   <div className="ra-card-body">
-                    <div className="d-flex align-items-center gap-2 mb-3">
+                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
                       <i className="bi bi-journals text-primary"></i>
-                      <span className="fw-bold">Materias {periodo ? `(${periodo})` : ''}</span>
+                      <span className="fw-bold materias-panel-title">Materias {periodo ? `(${periodo})` : ''}</span>
                       {materias.length > 0 && (
                         <span className="badge bg-primary rounded-pill ms-auto">{materias.length}</span>
                       )}
                     </div>
                     <div className="list-group materias-scroll">
                       {loadingList && <div className="text-muted">Cargando…</div>}
-                      {!loadingList && materias.length === 0 && <div className="text-muted">No hay materias.</div>}
+                      {!loadingList && materias.length === 0 && <div className="text-muted">No hay materias registradas en el periodo seleccionado.</div>}
                       {!loadingList && materias.map(m => (
                         <button
-                          key={m.codigo}
-                          className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${selected?.codigo===m.codigo?'active':''}`}
+                          key={m.id_asignatura}
+                          className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center materias-item ${selected?.codigo===m.codigo?'active':''}`}
                           onClick={()=>handleMateriaClick(m)}
                           onDoubleClick={()=>handleMateriaDoubleClick(m)}
                           title="Clic para seleccionar, doble clic para análisis detallado"
                           aria-current={selected?.codigo===m.codigo ? 'true' : undefined}
                         >
-                          <div>
-                            <div className="fw-semibold">
-                              {m.codigo} · {m.nombre}
+                          <div className="materias-item-main">
+                            <div className="fw-semibold materias-item-title">
+                              {m.codigo} - {m.nombre} - Grupo {m.grupo || 'N/A'} - Sede {m.sede || 'N/A'}
                               <i className="bi bi-bar-chart-line ms-2 text-primary opacity-50" style={{ fontSize: '0.85rem' }}></i>
                             </div>
-                            <div className="ra-small text-muted">{m.docente || 'Sin docente'}</div>
+                            <div className="ra-small text-muted materias-item-subtitle">{m.docente || 'Sin docente'}</div>
                           </div>
-                          <span className="badge bg-light text-dark">{m.total_ras} RAs</span>
+                          <span className="badge bg-light text-dark materias-item-badge">{m.total_ras} RAs</span>
                         </button>
                       ))}
                     </div>
@@ -236,10 +259,10 @@ const Materias: React.FC = () => {
               <div className="col-md-8">
                 <div className="ra-card h-100 shadow-sm">
                   <div className="ra-card-body">
-                    <div className="d-flex align-items-center justify-content-between mb-3">
-                      <div className="d-flex align-items-center gap-2">
+                    <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                      <div className="d-flex align-items-center gap-2 materias-right-title-wrap">
                         <i className="bi bi-bar-chart-line text-success"></i>
-                        <span className="fw-bold">{rightTitle}</span>
+                        <span className="fw-bold materias-right-title">{rightTitle}</span>
                       </div>
                       {/* Botón para ver vista del docente con ruta de retorno */}
                       {selected && (
@@ -284,14 +307,14 @@ const Materias: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={()=> setSelectedRAId(String(r.id_ra))}
-                                  className={`border rounded p-2 h-100 w-100 text-start bg-white ra-hover-card ${isActive?'border-primary shadow-sm':''}`}
+                                  className={`border rounded p-2 h-100 w-100 text-start bg-white ra-hover-card materias-ra-card ${isActive?'border-primary shadow-sm':''}`}
                                   aria-label={`Seleccionar RA ${r.id_ra}`}
                                 >
                                   <div className="d-flex align-items-center justify-content-between mb-1">
                                     <div className="fw-semibold">RA {r.id_ra}</div>
                                     <span className={`badge bg-${tone}`}>{pct}%</span>
                                   </div>
-                                  <div className="ra-small text-muted mb-2 text-truncate" title={r.descripcion || ''}>{r.descripcion || 'Sin descripción'}</div>
+                                  <div className="ra-small text-muted mb-2 materias-ra-desc" title={r.descripcion || ''}>{r.descripcion || 'Sin descripción'}</div>
                                   <div className="d-flex align-items-center gap-2">
                                     <div className="progress progress-compact flex-grow-1" aria-hidden="true">
                                       <div className={`progress-bar bg-${tone} ${widthClass}`} />
@@ -353,10 +376,10 @@ const Materias: React.FC = () => {
                                     {raIndicators && raIndicators.map((ind, idx) => (
                                       <div 
                                         key={ind.id} 
-                                        className={`d-flex justify-content-between align-items-start ra-small py-2 ${idx < raIndicators.length - 1 ? 'border-bottom' : ''}`}
+                                        className={`d-flex justify-content-between align-items-start ra-small py-2 materias-detail-row ${idx < raIndicators.length - 1 ? 'border-bottom' : ''}`}
                                       >
-                                        <div className="flex-grow-1 pe-2">
-                                          <div className="text-truncate mb-1" title={ind.descripcion}>
+                                        <div className="flex-grow-1 pe-2 materias-detail-main">
+                                          <div className="mb-1 materias-detail-line" title={ind.descripcion}>
                                             <i className="bi bi-dot"></i>
                                             {ind.descripcion || '—'}
                                           </div>
@@ -392,10 +415,10 @@ const Materias: React.FC = () => {
                                     {raActivities && raActivities.map((act, idx) => (
                                       <div 
                                         key={act.id} 
-                                        className={`d-flex justify-content-between align-items-start ra-small py-2 ${idx < raActivities.length - 1 ? 'border-bottom' : ''}`}
+                                        className={`d-flex justify-content-between align-items-start ra-small py-2 materias-detail-row ${idx < raActivities.length - 1 ? 'border-bottom' : ''}`}
                                       >
-                                        <div className="flex-grow-1 pe-2">
-                                          <div className="text-truncate mb-1" title={act.nombre}>
+                                        <div className="flex-grow-1 pe-2 materias-detail-main">
+                                          <div className="mb-1 materias-detail-line" title={act.nombre}>
                                             <i className="bi bi-check-circle me-1"></i>
                                             {act.nombre || '—'}
                                           </div>
@@ -431,7 +454,7 @@ const Materias: React.FC = () => {
                     {selected && !loadingAvance && !avance && (
                       <div className="alert alert-info d-flex align-items-center">
                         <i className="bi bi-info-circle me-2"></i>
-                        Sin datos de avance para este semestre.
+                        Sin datos de avance para este periodo.
                       </div>
                     )}
                   </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchEstudiantePerfil, type EstudiantePerfilCompleto } from '@/services/coordinador'
+import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
 
 interface EstudiantePerfilModalProps {
   id_estudiante: number
@@ -19,9 +20,16 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
       setError(null)
       try {
         const result = await fetchEstudiantePerfil(id_estudiante)
-        setData(result)
-        // Mostrar todas las asignaturas por defecto para evitar ocultar periodos.
-        setPeriodoSeleccionado(ALL_PERIODS_VALUE)
+        const filteredPeriodos = sortPeriodosDesc(
+          (result.periodos || []).filter((p) => isPeriodoAtLeast2024I(p.descripcion))
+        )
+        const normalizedResult = {
+          ...result,
+          periodos: filteredPeriodos,
+        }
+        setData(normalizedResult)
+        // Seleccionar automáticamente el período más reciente disponible.
+        setPeriodoSeleccionado(filteredPeriodos.length ? String(filteredPeriodos[0].id_periodo) : ALL_PERIODS_VALUE)
       } catch (err: any) {
         setError(err?.response?.data?.detail || 'Error al cargar el perfil del estudiante')
       } finally {

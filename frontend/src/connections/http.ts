@@ -201,10 +201,14 @@ api.interceptors.response.use(
     // ========== MANEJO DE 403 (PROHIBIDO) ==========
     if (status === 403) {
       console.error('⛔ 403 Forbidden - Insufficient permissions')
+      const detail = (error.response?.data as { detail?: string } | undefined)?.detail
       return Promise.reject({
-        message: 'No tienes permisos para realizar esta acción.',
+        message: detail || 'No tienes permisos para realizar esta acción.',
         type: 'FORBIDDEN',
-        status: 403
+        status: 403,
+        data: error.response?.data,
+        response: error.response,
+        originalError: error,
       })
     }
 

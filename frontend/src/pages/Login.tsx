@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { login } from '@/services/auth'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
+import HeaderBar from '@/components/HeaderBar'
 
 export default function Login() {
   const [usuario, setUsuario] = useState("");
@@ -38,8 +39,10 @@ export default function Login() {
       setCode(profile.code ?? usuario)
       navigate(profile.rol === 'docente' ? '/docente/inicio' : (profile.rol === 'coordinador' ? '/coordinador' : '/estudiante/inicio'))
     } catch (err: unknown) {
-      const data = (err as { response?: { data?: unknown } })?.response?.data
-      const statusCode = (err as { response?: { status?: number } })?.response?.status
+      const data = (err as { response?: { data?: unknown }; data?: unknown })?.response?.data
+        ?? (err as { data?: unknown })?.data
+      const statusCode = (err as { response?: { status?: number }; status?: number })?.response?.status
+        ?? (err as { status?: number })?.status
       
       let msg = 'Error al iniciar sesión'
       
@@ -71,6 +74,15 @@ export default function Login() {
       } else if (statusCode === 400) {
         msg = 'Complete todos los campos requeridos.'
         Alert.warning(msg)
+      } else if (statusCode === 403) {
+        if (data && typeof data === 'object') {
+          const detail = (data as Record<string, unknown>).detail
+          msg = detail ? String(detail) : 'Cuenta desactivada. Contacta al coordinador del programa.'
+        } else {
+          const fallbackMessage = (err as { message?: string })?.message
+          msg = fallbackMessage || 'Cuenta desactivada. Contacta al coordinador del programa.'
+        }
+        Alert.warning(msg)
       } else if (statusCode === 500) {
         msg = 'Error en el servidor. Intente nuevamente más tarde.'
         Alert.error(msg)
@@ -88,11 +100,7 @@ export default function Login() {
 
   return (
     <div className="login-page">
-    <header>
-  {/* Imágenes en public/ -> usa rutas absolutas */}
-  <img src="/LogoBlanco.png" alt="UniBlanco" />
-        <h1>Universidad del Valle</h1>
-      </header>
+      <HeaderBar showWhenLoggedOut />
 
       <main className="login-container">
         <section className="login-box">

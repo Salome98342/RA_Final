@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { useLocation, useNavigate } from 'react-router-dom'
 import DocentePerfilModal from '@/components/DocentePerfilModal'
 import Alert from '@/utils/alert'
@@ -43,6 +44,7 @@ const Docentes: React.FC = () => {
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -124,6 +126,7 @@ const Docentes: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -134,6 +137,13 @@ const Docentes: React.FC = () => {
         />
 
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Docentes' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="content-title d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
               <i className="bi bi-person-badge me-2"></i>

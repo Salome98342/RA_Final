@@ -2,6 +2,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from django.urls import reverse
 from datetime import date, timedelta
+from django.conf import settings
+from django.contrib.auth.hashers import check_password
 
 from .models.models import (
     TipoDocumento, Docente, Programa, Asignatura,
@@ -261,6 +263,7 @@ class CoordinadorEndpointsTests(TestCase):
 
 	def test_import_estudiantes_csv_basic(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import Estudiante
 		content = (
 			b"codigo_estudiante,nombre,apellido,correo,tipo_documento,num_documento,jornada\n"
 			b"E2001,Ana,Perez,ana.perez@example.com,CC,2001,Diurna"
@@ -272,5 +275,7 @@ class CoordinadorEndpointsTests(TestCase):
 		self.assertEqual(data.get("created"), 1)
 		self.assertEqual(data.get("existing"), 0)
 		self.assertEqual(len(data.get("errors", [])), 0)
+		est = Estudiante.objects.get(codigo_estudiante="E2001")
+		self.assertTrue(check_password(settings.DEFAULT_BULK_STUDENT_PASSWORD, est.contrasena_estudiante))
 		self.assertTrue(ImportAudit.objects.filter(kind="estudiantes", filename="estudiantes.csv", created_count=1).exists())
 

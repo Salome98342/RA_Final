@@ -64,10 +64,26 @@ export async function updateProfile(patch: Partial<{ correo: string; telefono?: 
   return getFullProfile()
 }
 
-export async function getProfile(): Promise<{ id: string; rol: 'docente' | 'estudiante' | 'coordinador'; nombre?: string; code?: string | null }> {
+export async function getProfile(): Promise<{
+  id: string
+  rol: 'docente' | 'estudiante' | 'coordinador'
+  nombre?: string
+  code?: string | null
+  programaDetectado?: {
+    id_programa: number
+    codigo_programa: string
+    nombre: string
+  } | null
+}> {
   const { data } = await api.get(endpoints.auth.me)
   const u = data?.user || {}
-  return { id: String(u.id ?? ''), rol: u.rol, nombre: u.nombre, code: u.code ?? null }
+  return {
+    id: String(u.id ?? ''),
+    rol: u.rol,
+    nombre: u.nombre,
+    code: u.code ?? null,
+    programaDetectado: u.programa_detectado ?? null,
+  }
 }
 
 export async function changePassword(current_password: string, new_password: string): Promise<void> {

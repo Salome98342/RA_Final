@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { SkeletonCard } from '@/components/Skeleton'
 import { useNavigate } from 'react-router-dom'
 import { getCourses } from '@/services/api'
@@ -77,23 +78,54 @@ const DocenteCursos: React.FC = () => {
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar
-          active={view}
+          active={view === 'cursos' ? 'cursos' : 'recursos'}
           onClick={(k)=>{
-            if (k === 'inicio') navigate('/docente/inicio')
-            else if (k === 'cursos') setView('cursos')
-            else if (k === 'recursos') {
-              // Si el filtro deja 1 curso, abrimos directamente sus recursos
-              const list = filtered
-              if (list.length === 1) {
-                navigate(`/docente/${list[0].id}/recursos`)
-              } else {
-                setView('recursos')
-              }
+            if (k === 'inicio') { navigate('/docente/inicio'); return }
+            if (k === 'cursos') { setView('cursos'); return }
+
+            const list = filtered
+            const singleCourse = list.length === 1 ? list[0].id : null
+
+            if (k === 'crear') {
+              if (singleCourse) navigate(`/docente/${singleCourse}/actividades/nueva`)
+              else setErr('Selecciona un solo curso para crear actividades.')
+              return
+            }
+
+            if (k === 'calificar') {
+              if (singleCourse) navigate(`/docente/${singleCourse}/calificar`)
+              else setErr('Selecciona un solo curso para calificar.')
+              return
+            }
+
+            if (k === 'recursos') {
+              if (singleCourse) navigate(`/docente/${singleCourse}/recursos`)
+              else setView('recursos')
             }
           }}
-          items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
+          items={[
+            {key:'inicio',icon:'bi-house-door',title:'Inicio'},
+            {key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},
+            {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
+            {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
+            {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
+          ]}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={view === 'recursos'
+              ? [
+                  { label: 'Inicio Docente', to: '/docente/inicio' },
+                  { label: 'Cursos', to: '/docente/cursos' },
+                  { label: 'Recursos' },
+                ]
+              : [
+                  { label: 'Inicio Docente', to: '/docente/inicio' },
+                  { label: 'Cursos' },
+                ]
+            }
+            onNavigate={navigate}
+          />
           {view === 'cursos' && (
             <>
               <div className="d-flex align-items-center justify-content-between mb-3">

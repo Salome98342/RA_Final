@@ -191,7 +191,7 @@ const Profile: React.FC = () => {
                 <div className="row g-3">
                   <div className="col-12">
                     <div className="ra-card"><div className="ra-card-body">
-                      <div className="fw-bold mb-2">{data.rol === 'docente' ? 'Cursos actuales' : 'Semestre actual'}</div>
+                      <div className="fw-bold mb-2">{data.rol === 'docente' ? 'Cursos actuales' : 'Periodo actual'}</div>
                       {!data.cursos || data.cursos.length === 0 ? (
                         <div className="text-muted">Sin cursos activos</div>
                       ) : (
