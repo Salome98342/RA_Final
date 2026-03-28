@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { Alert } from '@/utils/alert'
 import { useSession } from '@/state/SessionContext'
 import type { Student, Activity, RA } from '@/types'
@@ -610,12 +611,16 @@ const DocenteCalificar: React.FC = () => {
   const sidebarItems = useMemo(() => ([
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
+    { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
     { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
+    { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
   ]), [])
 
   const onSidebarClick = async (key: string) => {
     if (key === 'inicio') { navigate('/docente/inicio'); return }
     if (key === 'cursos') { navigate('/docente/cursos'); return }
+    if (key === 'crear') { if (curso) navigate(`/docente/${curso}/actividades/nueva`); return }
+    if (key === 'recursos') { if (curso) navigate(`/docente/${curso}/recursos`); return }
     if (key === 'calificar') {
       // Foco a lista estudiantes
       const el = document.getElementById('student-list-panel') as HTMLDivElement | null
@@ -637,6 +642,14 @@ const DocenteCalificar: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar active={activeKey} onClick={onSidebarClick} items={sidebarItems} />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Inicio Docente', to: '/docente/inicio' },
+              { label: 'Cursos', to: '/docente/cursos' },
+              { label: raId ? `Calificar RA ${raId}` : 'Calificar' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div className="content-title">
               <i className="bi bi-check2-square text-success me-2"></i>

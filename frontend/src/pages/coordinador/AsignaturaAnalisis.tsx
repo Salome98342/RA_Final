@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { getCourseAnalytics } from '@/services/api'
 import type { CourseAnalyticsResponse } from '@/types'
 
@@ -14,6 +15,9 @@ const AsignaturaAnalisis = () => {
   const [error, setError] = useState<string | null>(null)
 
   const returnTo = (location.state as any)?.returnTo || '/coordinador/materias'
+  const idAsignatura = (location.state as any)?.id_asignatura as number | undefined
+  const grupo = (location.state as any)?.grupo as string | undefined
+  const sede = (location.state as any)?.sede as string | undefined
 
   useEffect(() => {
     if (!codigo) return
@@ -21,7 +25,11 @@ const AsignaturaAnalisis = () => {
       setLoading(true)
       setError(null)
       try {
-        const result = await getCourseAnalytics(codigo)
+        const result = await getCourseAnalytics(codigo, {
+          id_asignatura: idAsignatura,
+          grupo,
+          sede,
+        })
         if (result) {
           setData(result)
         } else {
@@ -34,11 +42,12 @@ const AsignaturaAnalisis = () => {
       }
     }
     loadData()
-  }, [codigo])
+  }, [codigo, idAsignatura, grupo, sede])
 
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -57,6 +66,7 @@ const AsignaturaAnalisis = () => {
             items={items}
             onClick={(key) => {
               if (key === 'inicio') navigate('/coordinador')
+              else if (key === 'desempenio') navigate('/coordinador/desempenio')
               else if (key === 'materias') navigate('/coordinador/materias')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -88,6 +98,7 @@ const AsignaturaAnalisis = () => {
             items={items}
             onClick={(key) => {
               if (key === 'inicio') navigate('/coordinador')
+              else if (key === 'desempenio') navigate('/coordinador/desempenio')
               else if (key === 'materias') navigate('/coordinador/materias')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -123,6 +134,7 @@ const AsignaturaAnalisis = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -132,6 +144,14 @@ const AsignaturaAnalisis = () => {
           }}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Materias', to: '/coordinador/materias' },
+              { label: 'Analisis General' },
+            ]}
+            onNavigate={(to) => navigate(to)}
+          />
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div className="content-title">
               <i className="bi bi-bar-chart-line-fill me-2"></i>
@@ -167,6 +187,10 @@ const AsignaturaAnalisis = () => {
                   <div className="col-md-4">
                     <small className="text-muted d-block">Grupo</small>
                     <strong>{asignatura.grupo || 'N/A'}</strong>
+                  </div>
+                  <div className="col-md-4">
+                    <small className="text-muted d-block">Sede</small>
+                    <strong>{asignatura.sede || 'N/A'}</strong>
                   </div>
                   <div className="col-md-4">
                     <small className="text-muted d-block">Créditos</small>
@@ -287,13 +311,13 @@ const AsignaturaAnalisis = () => {
                           </td>
                           <td>
                             <div className="d-flex align-items-center gap-2">
-                              <div className="progress flex-grow-1" style={{ height: '8px', minWidth: '60px' }}>
+                              <div className="progress flex-grow-1 progress-min-60" style={{ height: '8px' }}>
                                 <div 
                                   className={`progress-bar bg-${ra.coverage_promedio >= 70 ? 'success' : ra.coverage_promedio >= 40 ? 'warning' : 'danger'}`}
                                   style={{ width: `${ra.coverage_promedio}%` }}
                                 ></div>
                               </div>
-                              <small className="text-muted" style={{ minWidth: '40px' }}>{ra.coverage_promedio}%</small>
+                              <small className="text-muted minw-40">{ra.coverage_promedio}%</small>
                             </div>
                           </td>
                         </tr>
@@ -336,13 +360,13 @@ const AsignaturaAnalisis = () => {
                             </td>
                             <td>
                               <div className="d-flex align-items-center gap-1">
-                                <div className="progress flex-grow-1" style={{ height: '6px', minWidth: '50px' }}>
+                                <div className="progress flex-grow-1 progress-min-50" style={{ height: '6px' }}>
                                   <div 
                                     className={`progress-bar bg-${est.coverage >= 70 ? 'success' : est.coverage >= 40 ? 'warning' : 'danger'}`}
                                     style={{ width: `${est.coverage}%` }}
                                   ></div>
                                 </div>
-                                <small style={{ minWidth: '35px' }}>{est.coverage}%</small>
+                                <small className="minw-35">{est.coverage}%</small>
                               </div>
                             </td>
                             <td>

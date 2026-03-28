@@ -14,7 +14,9 @@ export interface AsignaturaRow {
   id_asignatura: number
   codigo: string
   nombre: string
+  periodo?: string | null
   grupo: string
+  sede: string
   creditos?: number
   programa: string | null
   programa_codigo: string | null
@@ -74,6 +76,7 @@ export type EstudianteListItem = {
   tipo_documento: string | null
   num_documento: string
   jornada: string | null
+  activo?: boolean
   programa_codigo?: string | null
   programa?: string | null
 }
@@ -113,7 +116,10 @@ export type CreateAsignaturaWithRAPayload = {
   nombre_asignatura: string
   codigo_docente: string
   codigo_programa: string
+  periodo: string
+  creditos: number
   grupo?: string
+  sede?: string
   ras: CreateAsignaturaWithRAItem[]
 }
 
@@ -122,7 +128,10 @@ export type CreateAsignaturaWithRAResponse = {
   asignatura: {
     codigo: string
     nombre: string
+    periodo: string | null
     grupo: string | null
+    sede: string | null
+    creditos: number
     programa_codigo: string | null
     docente_codigo: string | null
   }
@@ -304,6 +313,30 @@ export async function createEstudiante(payload: CreateEstudiantePayload) {
   return data as { detail: string; estudiante: EstudianteListItem }
 }
 
+export async function deactivateEstudiante(idEstudiante: number) {
+  const { data } = await api.patch(endpoints.coordinador.estudianteDesactivar(idEstudiante))
+  return data as {
+    detail: string
+    estudiante: {
+      id_estudiante: number
+      codigo_estudiante: string
+      activo: boolean
+    }
+  }
+}
+
+export async function activateEstudiante(idEstudiante: number) {
+  const { data } = await api.patch(endpoints.coordinador.estudianteActivar(idEstudiante))
+  return data as {
+    detail: string
+    estudiante: {
+      id_estudiante: number
+      codigo_estudiante: string
+      activo: boolean
+    }
+  }
+}
+
 export async function createDocente(payload: CreateDocentePayload) {
   const { data } = await api.post(endpoints.coordinador.docentes, payload)
   return data as { detail: string; docente: DocenteListItem }
@@ -362,6 +395,65 @@ export interface EstudiantePerfilCompleto {
       }>
     }>
   }>
+}
+
+// ========== DASHBOARD DE DESEMPEÑO (HU-10, HU-11) ==========
+export interface HU10Estudiante {
+  id_estudiante: number
+  nombre: string
+  apellido: string
+  codigo: string
+  ras_perdidos: Array<{
+    id_ra: number
+    nombre: string
+    nota_promedio: number
+  }>
+  asignaturas_perdidas: Array<{
+    codigo: string
+    nombre: string
+  }>
+  total_ras_perdidos: number
+}
+
+export interface HU11Asignatura {
+  codigo: string
+  nombre: string
+  grupo: string
+  sede: string | null
+  total_matriculados: number
+  estudiantes_bajo_desempenio: number
+  porcentaje_bajo_desempenio: number
+  ras_afectados: Array<{
+    id_ra: number
+    nombre: string
+    porcentaje_bajo_desempenio: number
+  }>
+}
+
+export interface DashboardDesempenioResponse {
+  hu10_estudiantes_bajo_desempenio: HU10Estudiante[]
+  hu11_asignaturas_ranking: HU11Asignatura[]
+  filtros_aplicados: {
+    periodo: string | null
+    asignatura: string | null
+    cohorte: string | null
+  }
+  resumen: {
+    total_estudiantes_bajo_desempenio: number
+    total_asignaturas: number
+    asignatura_con_mas_bajo_desempenio: string | null
+  }
+}
+
+export async function fetchDashboardDesempenio(params?: {
+  periodo?: string
+  asignatura?: string
+  cohorte?: string
+}): Promise<DashboardDesempenioResponse> {
+  const { data } = await api.get(endpoints.coordinador?.dashboardDesempenio || '/coordinador/dashboard/desempenio/', { 
+    params: params || {} 
+  })
+  return data
 }
 
 export async function fetchEstudiantePerfil(id_estudiante: number): Promise<EstudiantePerfilCompleto> {

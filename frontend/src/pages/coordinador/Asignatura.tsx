@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import { getPeriodosByCourse } from '@/services/api'
 import {
@@ -14,6 +15,7 @@ import {
   type EstudianteRow,
   type RARow,
 } from '@/services/coordinador'
+import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
 
 const PAGE_SIZE = 20
 
@@ -54,6 +56,7 @@ const AsignaturaDetalle: React.FC = () => {
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -83,16 +86,26 @@ const AsignaturaDetalle: React.FC = () => {
     if (!selectedCodigo) {
       setPeriodos([])
       setPeriodoActual(null)
+      setPeriodo('')
       return
     }
 
     try {
-      const list = await getPeriodosByCourse(selectedCodigo)
+      const raw = await getPeriodosByCourse(selectedCodigo)
+      const list = sortPeriodosDesc(
+        raw.filter((p) => isPeriodoAtLeast2024I(p.descripcion))
+      )
       setPeriodos(list)
-      setPeriodoActual(list.length ? list[list.length - 1].descripcion : null)
+      const latest = list.length ? list[0].descripcion : null
+      setPeriodoActual(latest)
+      setPeriodo((prev) => {
+        if (prev && list.some((p) => p.descripcion === prev)) return prev
+        return latest || ''
+      })
     } catch {
       setPeriodos([])
       setPeriodoActual(null)
+      setPeriodo('')
     }
   }, [selectedCodigo])
 
@@ -173,7 +186,6 @@ const AsignaturaDetalle: React.FC = () => {
     if (selectedCodigo !== codigo) {
       navigate(`/coordinador/asignatura/${selectedCodigo}`, { replace: true })
     }
-    setPeriodo('')
     setEstPage(1)
   }, [selectedCodigo, codigo, navigate])
 
@@ -203,6 +215,7 @@ const AsignaturaDetalle: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -224,6 +237,15 @@ const AsignaturaDetalle: React.FC = () => {
             </button>
           </div>
 
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Materias', to: '/coordinador/materias' },
+              { label: 'Detalle de Asignatura' },
+            ]}
+            onNavigate={(to) => navigate(to)}
+          />
+
           <div className="card mb-4">
             <div className="card-header">
               <h5 className="mb-0">
@@ -244,8 +266,8 @@ const AsignaturaDetalle: React.FC = () => {
                   >
                     {!selectedCodigo && <option value="">Seleccione una asignatura...</option>}
                     {asignaturas.map((a) => (
-                      <option key={a.codigo} value={a.codigo}>
-                        {a.codigo} - {a.nombre}
+                      <option key={a.id_asignatura} value={a.codigo}>
+                        {a.codigo} - {a.nombre} - Grupo {a.grupo} - Sede {a.sede || 'N/A'}
                       </option>
                     ))}
                   </select>
@@ -260,19 +282,12 @@ const AsignaturaDetalle: React.FC = () => {
                       onChange={(e) => setPeriodo(e.target.value)}
                       aria-label="Seleccionar periodo"
                     >
-                      <option value="">Todos</option>
-                      {periodoActual && (
-                        <optgroup label="Actual">
-                          <option value={periodoActual}>{periodoActual}</option>
-                        </optgroup>
-                      )}
-                      {periodos
-                        .filter((p) => p.descripcion !== periodoActual)
-                        .map((p) => (
-                          <option key={p.id} value={p.descripcion}>
-                            {p.descripcion}
-                          </option>
-                        ))}
+                      {!periodos.length && <option value="">Sin periodos desde 2024-I</option>}
+                      {periodos.map((p) => (
+                        <option key={p.id} value={p.descripcion}>
+                          {p.descripcion}
+                        </option>
+                      ))}
                     </select>
                     {periodo && periodoActual && (
                       <span className={`badge align-self-center ${periodo === periodoActual ? 'bg-success' : 'bg-secondary'}`}>

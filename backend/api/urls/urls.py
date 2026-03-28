@@ -18,8 +18,11 @@ from ..views.views import (
     coordinador_docentes_view,
     coordinador_docente_perfil_view,
     coordinador_asignatura_avance_view, coordinador_estudiante_perfil_view, current_period_view, course_activities_grouped_view,
+    coordinador_estudiante_desactivar_view,
+    coordinador_estudiante_activar_view,
     docente_import_estudiantes_view, docente_buscar_estudiante_view, docente_agregar_estudiante_view, anuncio_delete_view,
 )
+from ..views.coordinador_desempenio import coordinador_dashboard_desempenio_view
 
 router = DefaultRouter()
 router.register(r"tipos-documento", TipoDocumentoViewSet, basename="tipo-documento")
@@ -53,6 +56,8 @@ urlpatterns = [
     path("notificaciones", notifications_view),
     # Coordinador: listados administrativos
     path("coordinador/estudiantes", coordinador_estudiantes_view),  # GET: listar, POST: crear individual
+    path("coordinador/estudiantes/<int:id_estudiante>/desactivar", coordinador_estudiante_desactivar_view),
+    path("coordinador/estudiantes/<int:id_estudiante>/activar", coordinador_estudiante_activar_view),
     path("coordinador/periodos", coordinador_periodos_view),
     path("coordinador/estudiantes-para-matricula", coordinador_estudiantes_para_matricula_view),
     path("coordinador/docentes", coordinador_docentes_view),  # GET: listar, POST: crear individual
@@ -99,4 +104,6 @@ urlpatterns = [
     path("docente/asignaturas/<str:codigo_asignatura>/estudiantes", docente_agregar_estudiante_view, name="docente-agregar-estudiante"),
     # Eliminar anuncio
     path("anuncios/<int:anuncio_id>/", anuncio_delete_view, name="anuncio-delete"),
+    # Dashboard de desempeño de estudiantes (HU-10, HU-11)
+    path("coordinador/dashboard/desempenio/", coordinador_dashboard_desempenio_view, name="coordinador-dashboard-desempenio"),
 ]

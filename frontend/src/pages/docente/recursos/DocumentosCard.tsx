@@ -121,6 +121,10 @@ const DocumentosCard: React.FC<Props> = ({ curso }) => {
             <i className="bi bi-folder-fill text-warning me-2 fs-5"></i>
             Documentos del curso
           </div>
+          <div className="small text-muted mb-2">
+            <i className="bi bi-mouse2 me-1"></i>
+            Doble clic sobre un documento para abrirlo en una nueva pestaña.
+          </div>
           {items.length === 0 ? (
             <div className="alert alert-info shadow-sm d-flex align-items-center mb-0">
               <i className="bi bi-inbox-fill me-2 fs-5"></i>
@@ -129,7 +133,7 @@ const DocumentosCard: React.FC<Props> = ({ curso }) => {
           ) : (
             <ul className="list-group ra-list-group">
               {items.map(r => (
-                <li key={r.id} className="list-group-item shadow-sm d-flex justify-content-between align-items-center" onDoubleClick={() => window.open(r.url, '_blank')}>
+                <li key={r.id} className="list-group-item shadow-sm d-flex justify-content-between align-items-center" onDoubleClick={() => window.open(r.url, '_blank')} title="Doble clic para abrir documento">
                   <div>
                     <div className="d-flex align-items-center gap-2">
                       <i className="bi bi-file-earmark-pdf-fill text-danger fs-5"></i>

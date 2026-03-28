@@ -54,6 +54,7 @@ export type CourseDetailResponse = {
     codigo: string
     nombre: string
     grupo: string | null
+    sede: string | null
     creditos: number | null
     programa: {
       codigo: string | null
@@ -101,6 +102,7 @@ export type CourseAnalyticsResponse = {
     codigo: string
     nombre: string
     grupo: string | null
+    sede: string | null
     creditos: number | null
     programa: {
       codigo: string | null

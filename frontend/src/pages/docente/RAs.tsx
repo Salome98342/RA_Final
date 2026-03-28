@@ -4,12 +4,14 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 // import SearchPill from '@/components/SearchPill'
 import StudentList from '@/components/StudentList'
 import type { RA, Indicator, Activity, Student } from '@/types'
 import { getRAsByCourse, getIndicatorsByRA, getActivitiesByRA, getStudentsByCourse, getPeriodosByCourse, getRAValidation, getAsignaturaValidation, updateRaActividad, deleteRaActividad, deleteIndicador } from '@/services/api'
 import ActivityDetailsModal from '@/components/ActivityDetailsModal'
 import { useSession } from '@/state/SessionContext'
+import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
 
 const DocenteRAs: React.FC = () => {
   const { curso } = useParams<{curso: string}>()
@@ -57,7 +59,22 @@ const DocenteRAs: React.FC = () => {
       .catch(()=>setErr('No se pudieron cargar los RA'))
   }, [curso, queryRA])
 
-  useEffect(() => { if(curso){ getPeriodosByCourse(curso).then(setPeriodos).catch(()=>setPeriodos([])) } }, [curso])
+  useEffect(() => {
+    if (!curso) return
+    getPeriodosByCourse(curso)
+      .then((rows) => {
+        const filtered = sortPeriodosDesc(rows.filter((p) => isPeriodoAtLeast2024I(p.descripcion)))
+        setPeriodos(filtered)
+        setPeriodoSel((prev) => {
+          if (prev && filtered.some((p) => p.id === prev)) return prev
+          return filtered[0]?.id || ''
+        })
+      })
+      .catch(() => {
+        setPeriodos([])
+        setPeriodoSel('')
+      })
+  }, [curso])
 
   const openRADetails = async (ra: RA) => {
     setSelectedRA(ra)
@@ -217,6 +234,14 @@ const DocenteRAs: React.FC = () => {
           ]}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Inicio Docente', to: '/docente/inicio' },
+              { label: 'Cursos', to: '/docente/cursos' },
+              { label: `RA - ${curso ?? ''}` },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div className="content-title">RA - {curso}</div>
             {state.role === 'coordinador' && (

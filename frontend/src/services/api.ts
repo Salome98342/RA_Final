@@ -200,9 +200,18 @@ export async function getCourseDetail(courseCode: string, studentId: string): Pr
 }
 
 // Análisis general de asignatura para coordinador
-export async function getCourseAnalytics(courseCode: string): Promise<import('@/types').CourseAnalyticsResponse | null> {
+export async function getCourseAnalytics(
+  courseCode: string,
+  opts?: { id_asignatura?: number; grupo?: string; sede?: string }
+): Promise<import('@/types').CourseAnalyticsResponse | null> {
   try {
-    const { data } = await api.get(`/asignaturas/${courseCode}/analitica/`)
+    const { data } = await api.get(`/asignaturas/${courseCode}/analitica/`, {
+      params: {
+        id_asignatura: opts?.id_asignatura,
+        grupo: opts?.grupo || undefined,
+        sede: opts?.sede || undefined,
+      },
+    })
     if (data && typeof data === 'object' && data.asignatura) {
       return data as import('@/types').CourseAnalyticsResponse
     }

@@ -10,6 +10,7 @@ import {
 } from '@/services/coordinador'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Alert from '@/utils/alert'
 import { api } from '@/connections/http'
@@ -108,8 +109,11 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-person-badge-fill',
     accentClass: 'text-warning',
     description: 'Importa docentes con documento, correo y datos de contacto.',
-    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento',
-    templateCandidates: [{ fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' }],
+    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento, num_telefono (opcional), password (opcional)',
+    templateCandidates: [
+      { fileName: 'plantilla_docentes.csv', downloadName: 'plantilla_docentes.csv' },
+      { fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' },
+    ],
     headerRule: {
       required: ['codigo_docente', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'],
     },
@@ -121,10 +125,10 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-people-fill',
     accentClass: 'text-primary',
     description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional.',
-    acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento',
+    acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada (opcional)',
     templateCandidates: [
+      { fileName: 'plantilla_estudiantes.csv', downloadName: 'plantilla_estudiantes.csv' },
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },
-      { fileName: 'plantilla_importacion_estudiantes_con_datos.csv', downloadName: 'plantilla_estudiantes.csv' },
     ],
     headerRule: {
       required: ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'],
@@ -137,14 +141,15 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-journal-bookmark-fill',
     accentClass: 'text-danger',
     description: 'Crea o actualiza asignaturas, RAs e indicadores de logro (IL) en una sola carga.',
-    acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, grupo, ra_descripcion, ra_porcentaje, indicador_descripcion, indicador_porcentaje',
+    acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, periodo, grupo, sede, creditos, ra_descripcion, ra_porcentaje, indicador_descripcion, indicador_porcentaje',
     templateCandidates: [
-      { fileName: 'plantilla_asignaturas_ras_il.xlsx', downloadName: 'plantilla_asignaturas_ras_il.xlsx' },
       { fileName: 'plantilla_asignaturas_ras_il.csv', downloadName: 'plantilla_asignaturas_ras_il.csv' },
+      { fileName: 'plantilla_asignaturas_ras.csv', downloadName: 'plantilla_asignaturas_ras.csv' },
+      { fileName: 'plantilla_asignaturas_ras_il.xlsx', downloadName: 'plantilla_asignaturas_ras_il.xlsx' },
       { fileName: 'plantilla_asignaturas_ras.xlsx', downloadName: 'plantilla_asignaturas_ras.xlsx' },
     ],
     headerRule: {
-      required: ['codigo_asignatura', 'codigo_docente', 'codigo_programa', 'grupo'],
+      required: ['codigo_asignatura', 'codigo_docente', 'codigo_programa', 'periodo', 'grupo', 'sede', 'creditos'],
       oneOfGroups: [['nombre_asignatura', 'nombre']],
     },
     importAction: importAsignaturasRAs,
@@ -155,8 +160,11 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-clipboard-check-fill',
     accentClass: 'text-success',
     description: 'Relaciona estudiantes con asignaturas y periodo académico de matrícula.',
-    acceptedColumns: 'codigo_estudiante, periodo (codigo_asignatura opcional si seleccionas materias en la alerta)',
-    templateCandidates: [{ fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' }],
+    acceptedColumns: 'codigo_estudiante, periodo, codigo_asignatura, grupo, sede (codigo_asignatura/grupo/sede opcionales si seleccionas materias en la alerta)',
+    templateCandidates: [
+      { fileName: 'plantilla_matriculados.csv', downloadName: 'plantilla_matriculados.csv' },
+      { fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' },
+    ],
     headerRule: {
       required: ['codigo_estudiante', 'periodo'],
     },
@@ -482,6 +490,7 @@ const Imports: React.FC<ImportsProps> = ({
             : 'materias'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -630,7 +639,7 @@ const Imports: React.FC<ImportsProps> = ({
 
     const optionsHtml = matriculadosAsignaturas
       .map((asignatura) => {
-        const label = `${asignatura.codigo} - ${asignatura.nombre} - Grupo ${asignatura.grupo}`
+        const label = `${asignatura.codigo} - ${asignatura.nombre} - Grupo ${asignatura.grupo} - Sede ${asignatura.sede || 'N/A'}`
         const inputId = `mat-asig-${asignatura.id_asignatura}`
         return `
           <div class="d-flex align-items-start gap-2 py-1 text-start">
@@ -824,6 +833,7 @@ const Imports: React.FC<ImportsProps> = ({
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -833,6 +843,13 @@ const Imports: React.FC<ImportsProps> = ({
           }}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Imports' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="content-title">
             <i className="bi bi-upload me-2" aria-hidden="true"></i>
             {pageTitle}

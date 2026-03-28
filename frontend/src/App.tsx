@@ -20,10 +20,12 @@ import CoordinadorDocentes from '@/pages/coordinador/Docentes'
 import CoordinadorMatriculados from '@/pages/coordinador/Matriculados'
 import CoordinadorAsignaturasRA from '@/pages/coordinador/AsignaturasRA'
 import CoordinadorAsignaturaAnalisis from '@/pages/coordinador/AsignaturaAnalisis'
+import CoordinadorDesempenio from '@/pages/coordinador/DesempenioEstudiantes'
 import EstudianteMateriaDetalle from '@/pages/estudiante/MateriaDetalle'
 import EstudianteHome from '@/pages/estudiante/Home'
 import { useSession } from '@/state/SessionContext'
 import { getAuthToken } from '@/connections/http'
+import ContextualHelp from '@/components/help/ContextualHelp'
 
 // ==================== RUTAS PROTEGIDAS ====================
 
@@ -81,6 +83,7 @@ const App: React.FC = () => {
   return (
     // Quitar BrowserRouter aquí, ya está en main.tsx
     <>
+    <ContextualHelp />
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
@@ -104,6 +107,7 @@ const App: React.FC = () => {
       <Route path="/perfil" element={<ProtectedRoute allowedRoles={['docente', 'estudiante', 'coordinador']}><Profile /></ProtectedRoute>} />
   {/* Coordinador */}
   <Route path="/coordinador" element={<CoordinatorRoute><CoordinadorDashboard /></CoordinatorRoute>} />
+  <Route path="/coordinador/desempenio" element={<CoordinatorRoute><CoordinadorDesempenio /></CoordinatorRoute>} />
   <Route path="/coordinador/materias" element={<CoordinatorRoute><CoordinadorMaterias /></CoordinatorRoute>} />
   <Route path="/coordinador/materias/:codigo/analitica" element={<CoordinatorRoute><CoordinadorAsignaturaAnalisis /></CoordinatorRoute>} />
   <Route path="/coordinador/docentes" element={<CoordinatorRoute><CoordinadorDocentes /></CoordinatorRoute>} />

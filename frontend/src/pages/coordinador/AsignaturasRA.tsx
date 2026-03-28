@@ -2,16 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import {
   createAsignaturaWithRAs,
   fetchDocentes,
-  fetchProgramas,
+  fetchPeriodosCoordinador,
   type CreateAsignaturaWithRAItem,
   type DocenteListItem,
   type ProgramaItem,
 } from '@/services/coordinador'
 import { getProfile } from '@/services/auth'
+import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
 
 type RAFormItem = {
   key: string
@@ -41,32 +43,6 @@ const createEmptyRA = (): RAFormItem => ({
 
 const normalizeCode = (value: string) => value.toUpperCase().trim()
 
-const inferProgramFromCoordinator = (
-  coordinatorCode: string,
-  coordinatorName: string,
-  programs: ProgramaItem[]
-): ProgramaItem | null => {
-  if (!programs.length) return null
-  const code = normalizeCode(coordinatorCode)
-  const name = coordinatorName.toLowerCase().trim()
-
-  const exact = programs.find((p) => normalizeCode(p.codigo_programa) === code)
-  if (exact) return exact
-
-  const startsWith = programs.find((p) => code && normalizeCode(p.codigo_programa).startsWith(code))
-  if (startsWith) return startsWith
-
-  if (name.includes('sistemas')) {
-    const sis = programs.find((p) =>
-      p.nombre.toLowerCase().includes('sistemas') || normalizeCode(p.codigo_programa).includes('SIS')
-    )
-    if (sis) return sis
-  }
-
-  if (programs.length === 1) return programs[0]
-  return null
-}
-
 const AsignaturasRA: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -85,6 +61,7 @@ const AsignaturasRA: React.FC = () => {
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -97,6 +74,7 @@ const AsignaturasRA: React.FC = () => {
   const [loadingSubmit, setLoadingSubmit] = useState(false)
 
   const [docentes, setDocentes] = useState<DocenteListItem[]>([])
+  const [periodos, setPeriodos] = useState<Array<{ id_periodo: number; descripcion: string }>>([])
   const [detectedPrograma, setDetectedPrograma] = useState<ProgramaItem | null>(null)
   const [coordinatorLabel, setCoordinatorLabel] = useState('')
   const [docenteSearch, setDocenteSearch] = useState('')
@@ -105,7 +83,10 @@ const AsignaturasRA: React.FC = () => {
     codigo_asignatura: '',
     nombre_asignatura: '',
     codigo_docente: '',
+    periodo: '',
+    creditos: '',
     grupo: '',
+    sede: '',
   })
 
   const [raList, setRaList] = useState<RAFormItem[]>([createEmptyRA()])
@@ -238,7 +219,10 @@ const AsignaturasRA: React.FC = () => {
     formData.codigo_asignatura.trim() &&
     formData.nombre_asignatura.trim() &&
     formData.codigo_docente.trim() &&
+    formData.periodo.trim() &&
+    formData.creditos.trim() &&
     formData.grupo.trim() &&
+    formData.sede.trim() &&
     detectedPrograma?.codigo_programa
   )
 
@@ -268,20 +252,26 @@ const AsignaturasRA: React.FC = () => {
     const load = async () => {
       setLoadingCatalogs(true)
       try {
-        const [docentesData, programasData, profile] = await Promise.all([
+        const [docentesData, periodosData, profile] = await Promise.all([
           fetchDocentes(),
-          fetchProgramas(),
+          fetchPeriodosCoordinador(),
           getProfile(),
         ])
         setDocentes(docentesData || [])
-        const detected = inferProgramFromCoordinator(profile.code || '', profile.nombre || '', programasData || [])
+        const filteredPeriodos = sortPeriodosDesc((periodosData || []).filter((p) => isPeriodoAtLeast2024I(p.descripcion)))
+        setPeriodos(filteredPeriodos)
+        setFormData((prev) => ({
+          ...prev,
+          periodo: prev.periodo || filteredPeriodos[0]?.descripcion || '',
+        }))
+        const detected = profile.programaDetectado || null
         setDetectedPrograma(detected)
         setCoordinatorLabel(`${profile.nombre || 'Coordinador'}${profile.code ? ` (${profile.code})` : ''}`)
         if (!detected) {
-          Alert.warning('No se pudo detectar automáticamente el programa del coordinador. Contacta al administrador para configurar este perfil.')
+          Alert.warning('No se pudo detectar automáticamente el programa del coordinador desde backend. Contacta al administrador para configurar este perfil.')
         }
       } catch (e: any) {
-        Alert.error(e?.response?.data?.detail || e.message || 'No fue posible cargar docentes, programas o perfil.')
+        Alert.error(e?.response?.data?.detail || e.message || 'No fue posible cargar docentes, periodos o perfil del coordinador.')
       } finally {
         setLoadingCatalogs(false)
       }
@@ -346,7 +336,10 @@ const AsignaturasRA: React.FC = () => {
       codigo_asignatura: '',
       nombre_asignatura: '',
       codigo_docente: '',
+      periodo: '',
+      creditos: '',
       grupo: '',
+      sede: '',
     })
     setRaList([createEmptyRA()])
   }
@@ -355,7 +348,13 @@ const AsignaturasRA: React.FC = () => {
     e.preventDefault()
 
     if (!requiredValid) {
-      Alert.toast.warning('Completa codigo_asignatura, nombre_asignatura, docente y grupo. El programa se asigna desde el perfil del coordinador.')
+      Alert.toast.warning('Completa codigo_asignatura, nombre_asignatura, docente, periodo, creditos, grupo y sede. El programa se detecta automáticamente y debes validarlo antes de guardar.')
+      return
+    }
+
+    const creditosNum = Number(formData.creditos)
+    if (!Number.isInteger(creditosNum) || creditosNum <= 0) {
+      Alert.toast.warning('Créditos debe ser un entero mayor que 0.')
       return
     }
 
@@ -380,8 +379,11 @@ const AsignaturasRA: React.FC = () => {
     const confirmText = [
       `Asignatura: ${normalizeCode(formData.codigo_asignatura)} - ${formData.nombre_asignatura.trim()}`,
       `Docente: ${normalizeCode(formData.codigo_docente)}`,
+      `Periodo: ${formData.periodo.trim()}`,
+      `Créditos: ${creditosNum}`,
       `Programa: ${detectedPrograma?.nombre || 'No detectado'} (${detectedPrograma?.codigo_programa || 'N/A'})`,
       `Grupo: ${formData.grupo.trim() || 'Sin grupo'}`,
+      `Sede: ${formData.sede.trim() || 'Sin sede'}`,
       `RAs a crear: ${payloadRAs.length}`,
       `Indicadores a crear: ${totalIndicadores}`,
       `Suma RA nueva: ${sumPct.toFixed(2)}%`,
@@ -406,7 +408,10 @@ const AsignaturasRA: React.FC = () => {
         nombre_asignatura: formData.nombre_asignatura.trim(),
         codigo_docente: normalizeCode(formData.codigo_docente),
         codigo_programa: normalizeCode(detectedPrograma?.codigo_programa || ''),
+        periodo: formData.periodo.trim(),
+        creditos: creditosNum,
         grupo: formData.grupo.trim() || undefined,
+        sede: formData.sede.trim() || undefined,
         ras: payloadRAs,
       })
 
@@ -427,7 +432,10 @@ const AsignaturasRA: React.FC = () => {
         ...prev,
         codigo_asignatura: '',
         nombre_asignatura: '',
+        periodo: '',
+        creditos: '',
         grupo: '',
+        sede: '',
       }))
     } catch (e: any) {
       Alert.error(e?.response?.data?.detail || e.message || 'No fue posible guardar la asignatura con sus RAs.')
@@ -445,6 +453,7 @@ const AsignaturasRA: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -455,6 +464,13 @@ const AsignaturasRA: React.FC = () => {
         />
 
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Asignaturas + RA' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="content-title d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
               <i className="bi bi-journal-bookmark me-2"></i>
@@ -520,7 +536,7 @@ const AsignaturasRA: React.FC = () => {
                   <i className="bi bi-person-badge mt-1"></i>
                   <div>
                     <strong>Perfil activo:</strong> {coordinatorLabel || 'Coordinador'}<br />
-                    <strong>Programa fijado automáticamente:</strong> {detectedPrograma.nombre} ({detectedPrograma.codigo_programa})
+                    <strong>Programa detectado automáticamente (estimado):</strong> {detectedPrograma.nombre} ({detectedPrograma.codigo_programa})
                   </div>
                 </div>
               )}
@@ -559,7 +575,7 @@ const AsignaturasRA: React.FC = () => {
                 </div>
 
                 <div className="row">
-                  <div className="col-md-4 mb-3">
+                  <div className="col-md-3 mb-3">
                     <label className="form-label fw-semibold">Docente <span className="text-danger">*</span></label>
                     <input
                       type="text"
@@ -589,7 +605,7 @@ const AsignaturasRA: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="col-md-4 mb-3">
+                  <div className="col-md-3 mb-3">
                     <label className="form-label fw-semibold">Programa <span className="text-danger">*</span></label>
                     <input
                       type="text"
@@ -598,10 +614,10 @@ const AsignaturasRA: React.FC = () => {
                       value={detectedPrograma ? `${detectedPrograma.codigo_programa} - ${detectedPrograma.nombre}` : 'No detectado'}
                       readOnly
                     />
-                    <div className="form-text">Se asigna automáticamente según el perfil del coordinador.</div>
+                    <div className="form-text">Se detecta automáticamente con base en el perfil actual y debe validarse antes de guardar.</div>
                   </div>
 
-                  <div className="col-md-4 mb-3">
+                  <div className="col-md-3 mb-3">
                     <label className="form-label fw-semibold">Grupo <span className="text-danger">*</span></label>
                     <input
                       type="text"
@@ -611,6 +627,51 @@ const AsignaturasRA: React.FC = () => {
                       onChange={(e) => setFormData((prev) => ({ ...prev, grupo: e.target.value }))}
                       placeholder="Ej: A"
                     />
+                  </div>
+
+                  <div className="col-md-3 mb-3">
+                    <label className="form-label fw-semibold">Periodo <span className="text-danger">*</span></label>
+                    <select
+                      className="form-select"
+                      title="Periodo"
+                      value={formData.periodo}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, periodo: e.target.value }))}
+                    >
+                      <option value="">Selecciona periodo</option>
+                      {periodos.map((p) => (
+                        <option key={p.id_periodo} value={p.descripcion}>{p.descripcion}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-md-3 mb-3">
+                    <label className="form-label fw-semibold">Créditos <span className="text-danger">*</span></label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      title="Créditos"
+                      min={1}
+                      step={1}
+                      value={formData.creditos}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, creditos: e.target.value }))}
+                      placeholder="Ej: 3"
+                    />
+                  </div>
+
+                  <div className="col-md-3 mb-3">
+                    <label className="form-label fw-semibold">Sede <span className="text-danger">*</span></label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      title="Sede"
+                      inputMode="numeric"
+                      pattern="[0-9]+"
+                      maxLength={3}
+                      value={formData.sede}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
+                      placeholder="Ej: 02"
+                    />
+                    <div className="form-text">Usa código numérico de sede (ej: 01, 02).</div>
                   </div>
                 </div>
 

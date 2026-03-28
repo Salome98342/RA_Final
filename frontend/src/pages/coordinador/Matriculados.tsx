@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import {
   fetchAsignaturaEstudiantes,
@@ -36,6 +37,7 @@ const Matriculados: React.FC = () => {
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
+    { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
     { key: 'materias', icon: 'bi-journals', title: 'Materias' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
@@ -122,7 +124,7 @@ const Matriculados: React.FC = () => {
         }
         return {
           ...prev,
-          periodo: list.length ? String(list[list.length - 1].descripcion) : '',
+          periodo: list.length ? String(list[0].descripcion) : '',
         }
       })
     } catch {
@@ -304,6 +306,7 @@ const Matriculados: React.FC = () => {
           items={items}
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
+            else if (key === 'desempenio') navigate('/coordinador/desempenio')
             else if (key === 'materias') navigate('/coordinador/materias')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
@@ -314,6 +317,13 @@ const Matriculados: React.FC = () => {
         />
 
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Coordinador', to: '/coordinador' },
+              { label: 'Matriculados' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="content-title d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
               <i className="bi bi-clipboard-check me-2"></i>
@@ -356,7 +366,7 @@ const Matriculados: React.FC = () => {
                       <option value="">Seleccione...</option>
                       {asignaturas.map((a) => (
                         <option key={a.id_asignatura} value={String(a.id_asignatura)}>
-                          {a.codigo} - {a.nombre} - Grupo {a.grupo}
+                          {a.codigo} - {a.nombre} - Grupo {a.grupo} - Sede {a.sede || 'N/A'}
                         </option>
                       ))}
                     </select>
@@ -385,6 +395,7 @@ const Matriculados: React.FC = () => {
                   <div className="mb-3 small text-muted">
                     <i className="bi bi-journal-text me-1"></i>
                     Grupo: {selectedAsignatura.grupo || '-'} | 
+                    Sede: {selectedAsignatura.sede || '-'} | 
                     Programa: {selectedAsignatura.programa || '-'} ({selectedAsignatura.programa_codigo || '-'})
                   </div>
                 )}

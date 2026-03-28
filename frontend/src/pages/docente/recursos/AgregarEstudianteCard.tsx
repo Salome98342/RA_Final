@@ -103,9 +103,13 @@ const AgregarEstudianteCard: React.FC<Props> = ({ curso, onSuccess }) => {
         <div className="alert alert-info d-flex align-items-start mb-3">
           <i className="bi bi-info-circle me-2 mt-1"></i>
           <div>
-            Ingresa el <strong>código del estudiante</strong> para buscarlo. 
-            Puedes usar el formato <code>codigo-programa</code> (ej: <code>202388558-2724</code>).
-            Podrás verificar sus datos antes de agregarlo al curso.
+            Esta función está pensada para casos excepcionales: cuando un estudiante
+            <strong> no puede ser matriculado oficialmente</strong> pero asiste a la clase,
+            para que el docente pueda agregarlo y calificarle en el curso.
+            <br />
+            Ingresa el <strong>código del estudiante</strong> para buscarlo.
+            Puedes usar el formato <code>codigo-programa</code> (ej: <code>202388558-2724</code>)
+            y verificar sus datos antes de agregarlo.
           </div>
         </div>
 

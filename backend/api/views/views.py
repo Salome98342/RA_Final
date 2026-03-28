@@ -67,14 +67,29 @@ TOKEN_MAX_AGE = 60 * 60 * 24 * 7
 logger = logging.getLogger("ra_manager.coordinador")
 
 ALLOWED_IMPORT_TEMPLATES = {
+    "plantilla_estudiantes.csv",
+    "plantilla_matriculados.csv",
+    "plantilla_docentes.csv",
+    "plantilla_asignaturas_ras.csv",
+    "plantilla_asignaturas_ras_il.csv",
     "plantilla_estudiantes.xlsx",
-    "plantilla_importacion_estudiantes_con_datos.csv",
     "plantilla_matriculados.xlsx",
     "plantilla_docentes.xlsx",
     "plantilla_asignaturas_ras.xlsx",
-    "plantilla_asignaturas_ras_il.csv",
     "plantilla_asignaturas_ras_il.xlsx",
 }
+
+
+def _get_bulk_student_password() -> str:
+    """
+    Retorna la contraseña provisional para altas masivas de estudiantes.
+    Se puede configurar con DEFAULT_BULK_STUDENT_PASSWORD en settings/.env.
+    """
+    configured = getattr(settings, "DEFAULT_BULK_STUDENT_PASSWORD", "")
+    password = str(configured or "").strip()
+    if not password:
+        password = "Estudiante123*"
+    return password
 
 
 def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
@@ -113,6 +128,52 @@ def _serialize_user(u, rol: str):
 def _bearer_token(request):
     auth = request.headers.get("Authorization", "")
     return auth.split(" ", 1)[1] if auth.startswith("Bearer ") and " " in auth else None
+
+
+def _norm_code(value: str) -> str:
+    return (value or "").strip().upper()
+
+
+def _student_program_from_code(estudiante_codigo: str):
+    """
+    Intenta resolver el programa desde un código de estudiante con sufijo:
+    <codigo>-<codigo_programa>.
+    """
+    code = (estudiante_codigo or "").strip()
+    if "-" not in code:
+        return None
+    suffix = code.rsplit("-", 1)[-1].strip()
+    if not suffix:
+        return None
+    return Programa.objects.filter(codigo_programa=suffix).first()
+
+
+def _infer_program_for_coordinador(coord: Coordinador):
+    """Intenta resolver el programa del coordinador con reglas estrictas y no ambiguas."""
+    programas = list(Programa.objects.all())
+    if not programas:
+        return None
+
+    coord_code = _norm_code(getattr(coord, "codigo_coordinador", ""))
+
+    # 1) Match exacto por código.
+    for p in programas:
+        if _norm_code(p.codigo_programa) == coord_code:
+            return p
+
+    # 2) Match por token del código (ej: COORD-ADM -> ADM, COORD-2724 -> 2724).
+    if coord_code:
+        tokenized = coord_code.replace("-", " ").replace("_", " ").replace("/", " ").split()
+        for p in programas:
+            p_code = _norm_code(p.codigo_programa)
+            if p_code in tokenized:
+                return p
+
+    # 3) Si solo existe un programa, usarlo.
+    if len(programas) == 1:
+        return programas[0]
+
+    return None
 
 def _send_welcome_email(estudiante, password_provisional):
     """
@@ -206,15 +267,84 @@ Equipo RA Manager
         logger.error(f"Error enviando correo de bienvenida a docente {docente.correo}: {str(e)}")
 
 
+def _send_account_deactivated_email(estudiante, coordinador=None, programa=None):
+    """
+    Notifica al estudiante que su cuenta fue desactivada por coordinación.
+    """
+    try:
+        subject = "Cuenta desactivada en RA Manager"
+        coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
+        programa_ref = getattr(programa, "nombre", None) or "tu programa"
+        message = f"""
+Hola {estudiante.nombre} {estudiante.apellido},
+
+Te informamos que tu cuenta de estudiante en RA Manager ha sido desactivada temporalmente.
+
+Código de estudiante: {estudiante.codigo_estudiante}
+Programa: {programa_ref}
+
+Si tienes dudas o consideras que esto es un error, por favor contacta al coordinador del programa ({coord_ref}).
+
+Saludos,
+Equipo RA Manager
+        """.strip()
+
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[estudiante.correo],
+            fail_silently=True,
+        )
+        logger.info(f"Correo de desactivación enviado a {estudiante.correo}")
+    except Exception as e:
+        logger.error(f"Error enviando correo de desactivación a {estudiante.correo}: {str(e)}")
+
+
+def _send_account_reactivated_email(estudiante, coordinador=None, programa=None):
+    """
+    Notifica al estudiante que su cuenta fue reactivada por coordinación.
+    """
+    try:
+        subject = "Cuenta reactivada en RA Manager"
+        coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
+        programa_ref = getattr(programa, "nombre", None) or "tu programa"
+        message = f"""
+Hola {estudiante.nombre} {estudiante.apellido},
+
+Te informamos que tu cuenta de estudiante en RA Manager ha sido reactivada.
+
+Código de estudiante: {estudiante.codigo_estudiante}
+Programa: {programa_ref}
+
+Ya puedes iniciar sesión nuevamente en la plataforma.
+Si tienes alguna duda, por favor contacta al coordinador del programa ({coord_ref}).
+
+Saludos,
+Equipo RA Manager
+        """.strip()
+
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[estudiante.correo],
+            fail_silently=True,
+        )
+        logger.info(f"Correo de reactivación enviado a {estudiante.correo}")
+    except Exception as e:
+        logger.error(f"Error enviando correo de reactivación a {estudiante.correo}: {str(e)}")
+
+
 def _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10):
     """
     Envia correos en segundo plano para no bloquear la respuesta HTTP del import masivo.
-    Se controla por setting SEND_WELCOME_EMAILS_ON_IMPORT (default: False).
+    Se controla por setting SEND_WELCOME_EMAILS_ON_IMPORT (default: True).
     """
     if not passwords_for_emails:
         return 0
 
-    if not getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", False):
+    if not getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", True):
         logger.info("Envio de correos en import deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
         return 0
 
@@ -455,6 +585,21 @@ def login_view(request):
         
         if not password_field or not check_user_password(getattr(user, password_field), password):
             user = None  # Contraseña incorrecta
+
+    if user and user_rol == "estudiante" and not getattr(user, "activo", True):
+        registrar_intento_login(
+            usuario_codigo=usuario_identificador,
+            exito=False,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            usuario_email=user_email,
+            rol_intentado=user_rol,
+            motivo_fallo="Cuenta desactivada por coordinador"
+        )
+        return Response(
+            {"detail": "Tu perfil de estudiante está desactivado. Contacta al coordinador."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     
     # 3. MANEJAR RESULTADO
     if not user:
@@ -527,7 +672,28 @@ def me_view(request):
         u = None
     if not u:
         return Response({"detail": "Usuario no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
-    return Response({"user": _serialize_user(u, rol or "estudiante")})
+
+    if rol == "estudiante" and not getattr(u, "activo", True):
+        return Response(
+            {"detail": "Tu perfil de estudiante está desactivado. Contacta al coordinador."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    user_payload = _serialize_user(u, rol or "estudiante")
+
+    if rol == "coordinador":
+        detected = _infer_program_for_coordinador(u)
+        user_payload["programa_detectado"] = (
+            {
+                "id_programa": detected.id_programa,
+                "codigo_programa": detected.codigo_programa,
+                "nombre": detected.nombre,
+            }
+            if detected
+            else None
+        )
+
+    return Response({"user": user_payload})
 
 
 def _require_coordinador(request):
@@ -546,6 +712,45 @@ def _require_coordinador(request):
         return None, Response({"detail": "Coordinador no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
     return coord, None
 
+
+def _require_asignatura_access(request, asig, id_estudiante=None):
+    """Valida acceso por rol a una asignatura concreta."""
+    token = _bearer_token(request)
+    if not token:
+        return None, Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return None, Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    rol = tok.get("rol")
+    uid = tok.get("id")
+
+    if rol == "docente":
+        if asig.docente_id != uid:
+            return None, Response({"detail": "Acceso denegado a esta asignatura"}, status=status.HTTP_403_FORBIDDEN)
+        return {"rol": rol, "id": uid}, None
+
+    if rol == "estudiante":
+        if id_estudiante is not None and int(uid) != int(id_estudiante):
+            return None, Response({"detail": "No puedes consultar datos de otro estudiante"}, status=status.HTTP_403_FORBIDDEN)
+        if not Matricula.objects.filter(asignatura=asig, estudiante_id=uid).exists():
+            return None, Response({"detail": "No estás matriculado en esta asignatura"}, status=status.HTTP_403_FORBIDDEN)
+        return {"rol": rol, "id": uid}, None
+
+    if rol == "coordinador":
+        coord = Coordinador.objects.filter(pk=uid).first()
+        if not coord:
+            return None, Response({"detail": "Coordinador no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
+        detected_program = _infer_program_for_coordinador(coord)
+        if not detected_program:
+            return None, Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+        if asig.programa_id != detected_program.id_programa:
+            return None, Response({"detail": "Acceso denegado a asignatura fuera de tu programa"}, status=status.HTTP_403_FORBIDDEN)
+        return {"rol": rol, "id": uid}, None
+
+    return None, Response({"detail": "Rol no autorizado"}, status=status.HTTP_403_FORBIDDEN)
+
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -560,8 +765,17 @@ def coordinador_estudiantes_view(request):
         return err
     
     if request.method == "GET":
+        detected_program = _infer_program_for_coordinador(coord)
+        if not detected_program:
+            return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+
         # Listar estudiantes con filtros opcionales
-        estudiantes = Estudiante.objects.select_related('tipo_documento').all()
+        estudiantes = (
+            Estudiante.objects
+            .select_related('tipo_documento')
+            .filter(matricula__asignatura__programa=detected_program)
+            .distinct()
+        )
         
         # Filtros opcionales
         search = request.query_params.get('search', '').strip()
@@ -589,6 +803,7 @@ def coordinador_estudiantes_view(request):
                 "tipo_documento": est.tipo_documento.descripcion if est.tipo_documento else None,
                 "num_documento": est.num_documento,
                 "jornada": est.jornada,
+                "activo": est.activo,
             })
         
         return Response(data, status=status.HTTP_200_OK)
@@ -613,6 +828,10 @@ def coordinador_estudiantes_view(request):
         tipo_doc_desc = data['tipo_documento'].strip()
         num_documento = data['num_documento'].strip()
         jornada = data.get('jornada', '').strip() or None
+
+        # Mantener código de estudiante tal como lo ingresa el coordinador
+        # (sin forzar sufijo de programa en el código).
+        detected_program = _infer_program_for_coordinador(coord)
         
         # Validar unicidad
         if Estudiante.objects.filter(codigo_estudiante=codigo).exists():
@@ -672,8 +891,8 @@ def coordinador_estudiantes_view(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Generar contraseña provisional
-        password_provisional = secrets.token_urlsafe(8)  # ~11 caracteres
+        # Usar la misma contraseña genérica configurada para importación masiva
+        password_provisional = _get_bulk_student_password()
         hashed_password = make_password(password_provisional)
         
         # Crear estudiante
@@ -686,7 +905,8 @@ def coordinador_estudiantes_view(request):
                 correo=correo,
                 tipo_documento=tipo_doc,
                 num_documento=num_documento,
-                jornada=jornada
+                jornada=jornada,
+                activo=True,
             )
             
             # Enviar correo de bienvenida
@@ -715,6 +935,9 @@ def coordinador_estudiantes_view(request):
                     "nombre": estudiante.nombre,
                     "apellido": estudiante.apellido,
                     "correo": estudiante.correo,
+                    "activo": estudiante.activo,
+                    "programa_codigo": getattr(detected_program, "codigo_programa", None),
+                    "programa": getattr(detected_program, "nombre", None),
                 }
             }, status=status.HTTP_201_CREATED)
             
@@ -724,6 +947,141 @@ def coordinador_estudiantes_view(request):
                 {"detail": f"Error al crear estudiante: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiante_desactivar_view(request, id_estudiante: int):
+    """Desactiva el perfil de un estudiante. Solo coordinador."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    detected_program = _infer_program_for_coordinador(coord)
+    if not detected_program:
+        return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+
+    estudiante = Estudiante.objects.filter(id_estudiante=id_estudiante).first()
+    if not estudiante:
+        return Response({"detail": "Estudiante no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Restringir desactivación a estudiantes de asignaturas del programa del coordinador.
+    in_program = Matricula.objects.filter(
+        estudiante=estudiante,
+        asignatura__programa=detected_program,
+    ).exists()
+    if not in_program:
+        return Response(
+            {"detail": "No tienes permisos para desactivar este estudiante"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if not estudiante.activo:
+        return Response(
+            {
+                "detail": "El perfil del estudiante ya estaba desactivado",
+                "estudiante": {
+                    "id_estudiante": estudiante.id_estudiante,
+                    "codigo_estudiante": estudiante.codigo_estudiante,
+                    "activo": estudiante.activo,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    estudiante.activo = False
+    estudiante.save(update_fields=["activo"])
+
+    _send_account_deactivated_email(estudiante, coordinador=coord, programa=detected_program)
+
+    logger.info(
+        "Perfil de estudiante desactivado",
+        extra={
+            "coordinador": getattr(coord, "codigo_coordinador", None),
+            "id_estudiante": estudiante.id_estudiante,
+            "codigo_estudiante": estudiante.codigo_estudiante,
+        },
+    )
+
+    return Response(
+        {
+            "detail": "Perfil de estudiante desactivado exitosamente",
+            "estudiante": {
+                "id_estudiante": estudiante.id_estudiante,
+                "codigo_estudiante": estudiante.codigo_estudiante,
+                "activo": estudiante.activo,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiante_activar_view(request, id_estudiante: int):
+    """Reactiva el perfil de un estudiante. Solo coordinador."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    detected_program = _infer_program_for_coordinador(coord)
+    if not detected_program:
+        return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+
+    estudiante = Estudiante.objects.filter(id_estudiante=id_estudiante).first()
+    if not estudiante:
+        return Response({"detail": "Estudiante no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    in_program = Matricula.objects.filter(
+        estudiante=estudiante,
+        asignatura__programa=detected_program,
+    ).exists()
+    if not in_program:
+        return Response(
+            {"detail": "No tienes permisos para activar este estudiante"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if estudiante.activo:
+        return Response(
+            {
+                "detail": "El perfil del estudiante ya estaba activo",
+                "estudiante": {
+                    "id_estudiante": estudiante.id_estudiante,
+                    "codigo_estudiante": estudiante.codigo_estudiante,
+                    "activo": estudiante.activo,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    estudiante.activo = True
+    estudiante.save(update_fields=["activo"])
+
+    _send_account_reactivated_email(estudiante, coordinador=coord, programa=detected_program)
+
+    logger.info(
+        "Perfil de estudiante activado",
+        extra={
+            "coordinador": getattr(coord, "codigo_coordinador", None),
+            "id_estudiante": estudiante.id_estudiante,
+            "codigo_estudiante": estudiante.codigo_estudiante,
+        },
+    )
+
+    return Response(
+        {
+            "detail": "Perfil de estudiante activado exitosamente",
+            "estudiante": {
+                "id_estudiante": estudiante.id_estudiante,
+                "codigo_estudiante": estudiante.codigo_estudiante,
+                "activo": estudiante.activo,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 
@@ -750,8 +1108,6 @@ def coordinador_estudiantes_para_matricula_view(request):
     grupo = (request.query_params.get("grupo") or "").strip()
     id_asignatura = request.query_params.get("id_asignatura")
     search = (request.query_params.get("search") or "").strip()
-    include_all_when_empty = (request.query_params.get("include_all_when_empty") or "1").strip() == "1"
-
     if not codigo_asignatura:
         return Response({"detail": "codigo_asignatura requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -766,17 +1122,17 @@ def coordinador_estudiantes_para_matricula_view(request):
 
     programa = getattr(asig, "programa", None)
 
-    # Estudiantes que ya tienen matrículas en asignaturas del mismo programa.
+    # Estudiantes candidatos del programa:
+    # - Ya matriculados alguna vez en asignaturas del mismo programa
+    # - O con formato legacy sin guion (manuales sin programa en el código)
     candidatos_qs = Estudiante.objects.none()
     if programa:
         candidatos_qs = Estudiante.objects.filter(
-            matricula__asignatura__programa=programa
+            Q(matricula__asignatura__programa=programa)
+            | ~Q(codigo_estudiante__contains='-')
         ).select_related("tipo_documento").distinct()
 
     used_fallback_all = False
-    if include_all_when_empty and not candidatos_qs.exists():
-        used_fallback_all = True
-        candidatos_qs = Estudiante.objects.select_related("tipo_documento").all()
 
     if search:
         candidatos_qs = candidatos_qs.filter(
@@ -849,7 +1205,16 @@ def coordinador_docentes_view(request):
         return err
 
     if request.method == "GET":
-        docentes = Docente.objects.select_related('tipo_documento').all()
+        detected_program = _infer_program_for_coordinador(coord)
+        if not detected_program:
+            return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+
+        docentes = (
+            Docente.objects
+            .select_related('tipo_documento')
+            .filter(asignatura__programa=detected_program)
+            .distinct()
+        )
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1016,7 +1381,14 @@ def coordinador_docente_perfil_view(request, id_docente: int):
     except Docente.DoesNotExist:
         return Response({"detail": "Docente no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
-    asignaturas = Asignatura.objects.filter(docente=docente).select_related('programa').order_by('codigo_asignatura')
+    detected_program = _infer_program_for_coordinador(coord)
+    if not detected_program:
+        return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
+
+    if not Asignatura.objects.filter(docente=docente, programa=detected_program).exists():
+        return Response({"detail": "Docente fuera del alcance de tu programa"}, status=status.HTTP_404_NOT_FOUND)
+
+    asignaturas = Asignatura.objects.filter(docente=docente, programa=detected_program).select_related('programa').order_by('codigo_asignatura')
 
     asignaturas_data = []
     total_estudiantes = 0
@@ -1064,7 +1436,7 @@ def coordinador_docente_perfil_view(request, id_docente: int):
 def coordinador_import_estudiantes_view(request):
     """Importa estudiantes desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
     Columnas mínimas requeridas: codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento
-    Opcionales: jornada, password (si no se provee se genera aleatoria).
+    Opcionales: jornada.
     Soporta: .csv, .xlsx, .xls
     Sinónimos aceptados:
       - codigo_estudiante | estudiante | codigo
@@ -1150,6 +1522,7 @@ def coordinador_import_estudiantes_view(request):
     imported_students = []
     max_rows = 5000
     to_create = []
+    bulk_password = _get_bulk_student_password()
     passwords_for_emails = []  # Lista paralela: (correo, nombre, apellido, codigo, password)
     
     # Helper function para acceder a columnas de pandas de forma segura
@@ -1181,7 +1554,6 @@ def coordinador_import_estudiantes_view(request):
         tipo_doc_id = get_col(row, "tipo_documento_id", "tipo_doc_id", "id tipo documento")
         num_documento = get_col(row, "num_documento", "documento", "doc_number", "numero documento", "nro documento", "cedula", "identificacion", "id number", "no. documento")
         jornada = get_col(row, "jornada", "turno", "shift")
-        raw_pass = get_col(row, "password", "contrasena_estudiante", "contraseña", "clave", "pass", "password estudiante")
         
         # Log de debug para primera fila - valores extraídos
         if idx == 0:
@@ -1203,7 +1575,6 @@ def coordinador_import_estudiantes_view(request):
         tipo_doc_desc = clean_val(tipo_doc_desc)
         num_documento = clean_val(num_documento, 20)
         jornada = clean_val(jornada, 50)
-        raw_pass = clean_val(raw_pass)
         
         # Debug específico para primera fila después de limpieza
         if idx == 0:
@@ -1261,9 +1632,8 @@ def coordinador_import_estudiantes_view(request):
         if num_documento in existing_estudiantes_docs:
             errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
         
-        # Generar contraseña si no viene
-        password = raw_pass or secrets.token_urlsafe(8)  # ~11 chars base64
-        hashed = make_password(password)
+        # Import masivo: usar contraseña genérica única para todos los estudiantes.
+        hashed = make_password(bulk_password)
         
         # Agregar a lista de creación
         to_create.append(Estudiante(
@@ -1285,15 +1655,14 @@ def coordinador_import_estudiantes_view(request):
             "correo": correo,
         })
         
-        # Guardar información para envío de correos (solo si es contraseña generada)
-        if not raw_pass:  # Solo enviamos correo si se generó la contraseña
-            passwords_for_emails.append({
-                'correo': correo,
-                'nombre': nombre,
-                'apellido': apellido,
-                'codigo': codigo,
-                'password': password
-            })
+        # Guardar información para envío de correos
+        passwords_for_emails.append({
+            'correo': correo,
+            'nombre': nombre,
+            'apellido': apellido,
+            'codigo': codigo,
+            'password': bulk_password
+        })
         
         # Marcar como existente para evitar duplicados en el mismo archivo
         existing_estudiantes_codigos.add(codigo)
@@ -1324,6 +1693,7 @@ def coordinador_import_estudiantes_view(request):
         "existing": existing,
         "errors": errors,
         "imported_students": imported_students,
+        "password_mode": "generic",
     }
     try:
         logger.info("import_estudiantes: %s", {
@@ -1352,7 +1722,11 @@ def coordinador_asignaturas_view(request):
     coord, err = _require_coordinador(request)
     if err:
         return err
-    qs = Asignatura.objects.select_related("docente", "programa")
+    qs = Asignatura.objects.select_related("docente", "programa", "periodo")
+    detected_program = _infer_program_for_coordinador(coord)
+    if detected_program:
+        qs = qs.filter(programa=detected_program)
+
     prog_code = request.query_params.get("programa")
     docente_code = request.query_params.get("docente")
     periodo_desc = request.query_params.get("periodo")
@@ -1361,7 +1735,7 @@ def coordinador_asignaturas_view(request):
     if docente_code:
         qs = qs.filter(docente__codigo_docente=docente_code)
     if periodo_desc:
-        qs = qs.filter(matricula__periodo__descripcion=periodo_desc).distinct()
+        qs = qs.filter(Q(periodo__descripcion=periodo_desc) | Q(matricula__periodo__descripcion=periodo_desc)).distinct()
     from django.db.models import Count
     page_size = int(request.query_params.get("page_size") or 20)
     page = int(request.query_params.get("page") or 1)
@@ -1383,7 +1757,9 @@ def coordinador_asignaturas_view(request):
             "codigo": a.codigo_asignatura,
             "nombre": a.nombre,
             "grupo": a.grupo,
+            "sede": a.sede,
             "creditos": getattr(a, "creditos", 0),
+            "periodo": getattr(getattr(a, "periodo", None), "descripcion", None),
             "programa": getattr(a.programa, "nombre", None),
             "programa_codigo": getattr(a.programa, "codigo_programa", None),
             "docente": getattr(a.docente, "nombre", None),
@@ -1489,14 +1865,29 @@ def coordinador_crear_asignatura_ra_view(request):
     nombre_asignatura = str(data.get("nombre_asignatura") or "").strip()
     codigo_docente = str(data.get("codigo_docente") or "").strip()
     codigo_programa = str(data.get("codigo_programa") or "").strip()
+    periodo_desc = str(data.get("periodo") or "").strip()
+    raw_creditos = data.get("creditos")
     grupo = str(data.get("grupo") or "").strip()
+    sede = str(data.get("sede") or "").strip()
     ras_input = data.get("ras") or []
 
-    if not (codigo_asignatura and nombre_asignatura and codigo_docente and codigo_programa and grupo):
+    if not (codigo_asignatura and nombre_asignatura and codigo_docente and periodo_desc and grupo and sede):
         return Response(
-            {"detail": "codigo_asignatura, nombre_asignatura, codigo_docente, codigo_programa y grupo son obligatorios"},
+            {"detail": "codigo_asignatura, nombre_asignatura, codigo_docente, periodo, grupo y sede son obligatorios"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    try:
+        creditos = int(raw_creditos)
+    except (TypeError, ValueError):
+        return Response({"detail": "creditos es obligatorio y debe ser un entero"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if creditos <= 0:
+        return Response({"detail": "creditos debe ser mayor que 0"}, status=status.HTTP_400_BAD_REQUEST)
+
+    periodo = PeriodoAcademico.objects.filter(descripcion=periodo_desc).first()
+    if not periodo:
+        return Response({"detail": f"Periodo no encontrado en BD: {periodo_desc}"}, status=status.HTTP_400_BAD_REQUEST)
 
     if not isinstance(ras_input, list):
         return Response({"detail": "ras debe ser una lista"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1505,9 +1896,18 @@ def coordinador_crear_asignatura_ra_view(request):
     if not docente:
         return Response({"detail": f"Docente no encontrado: {codigo_docente}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    programa = Programa.objects.filter(codigo_programa=codigo_programa).first()
+    # Detección automática basada en el coordinador autenticado.
+    programa = _infer_program_for_coordinador(coord)
+
+    # Fallback controlado: si no se detecta automáticamente, aceptar código explícito.
+    if not programa and codigo_programa:
+        programa = Programa.objects.filter(codigo_programa=codigo_programa).first()
+
     if not programa:
-        return Response({"detail": f"Programa no encontrado: {codigo_programa}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "No se pudo detectar automáticamente el programa del coordinador. Configura el perfil o envía codigo_programa válido."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Normalizar y validar RAs entrantes
     ras_normalizados = []
@@ -1634,6 +2034,8 @@ def coordinador_crear_asignatura_ra_view(request):
         asignatura = Asignatura.objects.select_related("docente", "programa").filter(
             codigo_asignatura=codigo_asignatura,
             grupo=grupo,
+            sede=sede,
+            periodo=periodo,
         ).first()
         asignatura_creada = False
         asignatura_actualizada = False
@@ -1644,7 +2046,10 @@ def coordinador_crear_asignatura_ra_view(request):
                 nombre=nombre_asignatura,
                 docente=docente,
                 programa=programa,
+                periodo=periodo,
                 grupo=grupo,
+                sede=sede,
+                creditos=creditos,
             )
             asignatura_creada = True
         else:
@@ -1655,8 +2060,14 @@ def coordinador_crear_asignatura_ra_view(request):
                 updates["docente"] = docente
             if asignatura.programa_id != programa.id_programa:
                 updates["programa"] = programa
+            if asignatura.periodo_id != periodo.id_periodo:
+                updates["periodo"] = periodo
             if asignatura.grupo != grupo:
                 updates["grupo"] = grupo
+            if asignatura.sede != sede:
+                updates["sede"] = sede
+            if int(getattr(asignatura, "creditos", 0) or 0) != creditos:
+                updates["creditos"] = creditos
 
             if updates:
                 for field, value in updates.items():
@@ -1754,7 +2165,10 @@ def coordinador_crear_asignatura_ra_view(request):
             "asignatura": {
                 "codigo": asignatura.codigo_asignatura,
                 "nombre": asignatura.nombre,
+                "periodo": getattr(asignatura.periodo, "descripcion", None),
                 "grupo": asignatura.grupo,
+                "sede": asignatura.sede,
+                "creditos": int(getattr(asignatura, "creditos", 0) or 0),
                 "programa_codigo": getattr(asignatura.programa, "codigo_programa", None),
                 "docente_codigo": getattr(asignatura.docente, "codigo_docente", None),
             },
@@ -1982,13 +2396,21 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
         ).get(id_estudiante=id_estudiante)
     except Estudiante.DoesNotExist:
         return Response({"detail": "Estudiante no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    detected_program = _infer_program_for_coordinador(coord)
+    if not detected_program:
+        return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
     
     # Obtener todas las matrículas del estudiante
     matriculas = Matricula.objects.filter(
-        estudiante=estudiante
+        estudiante=estudiante,
+        asignatura__programa=detected_program,
     ).select_related(
         'asignatura', 'asignatura__docente', 'asignatura__programa', 'periodo'
     ).order_by('-periodo__fecha_inicio')
+
+    if not matriculas.exists():
+        return Response({"detail": "Estudiante fuera del alcance de tu programa"}, status=status.HTTP_404_NOT_FOUND)
     
     # Obtener programa del estudiante (de su primera matrícula)
     programa_nombre = None
@@ -1996,6 +2418,18 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
         primera_mat = matriculas.first()
         if primera_mat and primera_mat.asignatura and primera_mat.asignatura.programa:
             programa_nombre = primera_mat.asignatura.programa.nombre
+
+    # Fallback: inferir programa desde código de estudiante (codigo-programa)
+    if not programa_nombre:
+        inferred_program = _student_program_from_code(estudiante.codigo_estudiante)
+        if inferred_program:
+            programa_nombre = inferred_program.nombre
+
+    # Fallback final: usar programa del coordinador que consulta
+    if not programa_nombre:
+        coord_program = _infer_program_for_coordinador(coord)
+        if coord_program:
+            programa_nombre = coord_program.nombre
     
     # Información personal
     info_personal = {
@@ -2146,12 +2580,13 @@ def coordinador_import_matriculados_view(request):
     """Importa matriculados desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
     Columnas mínimas requeridas: codigo_estudiante, periodo
     Si no se envían asignaturas seleccionadas en el formulario, también requiere codigo_asignatura.
-    Recomendado: incluir grupo para desambiguar asignaturas con mismo código.
+    Recomendado: incluir grupo y sede para desambiguar asignaturas con mismo código.
     Soporta: .csv, .xlsx, .xls
     Campos aceptados (sinónimos):
       - codigo_estudiante | estudiante | code
       - codigo_asignatura | asignatura | curso
             - grupo
+            - sede
       - periodo | periodo_academico
     """
     coord, err = _require_coordinador(request)
@@ -2183,7 +2618,7 @@ def coordinador_import_matriculados_view(request):
     
     # OPTIMIZACIÓN: Pre-cargar todos los datos en memoria
     estudiantes_map = {e.codigo_estudiante: e for e in Estudiante.objects.all()}
-    asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.all()}
+    asignaturas_map = {(a.codigo_asignatura, a.grupo, a.sede): a for a in Asignatura.objects.all()}
     asignaturas_por_codigo = {}
     for a in Asignatura.objects.all():
         asignaturas_por_codigo.setdefault(a.codigo_asignatura, []).append(a)
@@ -2239,12 +2674,14 @@ def coordinador_import_matriculados_view(request):
         cod_est = get_col(row, "codigo_estudiante", "estudiante", "code")
         cod_asig = get_col(row, "codigo_asignatura", "asignatura", "curso")
         grupo = get_col(row, "grupo")
+        sede = get_col(row, "sede")
         periodo_desc = get_col(row, "periodo", "periodo_academico")
         
         # Limpiar strings
         if cod_est: cod_est = str(cod_est).strip()[:50]
         if cod_asig: cod_asig = str(cod_asig).strip()[:50]
         if grupo: grupo = str(grupo).strip()[:20]
+        if sede: sede = str(sede).strip()[:80]
         if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
         
         requires_asignatura_in_file = not selected_asignaturas
@@ -2265,17 +2702,17 @@ def coordinador_import_matriculados_view(request):
             row_asignaturas = selected_asignaturas
         else:
             asig = None
-            if grupo:
-                asig = asignaturas_map.get((cod_asig, grupo))
+            if grupo and sede:
+                asig = asignaturas_map.get((cod_asig, grupo, sede))
             else:
                 candidatos = asignaturas_por_codigo.get(cod_asig, [])
                 if len(candidatos) == 1:
                     asig = candidatos[0]
                 elif len(candidatos) > 1:
-                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo."})
+                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo y sede."})
                     continue
             if not asig:
-                detalle = f"{cod_asig} grupo {grupo}" if grupo else cod_asig
+                detalle = f"{cod_asig} grupo {grupo} sede {sede}" if (grupo or sede) else cod_asig
                 errors.append({"row": row_num, "error": f"Asignatura no encontrada: {detalle}"})
                 continue
             row_asignaturas = [asig]
@@ -2305,6 +2742,7 @@ def coordinador_import_matriculados_view(request):
                 "asignatura_nombre": asig.nombre,
                 "asignatura_codigo": asig.codigo_asignatura,
                 "grupo": asig.grupo,
+                "sede": asig.sede,
                 "periodo": per.descripcion,
                 "programa": getattr(asig.programa, "nombre", None),
                 "docente": f"{getattr(asig.docente, 'nombre', '')} {getattr(asig.docente, 'apellido', '')}".strip(),
@@ -2902,7 +3340,7 @@ def coordinador_import_docentes_view(request):
 @authentication_classes([])
 def coordinador_import_asignaturas_ras_view(request):
     """Importa asignaturas y RAs desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
-    Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa, grupo
+    Columnas mínimas asignatura: codigo_asignatura, nombre_asignatura|nombre, codigo_docente, codigo_programa, periodo, grupo, sede, creditos
     Columnas RA opcionales (si presentes se crea RA): ra_descripcion, ra_porcentaje
         Columnas de indicador opcionales: indicador_descripcion, indicador_porcentaje
     Soporta: .csv, .xlsx, .xls
@@ -2911,6 +3349,8 @@ def coordinador_import_asignaturas_ras_view(request):
       - nombre_asignatura | nombre | nombre_curso
       - codigo_docente | docente
       - codigo_programa | programa
+            - periodo | periodo_academico
+            - creditos | credito
       - ra_descripcion | ra_desc | descripcion_ra
       - ra_porcentaje | ra_pct | porcentaje_ra
             - indicador_descripcion | il_descripcion | descripcion_indicador | indicador
@@ -2947,12 +3387,13 @@ def coordinador_import_asignaturas_ras_view(request):
     # OPTIMIZACIÓN: Pre-cargar datos existentes
     docentes_map = {d.codigo_docente: d for d in Docente.objects.all()}
     programas_map = {p.codigo_programa: p for p in Programa.objects.all()}
-    asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+    periodos_map = {p.descripcion: p for p in PeriodoAcademico.objects.all()}
+    asignaturas_map = {(a.codigo_asignatura, a.grupo, a.sede, a.periodo_id): a for a in Asignatura.objects.select_related('docente', 'programa', 'periodo').all()}
     
     # Calcular sumas de porcentajes de RAs por asignatura
     ra_sumas = {}
-    for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura', 'asignatura__grupo').annotate(suma=Sum('porcentaje_ra')):
-        ra_sumas[(ra['asignatura__codigo_asignatura'], ra['asignatura__grupo'])] = float(ra['suma'] or 0)
+    for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura', 'asignatura__grupo', 'asignatura__sede', 'asignatura__periodo_id').annotate(suma=Sum('porcentaje_ra')):
+        ra_sumas[(ra['asignatura__codigo_asignatura'], ra['asignatura__grupo'], ra['asignatura__sede'], ra['asignatura__periodo_id'])] = float(ra['suma'] or 0)
     
     created_asig = 0
     existing_asig = 0
@@ -2987,7 +3428,10 @@ def coordinador_import_asignaturas_ras_view(request):
         nombre = get_col(row, "nombre_asignatura", "nombre", "nombre_curso")
         codigo_doc = get_col(row, "codigo_docente", "docente")
         codigo_prog = get_col(row, "codigo_programa", "programa")
+        periodo_desc = get_col(row, "periodo", "periodo_academico")
+        raw_creditos = get_col(row, "creditos", "credito")
         grupo = get_col(row, "grupo")
+        sede = get_col(row, "sede")
         ra_desc = get_col(row, "ra_descripcion", "ra_desc", "descripcion_ra")
         raw_pct = get_col(row, "ra_porcentaje", "ra_pct", "porcentaje_ra")
         ind_desc = get_col(row, "indicador_descripcion", "il_descripcion", "descripcion_indicador", "indicador", "il_desc")
@@ -2998,11 +3442,13 @@ def coordinador_import_asignaturas_ras_view(request):
         if nombre: nombre = str(nombre).strip()[:200]
         if codigo_doc: codigo_doc = str(codigo_doc).strip()[:50]
         if codigo_prog: codigo_prog = str(codigo_prog).strip()[:50]
+        if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
         if grupo: grupo = str(grupo).strip()[:20]
+        if sede: sede = str(sede).strip()[:80]
         if ra_desc: ra_desc = str(ra_desc).strip()[:255]
         if ind_desc: ind_desc = str(ind_desc).strip()[:255]
         
-        if not (codigo and nombre and codigo_doc and codigo_prog and grupo):
+        if not (codigo and nombre and codigo_doc and codigo_prog and periodo_desc and grupo and sede and raw_creditos is not None and str(raw_creditos).strip() != ""):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas asignatura"}); continue
         
         docente = docentes_map.get(codigo_doc)
@@ -3012,19 +3458,34 @@ def coordinador_import_asignaturas_ras_view(request):
         programa = programas_map.get(codigo_prog)
         if not programa:
             errors.append({"row": row_num, "error": f"Programa no encontrado: {codigo_prog}"}); continue
+
+        periodo = periodos_map.get(periodo_desc)
+        if not periodo:
+            errors.append({"row": row_num, "error": f"Periodo no encontrado: {periodo_desc}"}); continue
+
+        try:
+            creditos = int(raw_creditos)
+        except (TypeError, ValueError):
+            errors.append({"row": row_num, "error": f"creditos inválido: {raw_creditos}"}); continue
+
+        if creditos <= 0:
+            errors.append({"row": row_num, "error": f"creditos debe ser mayor que 0: {creditos}"}); continue
         
         # Verificar si asignatura existe
-        asig_key = (codigo, grupo)
+        asig_key = (codigo, grupo, sede, periodo.id_periodo)
         asign = asignaturas_map.get(asig_key)
         if not asign:
             # Verificar si ya la vamos a crear en este batch
-            if asig_key not in [(a.codigo_asignatura, a.grupo) for a in asignaturas_to_create]:
+            if asig_key not in [(a.codigo_asignatura, a.grupo, a.sede, a.periodo_id) for a in asignaturas_to_create]:
                 asignaturas_to_create.append(Asignatura(
                     nombre=nombre,
                     codigo_asignatura=codigo,
                     docente=docente,
+                    periodo=periodo,
                     grupo=grupo,
-                    programa=programa
+                    sede=sede,
+                    programa=programa,
+                    creditos=creditos,
                 ))
                 asignaturas_map[asig_key] = None  # Marcador temporal
                 created_asig += 1
@@ -3036,6 +3497,15 @@ def coordinador_import_asignaturas_ras_view(request):
             updates = {}
             if nombre and asign.nombre != nombre:
                 updates['nombre'] = nombre
+                changed = True
+            if asign.docente_id != docente.id_docente:
+                updates['docente_id'] = docente.id_docente
+                changed = True
+            if asign.programa_id != programa.id_programa:
+                updates['programa_id'] = programa.id_programa
+                changed = True
+            if int(getattr(asign, 'creditos', 0) or 0) != creditos:
+                updates['creditos'] = creditos
                 changed = True
             if changed:
                 asignaturas_to_update[asig_key] = updates
@@ -3049,7 +3519,7 @@ def coordinador_import_asignaturas_ras_view(request):
             if pct < 0 or pct > 100:
                 errors.append({"row": idx, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
 
-            ra_key = (codigo, grupo, ra_desc.lower())
+            ra_key = (codigo, grupo, sede, periodo.id_periodo, ra_desc.lower())
             ra_entry = ra_entries.get(ra_key)
 
             if not ra_entry:
@@ -3061,6 +3531,8 @@ def coordinador_import_asignaturas_ras_view(request):
                 ra_entry = {
                     'codigo_asignatura': codigo,
                     'grupo': grupo,
+                    'sede': sede,
+                    'periodo_id': periodo.id_periodo,
                     'descripcion': ra_desc,
                     'porcentaje': pct,
                     'indicadores': [],
@@ -3111,6 +3583,8 @@ def coordinador_import_asignaturas_ras_view(request):
             ras_pendientes.append({
                 'codigo_asignatura': entry['codigo_asignatura'],
                 'grupo': entry['grupo'],
+                'sede': entry['sede'],
+                'periodo_id': entry['periodo_id'],
                 'descripcion': entry['descripcion'],
                 'porcentaje': entry['porcentaje'],
                 'indicadores': entry['indicadores'],
@@ -3122,7 +3596,7 @@ def coordinador_import_asignaturas_ras_view(request):
             with transaction.atomic():
                 Asignatura.objects.bulk_create(asignaturas_to_create, batch_size=500)
                 # Recargar mapa de asignaturas con las recién creadas
-                asignaturas_map = {(a.codigo_asignatura, a.grupo): a for a in Asignatura.objects.select_related('docente', 'programa').all()}
+                asignaturas_map = {(a.codigo_asignatura, a.grupo, a.sede, a.periodo_id): a for a in Asignatura.objects.select_related('docente', 'programa', 'periodo').all()}
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva de asignaturas: {str(e)}"})
             created_asig = 0
@@ -3131,8 +3605,8 @@ def coordinador_import_asignaturas_ras_view(request):
     # Actualizar asignaturas existentes
     if asignaturas_to_update:
         try:
-            for (codigo, grupo), updates in asignaturas_to_update.items():
-                Asignatura.objects.filter(codigo_asignatura=codigo, grupo=grupo).update(**updates)
+            for (codigo, grupo, sede, periodo_id), updates in asignaturas_to_update.items():
+                Asignatura.objects.filter(codigo_asignatura=codigo, grupo=grupo, sede=sede, periodo_id=periodo_id).update(**updates)
         except Exception:
             pass
     
@@ -3141,7 +3615,7 @@ def coordinador_import_asignaturas_ras_view(request):
         try:
             ra_meta = []
             for ra_data in ras_pendientes:
-                asign = asignaturas_map.get((ra_data['codigo_asignatura'], ra_data['grupo']))
+                asign = asignaturas_map.get((ra_data['codigo_asignatura'], ra_data['grupo'], ra_data['sede'], ra_data['periodo_id']))
                 if asign:
                     ra_obj = ResultadoDeAprendizaje(
                         asignatura=asign,
@@ -4280,6 +4754,9 @@ def course_student_indicators_view(request, codigo_asignatura: str, id_estudiant
     asignatura = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
     if not asignatura:
         return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
+    _, auth_err = _require_asignatura_access(request, asignatura, id_estudiante=id_estudiante)
+    if auth_err:
+        return auth_err
     mat = Matricula.objects.filter(asignatura=asignatura, estudiante_id=id_estudiante).order_by("-id_matricula").first()
     if not mat:
         return Response([], status=status.HTTP_200_OK)
@@ -4335,6 +4812,9 @@ def course_grade_view(request, codigo_asignatura: str, id_estudiante: int):
     asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
     if not asig:
         return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
+    _, auth_err = _require_asignatura_access(request, asig, id_estudiante=id_estudiante)
+    if auth_err:
+        return auth_err
 
     mat = (Matricula.objects
            .filter(asignatura=asig, estudiante_id=id_estudiante)
@@ -4427,9 +4907,12 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
     - Estadísticas del curso (promedio, desviación)
     - Lista de RAs con progreso
     """
-    asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).select_related("docente", "programa").first()
+    asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).select_related("docente", "programa", "periodo").first()
     if not asig:
         return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
+    _, auth_err = _require_asignatura_access(request, asig, id_estudiante=id_estudiante)
+    if auth_err:
+        return auth_err
 
     # Verificar matrícula del estudiante
     mat = (Matricula.objects
@@ -4446,14 +4929,15 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
         "codigo": asig.codigo_asignatura,
         "nombre": asig.nombre,
         "grupo": asig.grupo,
-        "creditos": None,  # Campo no disponible en el modelo
+        "sede": asig.sede,
+        "creditos": int(getattr(asig, "creditos", 0) or 0),
         "programa": {
             "codigo": asig.programa.codigo_programa if asig.programa else None,
             "nombre": asig.programa.nombre if asig.programa else None,
         },
         "periodo": {
-            "id": mat.periodo.id_periodo if mat.periodo else None,
-            "descripcion": mat.periodo.descripcion if mat.periodo else None,
+            "id": asig.periodo.id_periodo if asig.periodo else (mat.periodo.id_periodo if mat.periodo else None),
+            "descripcion": asig.periodo.descripcion if asig.periodo else (mat.periodo.descripcion if mat.periodo else None),
         },
     }
 
@@ -4598,13 +5082,27 @@ def course_analytics_view(request, codigo_asignatura: str):
     - Lista de RAs con promedios generales
     - Lista de estudiantes con sus notas
     """
+    id_asignatura = request.query_params.get("id_asignatura")
+    grupo = (request.query_params.get("grupo") or "").strip()
+    sede = (request.query_params.get("sede") or "").strip()
+
     # Obtener asignatura con optimización de queries
-    asig = Asignatura.objects.filter(
+    asig_qs = Asignatura.objects.filter(
         codigo_asignatura=codigo_asignatura
     ).select_related(
         "docente", 
-        "programa"
-    ).first()
+        "programa",
+        "periodo"
+    )
+
+    if id_asignatura:
+        asig_qs = asig_qs.filter(id_asignatura=id_asignatura)
+    if grupo:
+        asig_qs = asig_qs.filter(grupo=grupo)
+    if sede:
+        asig_qs = asig_qs.filter(sede=sede)
+
+    asig = asig_qs.first()
     
     if not asig:
         return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
@@ -4616,17 +5114,15 @@ def course_analytics_view(request, codigo_asignatura: str):
                     .order_by("-periodo__id_periodo")
                     .first())
     
-    if not mat_reciente:
-        return Response({"detail": "Sin matrículas para esta asignatura"}, status=status.HTTP_404_NOT_FOUND)
-
-    periodo = mat_reciente.periodo
+    periodo = asig.periodo or (mat_reciente.periodo if mat_reciente else None)
 
     # Información básica de la asignatura
     asignatura_info = {
         "codigo": asig.codigo_asignatura,
         "nombre": asig.nombre,
         "grupo": asig.grupo,
-        "creditos": None,  # Campo no disponible en el modelo
+        "sede": asig.sede,
+        "creditos": int(getattr(asig, "creditos", 0) or 0),
         "programa": {
             "codigo": asig.programa.codigo_programa if asig.programa else None,
             "nombre": asig.programa.nombre if asig.programa else None,
@@ -4647,10 +5143,9 @@ def course_analytics_view(request, codigo_asignatura: str):
         }
 
     # Optimización: Traer todas las matrículas con estudiantes en una sola query
-    matriculas_curso = Matricula.objects.filter(
-        asignatura=asig, 
-        periodo=periodo
-    ).select_related("estudiante")
+    matriculas_curso = Matricula.objects.filter(asignatura=asig).select_related("estudiante")
+    if periodo:
+        matriculas_curso = matriculas_curso.filter(periodo=periodo)
     total_estudiantes = matriculas_curso.count()
 
     # Optimización: Prefetch RAs con todas sus relaciones
@@ -5420,8 +5915,18 @@ def course_activities_grouped_view(request, codigo_asignatura: str):
     asig = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
     if not asig:
         return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    auth_ctx, auth_err = _require_asignatura_access(request, asig)
+    if auth_err:
+        return auth_err
     
     id_matricula = request.query_params.get("id_matricula")
+    if id_matricula:
+        mat_qs = Matricula.objects.filter(id_matricula=id_matricula, asignatura=asig)
+        if auth_ctx and auth_ctx.get("rol") == "estudiante":
+            mat_qs = mat_qs.filter(estudiante_id=auth_ctx.get("id"))
+        if not mat_qs.exists():
+            return Response({"detail": "Matrícula no válida para esta asignatura"}, status=status.HTTP_403_FORBIDDEN)
     
     # Obtener todas las relaciones RA-Actividad de esta asignatura
     rels = (RaActividad.objects

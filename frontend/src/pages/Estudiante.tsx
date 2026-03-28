@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
@@ -10,12 +11,10 @@ import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeS
 import GradeSummary from '@/components/GradeSummary'
 import { getProfile, getFullProfile } from '@/services/auth'
 import { SkeletonCard } from '@/components/Skeleton'
-import { useSession } from '@/state/SessionContext'
 
 const Estudiante: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { state } = useSession()
   const [courses, setCourses] = useState<Course[]>([])
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<Course | null>(null)
@@ -282,6 +281,34 @@ const Estudiante: React.FC = () => {
     ? 'Tareas'
     : 'Mis cursos'
 
+  const breadcrumbItems = selectedGroupedActivity && selected
+    ? [
+        { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+        { label: 'Mis cursos', to: '/estudiante?view=cursos' },
+        { label: selected.nombre },
+        { label: selectedGroupedActivity.nombre_actividad },
+      ]
+    : selected
+    ? [
+        { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+        { label: 'Mis cursos', to: '/estudiante?view=cursos' },
+        { label: selected.nombre },
+      ]
+    : view === 'tareas'
+    ? [
+        { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+        { label: 'Tareas' },
+      ]
+    : view === 'recursos'
+    ? [
+        { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+        { label: 'Recursos' },
+      ]
+    : [
+        { label: 'Inicio Estudiante', to: '/estudiante/inicio' },
+        { label: 'Mis cursos' },
+      ]
+
   const filteredCourses = courses.filter(
     (c) => !filter || c.id.toUpperCase().includes(filter.toUpperCase()) || c.carrera.toUpperCase().includes(filter.toUpperCase())
   )
@@ -338,6 +365,7 @@ const Estudiante: React.FC = () => {
           items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Mis cursos'},{key:'tareas',icon:'bi-journal-text',title:'Tareas'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs items={breadcrumbItems} onNavigate={navigate} />
           <div className="content-title">
             {view === 'cursos' && !selected && <i className="bi bi-book text-primary me-2"></i>}
             {view === 'tareas' && <i className="bi bi-list-check text-warning me-2"></i>}
@@ -358,18 +386,11 @@ const Estudiante: React.FC = () => {
           {/* Cursos */}
           {!selected && !selectedGroupedActivity && view === 'cursos' && (
             <section className="panel shown">
-              <section className="card shadow-sm border-0 mb-3">
-                <div className="card-body">
-                  <h5 className="mb-2">Bienvenido, {state.name || 'Estudiante'}! 👋</h5>
-                  <p className="text-muted mb-3">En tu módulo puedes revisar tus cursos, tareas pendientes y los recursos compartidos por tus docentes.</p>
-                  <div className="d-flex flex-wrap gap-2">
-                    <span className="badge text-bg-light border"><i className="bi bi-grid-3x3-gap me-1"></i>Explorar tus cursos por periodo</span>
-                    <span className="badge text-bg-light border"><i className="bi bi-journal-text me-1"></i>Ver tareas y fechas límite</span>
-                    <span className="badge text-bg-light border"><i className="bi bi-paperclip me-1"></i>Acceder a recursos y anuncios</span>
-                  </div>
-                </div>
-              </section>
               <SearchPill icon="bi-search" placeholder="Filtrar por código de carrera" value={filter} onChange={setFilter} />
+              <div className="alert alert-info d-flex align-items-center py-2" role="note">
+                <i className="bi bi-mouse2 me-2"></i>
+                En cursos: clic abre el curso y doble clic abre el detalle de la materia.
+              </div>
               {err && (
                 <div className="alert alert-danger d-flex align-items-center">
                   <i className="bi bi-exclamation-triangle-fill me-2"></i>
@@ -523,7 +544,7 @@ const Estudiante: React.FC = () => {
                       </div>
                     </div>
                     <input
-                      className="form-control w-240px"
+                      className="form-control sched-search-input"
                       placeholder="Buscar por tipo o nombre de actividad"
                       value={schedQuery}
                       onChange={e=>setSchedQuery(e.target.value)}
@@ -639,7 +660,7 @@ const Estudiante: React.FC = () => {
                       </div>
                     </div>
                     <input
-                      className="form-control w-240px"
+                      className="form-control sched-search-input"
                       placeholder="Buscar por tipo o nombre de actividad"
                       value={schedQuery}
                       onChange={e=>setSchedQuery(e.target.value)}
@@ -1180,6 +1201,10 @@ const Estudiante: React.FC = () => {
                             <h5 className="mb-0">{curso.nombre}</h5>
                             <span className="badge bg-light text-dark">{rc.items.length} documento{rc.items.length !== 1 ? 's' : ''}</span>
                           </div>
+                          <div className="small text-muted mb-2">
+                            <i className="bi bi-mouse2 me-1"></i>
+                            Doble clic sobre un documento para abrirlo en una nueva pestaña.
+                          </div>
                           
                           <ul className="list-group ra-list-group">
                             {rc.items.map((r: { id: string; titulo: string; url: string; fecha: string }) => (
@@ -1187,6 +1212,7 @@ const Estudiante: React.FC = () => {
                                 key={r.id}
                                 className="list-group-item shadow-sm d-flex justify-content-between align-items-center"
                                 onDoubleClick={() => window.open(r.url, '_blank')}
+                                title="Doble clic para abrir documento"
                               >
                                 <div>
                                   <div className="d-flex align-items-center gap-2">

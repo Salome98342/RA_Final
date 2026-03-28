@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { getAnunciosByCourse, createAnuncio, deleteAnuncio, type Anuncio } from '@/services/api'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
@@ -117,14 +118,30 @@ const DocenteRecursos: React.FC = () => {
       <div className="dash-wrapper">
         <Sidebar
           active="recursos"
-          onClick={(k) => { if (k === 'inicio') navigate('/docente/inicio'); if (k === 'cursos') navigate('/docente/cursos') }}
+          onClick={(k) => {
+            if (k === 'inicio') navigate('/docente/inicio')
+            if (k === 'cursos') navigate('/docente/cursos')
+            if (k === 'crear' && curso) navigate(`/docente/${curso}/actividades/nueva`)
+            if (k === 'calificar' && curso) navigate(`/docente/${curso}/calificar`)
+            if (k === 'recursos' && curso) navigate(`/docente/${curso}/recursos`)
+          }}
           items={[
             { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
             { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
+            { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
+            { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
             { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
           ]}
         />
         <main className="dash-content">
+          <ModuleBreadcrumbs
+            items={[
+              { label: 'Inicio Docente', to: '/docente/inicio' },
+              { label: 'Cursos', to: '/docente/cursos' },
+              { label: 'Recursos' },
+            ]}
+            onNavigate={navigate}
+          />
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div className="content-title">Recursos · {curso}</div>
             {state.role === 'coordinador' && (

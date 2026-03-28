@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
+import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
@@ -263,12 +264,49 @@ const Docente: React.FC = () => {
     (c) => !filter || c.id.toUpperCase().includes(filter.toUpperCase()) || c.carrera.toUpperCase().includes(filter.toUpperCase())
   )
 
+  const breadcrumbItems = view === 'estudiantes'
+    ? [
+        { label: 'Inicio Docente', to: 'inicio' },
+        { label: 'Cursos', to: 'cursos' },
+        { label: 'Estudiantes' },
+      ]
+    : view === 'ra' && selectedRA
+    ? [
+        { label: 'Inicio Docente', to: 'inicio' },
+        { label: 'Cursos', to: 'cursos' },
+        { label: selectedCurso || 'Curso', to: 'ra' },
+        { label: selectedRA.titulo || 'RA' },
+      ]
+    : view === 'ra'
+    ? [
+        { label: 'Inicio Docente', to: 'inicio' },
+        { label: 'Cursos', to: 'cursos' },
+        { label: selectedCurso || 'Curso' },
+      ]
+    : [
+        { label: 'Inicio Docente' },
+      ]
+
+  const onBreadcrumbNavigate = (to: string) => {
+    if (to === 'inicio' || to === 'cursos') {
+      setView('cursos')
+      if (to === 'inicio') {
+        setSelectedRA(null)
+      }
+      return
+    }
+    if (to === 'ra' && selectedCurso) {
+      setView('ra')
+    }
+  }
+
   return (
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Docente" />
       <div className="dash-wrapper">
         <Sidebar active={view === 'cursos' ? 'inicio' : view === 'ra' ? 'crear' : 'listar'} onClick={onSidebarClick} items={items} />
         <main className="dash-content">
+          <ModuleBreadcrumbs items={breadcrumbItems} onNavigate={onBreadcrumbNavigate} />
           {errorMsg && (
             <div className="alert alert-danger d-flex justify-content-between align-items-center mb-3" role="alert">
               <span>{errorMsg}</span>
