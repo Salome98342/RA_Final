@@ -614,11 +614,13 @@ const DocenteCalificar: React.FC = () => {
     { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
     { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
     { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
-  ]), [])
+    ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
+  ]), [state.role])
 
   const onSidebarClick = async (key: string) => {
     if (key === 'inicio') { navigate('/docente/inicio'); return }
     if (key === 'cursos') { navigate('/docente/cursos'); return }
+    if (key === 'volver-coordinador') { navigate('/coordinador/asignaturas'); return }
     if (key === 'crear') { if (curso) navigate(`/docente/${curso}/actividades/nueva`); return }
     if (key === 'recursos') { if (curso) navigate(`/docente/${curso}/recursos`); return }
     if (key === 'calificar') {
@@ -658,7 +660,7 @@ const DocenteCalificar: React.FC = () => {
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary"
-                onClick={() => navigate('/coordinador/materias')}
+                onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>
@@ -706,7 +708,7 @@ const DocenteCalificar: React.FC = () => {
                     <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
                       <i className="bi bi-download me-1" aria-hidden /> CSV (est.)
                     </button>
-                    <button className="btn btn-sm btn-outline-info shadow-sm" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
+                    <button className="btn btn-sm btn-outline-danger shadow-sm" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
                       <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
                       {showChart ? 'Ocultar' : 'Progreso'}
                     </button>

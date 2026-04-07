@@ -35,6 +35,7 @@ const Estudiante: React.FC = () => {
   const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, import('@/types').GradeSummaryResponse>>({})
   // Cronograma (notificaciones abajo)
   const [schedQuery, setSchedQuery] = useState('')
+  const [schedFilter, setSchedFilter] = useState<'todas'|'pendientes'|'vencidas'>('todas')
   const [schedOrder, setSchedOrder] = useState<'fecha'|'curso'|'nombre'>('fecha')
 
   // UI filtros/orden para actividades
@@ -51,7 +52,7 @@ const Estudiante: React.FC = () => {
 
   // Función para navegar al detalle de curso
   const openCourseDetail = (course: Course) => {
-    navigate(`/estudiante/materias/${course.codigo || course.id}/detalle`)
+    navigate(`/estudiante/asignaturas/${course.codigo || course.id}/detalle`)
   }
 
   // ESC para volver atrás
@@ -330,6 +331,7 @@ const Estudiante: React.FC = () => {
   const filteredCurrent = groups ? filteredCourses.filter(c => currentCodes.has(c.id)) : filteredCourses
   const filteredMap = new Map(filteredCourses.map(c => [c.id, c]))
   const previousGroups = groups ? groups.filter(g => currentPeriodId == null || Number(g.periodo.id) !== Number(currentPeriodId)) : []
+  const sidebarItems = [{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Mis cursos'},{key:'tareas',icon:'bi-journal-text',title:'Tareas'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]
 
   // Filtros y orden para actividades
   const now = new Date()
@@ -362,13 +364,13 @@ const Estudiante: React.FC = () => {
             if (key === 'tareas') { setView('tareas'); setSearchParams({ view: 'tareas' }); return }
             if (key === 'recursos') { setView('recursos'); setSearchParams({ view: 'recursos' }); return }
           }}
-          items={[{key:'inicio',icon:'bi-house-door',title:'Inicio'},{key:'cursos',icon:'bi-grid-3x3-gap',title:'Mis cursos'},{key:'tareas',icon:'bi-journal-text',title:'Tareas'},{key:'recursos',icon:'bi-paperclip',title:'Recursos'}]}
+          items={sidebarItems}
         />
         <main className="dash-content">
           <ModuleBreadcrumbs items={breadcrumbItems} onNavigate={navigate} />
           <div className="content-title">
-            {view === 'cursos' && !selected && <i className="bi bi-book text-primary me-2"></i>}
-            {view === 'tareas' && <i className="bi bi-list-check text-warning me-2"></i>}
+            {view === 'cursos' && !selected && <i className="bi bi-grid-3x3-gap text-primary me-2"></i>}
+            {view === 'tareas' && <i className="bi bi-journal-text text-warning me-2"></i>}
             {selected && !selectedGroupedActivity && <i className="bi bi-clipboard-check text-info me-2"></i>}
             {selectedGroupedActivity && <i className="bi bi-file-earmark-text text-danger me-2"></i>}
             {title}
@@ -405,9 +407,9 @@ const Estudiante: React.FC = () => {
                 <>
                   {groups && groups.length > 0 ? (
                     <>
-                      <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del periodo actual">
+                      <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del período actual">
                         <i className="bi bi-calendar-check text-success"></i>
-                        <span className="fw-bold">Periodo actual</span>
+                        <span className="fw-bold">Período actual</span>
                         {filteredCurrent.length > 0 && (
                           <span className="badge bg-success rounded-pill">{filteredCurrent.length}</span>
                         )}
@@ -416,7 +418,7 @@ const Estudiante: React.FC = () => {
                         {filteredCurrent.length === 0 ? (
                           <div className="alert alert-info d-flex align-items-center">
                             <i className="bi bi-info-circle me-2"></i>
-                            Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
+                            Sin cursos en el período actual{filter ? ' (filtro aplicado)' : ''}.
                           </div>
                         ) : (
                           filteredCurrent.map((c, idx) => {
@@ -435,14 +437,14 @@ const Estudiante: React.FC = () => {
                           })
                         )}
                       </CardGrid>
-                      <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
+                      <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de períodos anteriores">
                         <i className="bi bi-clock-history text-muted"></i>
-                        <span className="fw-bold">Periodos anteriores</span>
+                        <span className="fw-bold">Períodos anteriores</span>
                       </div>
                       {previousGroups.length === 0 ? (
                         <div className="alert alert-secondary d-flex align-items-center">
                           <i className="bi bi-inbox me-2"></i>
-                          Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.
+                          Sin cursos en períodos anteriores{filter ? ' (filtro aplicado)' : ''}.
                         </div>
                       ) : (
                         previousGroups.map(pg => {
@@ -450,7 +452,7 @@ const Estudiante: React.FC = () => {
                             .map(c => filteredMap.get(c.codigo))
                             .filter((x): x is Course => Boolean(x))
                           return (
-                            <section key={pg.periodo.id} className="mb-3" aria-label={`Periodo ${pg.periodo.descripcion}`}>
+                            <section key={pg.periodo.id} className="mb-3" aria-label={`Período ${pg.periodo.descripcion}`}>
                               <div className="d-flex align-items-center gap-2 mb-2">
                                 <i className="bi bi-calendar2 text-muted ra-small"></i>
                                 <span className="ra-small text-muted fw-semibold">{pg.periodo.descripcion}</span>
@@ -529,9 +531,13 @@ const Estudiante: React.FC = () => {
                   <div className="d-flex align-items-center justify-content-between mb-3">
                     <div className="d-flex align-items-center gap-2">
                       <div className="dropdown">
-                        <button className="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">Todos</button>
+                        <button className="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                          {schedFilter === 'todas' ? 'Todos' : schedFilter === 'pendientes' ? 'Pendientes' : 'Vencidas'}
+                        </button>
                         <ul className="dropdown-menu">
-                          <li><button className="dropdown-item" type="button">Todos</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('todas')}>Todos</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('pendientes')}>Pendientes</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('vencidas')}>Vencidas</button></li>
                         </ul>
                       </div>
                       <div className="dropdown">
@@ -554,6 +560,12 @@ const Estudiante: React.FC = () => {
 
                   {(() => {
                   const list = tasks
+                    .filter(t => {
+                      if (schedFilter === 'todas') return true
+                      const due = t.fechaCierre ? new Date(t.fechaCierre) : null
+                      const vencida = due ? due.getTime() < now.getTime() : false
+                      return schedFilter === 'vencidas' ? vencida : !vencida
+                    })
                     .filter(t => !schedQuery || t.nombre.toLowerCase().includes(schedQuery.toLowerCase()) || t.courseName.toLowerCase().includes(schedQuery.toLowerCase()))
                     .slice()
                     .sort((a,b) => {
@@ -628,7 +640,7 @@ const Estudiante: React.FC = () => {
             </section>
           )}
 
-          {/* Tareas pendientes (todas las materias) con formato Cronograma */}
+          {/* Tareas pendientes (todas las asignaturas) con formato Cronograma */}
           {!selected && !selectedGroupedActivity && view === 'tareas' && (
             <section className="panel shown">
               <div className="card sched-card shadow-sm">
@@ -643,9 +655,13 @@ const Estudiante: React.FC = () => {
                   <div className="d-flex align-items-center justify-content-between mb-3">
                     <div className="d-flex align-items-center gap-2">
                       <div className="dropdown">
-                        <button className="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">Todos</button>
+                        <button className="btn btn-outline-danger dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                          {schedFilter === 'todas' ? 'Todos' : schedFilter === 'pendientes' ? 'Pendientes' : 'Vencidas'}
+                        </button>
                         <ul className="dropdown-menu">
-                          <li><button className="dropdown-item" type="button">Todos</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('todas')}>Todos</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('pendientes')}>Pendientes</button></li>
+                          <li><button className="dropdown-item" type="button" onClick={()=>setSchedFilter('vencidas')}>Vencidas</button></li>
                         </ul>
                       </div>
                       <div className="dropdown">
@@ -670,6 +686,12 @@ const Estudiante: React.FC = () => {
 
                   {(() => {
                   const list = tasks
+                    .filter(t => {
+                      if (schedFilter === 'todas') return true
+                      const due = t.fechaCierre ? new Date(t.fechaCierre) : null
+                      const vencida = due ? due.getTime() < now.getTime() : false
+                      return schedFilter === 'vencidas' ? vencida : !vencida
+                    })
                     .filter(t => !schedQuery || t.nombre.toLowerCase().includes(schedQuery.toLowerCase()) || t.courseName.toLowerCase().includes(schedQuery.toLowerCase()))
                     .slice()
                     .sort((a,b) => {

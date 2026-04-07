@@ -188,20 +188,20 @@ const MateriaDetalle = () => {
                 </h6>
                 <div className="row g-3">
                   <div className="col-md-4">
-                    <div className="text-center p-3 bg-primary bg-opacity-10 rounded">
-                      <div className="display-6 mb-2 text-primary fw-bold">{mi_estadistica.nota_progressive}</div>
+                    <div className="text-center p-3 rounded md-metric-card md-metric-card--progressive">
+                      <div className="display-6 mb-2 fw-bold md-metric-value">{mi_estadistica.nota_progressive}</div>
                       <small className="text-muted">Nota Progresiva</small>
                     </div>
                   </div>
                   <div className="col-md-4">
-                    <div className="text-center p-3 bg-success bg-opacity-10 rounded">
-                      <div className="display-6 mb-2 text-success fw-bold">{mi_estadistica.coverage}%</div>
+                    <div className="text-center p-3 rounded md-metric-card md-metric-card--coverage">
+                      <div className="display-6 mb-2 fw-bold md-metric-value">{mi_estadistica.coverage}%</div>
                       <small className="text-muted">Cobertura</small>
                     </div>
                   </div>
                   <div className="col-md-4">
-                    <div className="text-center p-3 bg-info bg-opacity-10 rounded">
-                      <div className="display-6 mb-2 text-info fw-bold">{mi_estadistica.actividades_calificadas}</div>
+                    <div className="text-center p-3 rounded md-metric-card md-metric-card--activities">
+                      <div className="display-6 mb-2 fw-bold md-metric-value">{mi_estadistica.actividades_calificadas}</div>
                       <small className="text-muted">de {mi_estadistica.actividades_totales} actividades calificadas</small>
                     </div>
                   </div>

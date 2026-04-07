@@ -21,10 +21,10 @@ const StudentList: React.FC<Props> = ({ students, onSelect }) => {
 
   return (
     <ul className="list-group ra-list-group" ref={listRef} onKeyDown={onKeyDown}>
-      {students.map((s, i) => (
+      {students.map((s) => (
         <li
           key={s.id}
-          className={`list-group-item d-flex justify-content-between align-items-center${i===0?' active text-white':''}`}
+          className="list-group-item d-flex justify-content-between align-items-center"
           tabIndex={0}
           onClick={() => onSelect?.(s)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect?.(s) } }}

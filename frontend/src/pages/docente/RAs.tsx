@@ -42,6 +42,7 @@ const DocenteRAs: React.FC = () => {
     return c.toFixed(2)
   }
 
+
   useEffect(() => {
     if (!curso) return
     setErr(null)
@@ -221,6 +222,7 @@ const DocenteRAs: React.FC = () => {
             if(k==='inicio') navigate('/docente/inicio')
             if(k==='cursos') navigate('/docente/cursos')
             if(k==='recursos' && curso) navigate(`/docente/${curso}/recursos`)
+            if(k==='volver-coordinador') navigate('/coordinador/asignaturas')
             if(k==='calificar') {
               if (curso) navigate(`/docente/${curso}/calificar`)
             }
@@ -231,6 +233,7 @@ const DocenteRAs: React.FC = () => {
             {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
             {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
             {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
+            ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
           ]}
         />
         <main className="dash-content">
@@ -247,7 +250,7 @@ const DocenteRAs: React.FC = () => {
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary"
-                onClick={() => navigate('/coordinador/materias')}
+                onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>
@@ -256,16 +259,16 @@ const DocenteRAs: React.FC = () => {
             )}
           </div>
           {asigVal && (
-            <div className={`alert shadow-sm ${asigVal.ras.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`} role="status">
+            <div className={`alert shadow-sm compact-progress-alert ${asigVal.ras.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`} role="status">
               <i className={`bi ${asigVal.ras.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
               <div className="flex-grow-1">
-                <div>Suma de RAs: <strong>{fmtPct(asigVal.ras.suma)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${fmtPct(asigVal.ras.faltante)}% para llegar a 100%.`}</div>
+                <div className="mb-1">Suma de RAs: <strong>{fmtPct(asigVal.ras.suma)}%</strong>. {asigVal.ras.ok ? '¡Perfecto!' : `Falta ${fmtPct(asigVal.ras.faltante)}% para llegar a 100%.`}</div>
                 {(() => {
                   const suma = asigVal.ras.suma
-                  const variant = suma > 100 ? 'prog-danger' : (asigVal.ras.ok ? 'prog-success' : 'prog-warning')
+                  const variant = 'prog-success'
                   return (
                     <progress
-                      className={`uv-progress mt-2 ${variant}`}
+                      className={`uv-progress mt-1 ${variant}`}
                       value={Math.min(100, Math.max(0, suma))}
                       max={100}
                       aria-label="Progreso RAs a 100%"
@@ -273,7 +276,7 @@ const DocenteRAs: React.FC = () => {
                     />
                   )
                 })()}
-                <div className="ra-small text-muted text-end mt-1">{fmtPct(asigVal.ras.suma)}%</div>
+                <div className="ra-small text-muted text-end mt-0">{fmtPct(asigVal.ras.suma)}%</div>
               </div>
             </div>
           )}
@@ -324,7 +327,7 @@ const DocenteRAs: React.FC = () => {
                         <div>Actividades: <strong>{fmtPct(raVal.actividades.suma)}%</strong>. {raVal.actividades.ok ? '¡Listo!' : `Falta ${fmtPct(raVal.actividades.faltante)}%`}</div>
                         {(() => {
                           const suma = raVal.actividades.suma
-                          const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
+                          const variant = 'prog-success'
                           return (
                             <progress
                               className={`uv-progress mt-2 ${variant}`}
@@ -363,15 +366,10 @@ const DocenteRAs: React.FC = () => {
                             key={ind.id}
                             className="list-group-item shadow-sm d-flex justify-content-between align-items-center"
                             tabIndex={0}
+                            onClick={() => openIndicatorModal(ind)}
                             onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openIndicatorModal(ind) } }}
                           >
                             <span>{ind.descripcion}</span>
-                            <div className="d-flex gap-2">
-                              <button className="btn btn-sm btn-outline-info shadow-sm" title="Ver indicador" aria-label="Ver indicador" onClick={() => openIndicatorModal(ind)}>
-                                <i className="bi bi-eye-fill me-1"></i>
-                                Ver
-                              </button>
-                            </div>
                             {/* quitar porcentaje de indicador */}
                           </li>
                         ))}
@@ -421,24 +419,17 @@ const DocenteRAs: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-4 d-flex gap-2">
-                <button className="btn btn-outline-primary shadow-sm" onClick={loadStudents}>
-                  <i className="bi bi-arrow-clockwise me-2"></i>
-                  Recargar estudiantes
-                </button>
-              </div>
-
               <div className="mt-4">
                 <div className="content-title">
                   <i className="bi bi-people-fill text-primary me-2"></i>
                   Estudiantes - {curso}
                 </div>
                 <div className="d-flex gap-2 align-items-center mb-2">
-                  <label className="ra-small">Periodo</label>
+                  <label className="ra-small">Período</label>
                   <select
                     className="form-select w-240px"
-                    aria-label="Filtrar por periodo"
-                    title="Filtrar por periodo"
+                    aria-label="Filtrar por período"
+                    title="Filtrar por período"
                     value={periodoSel}
                     onChange={e=>setPeriodoSel(e.target.value)}
                   >

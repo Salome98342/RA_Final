@@ -3,7 +3,7 @@
 /* Fondo animado SOLO en páginas de login/recuperar */
 .login-page {
   min-height: 100vh;
-  background: linear-gradient(-45deg, #dadada, #f3f3f3, #e4e4e4, #f8f8f8);
+  background: linear-gradient(-45deg, #f1f1f1, #ededed, #f1f1f1, #ffffff);
   background-size: 400% 400%;
   animation: gradientBG 12s ease infinite;
 }
@@ -37,13 +37,13 @@
 
 .login-box button:hover {
     transform: scale(1.05);
-    box-shadow: 0 6px 15px rgba(200, 16, 46, 0.5);
+  box-shadow: 0 6px 15px rgba(227, 6, 19, 0.5);
 }
 
 /* Inputs con animación al foco */
 .login-box input:focus {
-    border-color: #C8102E;
-    box-shadow: 0 0 8px rgba(200, 16, 46, 0.3);
+  border-color: var(--uv-red, #E30613);
+  box-shadow: 0 0 8px rgba(227, 6, 19, 0.3);
     transition: all 0.3s ease;
 }
 
@@ -60,7 +60,7 @@
     left: 0;
     width: 0;
     height: 2px;
-    background: #C8102E;
+    background: var(--uv-red, #E30613);
     transition: width 0.3s ease;
 }
 
@@ -245,27 +245,27 @@
 }
 
 .alert-success-modern {
-  background-color: #ecfdf5;
-  border-left-color: #10b981;
-  color: #065f46;
+  background-color: #fff1f1;
+  border-left-color: var(--uv-success, #E73431);
+  color: #1D1D1B;
 }
 
 .alert-danger-modern {
-  background-color: #fef2f2;
-  border-left-color: #ef4444;
-  color: #991b1b;
+  background-color: #fdecea;
+  border-left-color: var(--uv-danger, #9A1915);
+  color: #1D1D1B;
 }
 
 .alert-warning-modern {
-  background-color: #fffbeb;
-  border-left-color: #f59e0b;
-  color: #92400e;
+  background-color: #fff3f3;
+  border-left-color: var(--uv-warning, #9A1915);
+  color: #1D1D1B;
 }
 
 .alert-info-modern {
-  background-color: #eff6ff;
-  border-left-color: #3b82f6;
-  color: #1e40af;
+  background-color: #f4f4f4;
+  border-left-color: var(--uv-info, #575756);
+  color: #1D1D1B;
 }
 
 .alert-icon-wrapper {
@@ -281,10 +281,10 @@
   backdrop-filter: blur(10px);
 }
 
-.alert-success-modern .alert-icon { color: #10b981; }
-.alert-danger-modern .alert-icon { color: #ef4444; }
-.alert-warning-modern .alert-icon { color: #f59e0b; }
-.alert-info-modern .alert-icon { color: #3b82f6; }
+.alert-success-modern .alert-icon { color: var(--uv-success, #E73431); }
+.alert-danger-modern .alert-icon { color: var(--uv-danger, #9A1915); }
+.alert-warning-modern .alert-icon { color: var(--uv-warning, #9A1915); }
+.alert-info-modern .alert-icon { color: var(--uv-info, #575756); }
 
 .alert-icon {
   font-size: 1.1rem;
@@ -367,7 +367,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
   50% {
-    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 2px 12px rgba(231, 52, 49, 0.18);
   }
 }
 
@@ -401,10 +401,10 @@
 }
 
 .mensaje.visible { top: 24px; opacity: 1; }
-.mensaje.error { background: linear-gradient(135deg, #ff4d4d 0%, #f12711 100%); color: white; border-left: 4px solid #c62828; }
-.mensaje.ok { background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color: white; border-left: 4px solid #1b5e20; }
-.mensaje.warning { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); color: white; border-left: 4px solid #e65100; }
-.mensaje.info { background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); color: white; border-left: 4px solid #0d47a1; }
+.mensaje.error { background: linear-gradient(135deg, #E73431 0%, #9A1915 100%); color: white; border-left: 4px solid #460E0F; }
+.mensaje.ok { background: linear-gradient(135deg, #E30613 0%, #9A1915 100%); color: white; border-left: 4px solid #460E0F; }
+.mensaje.warning { background: linear-gradient(135deg, #9A1915 0%, #460E0F 100%); color: white; border-left: 4px solid #460E0F; }
+.mensaje.info { background: linear-gradient(135deg, #575756 0%, #1D1D1B 100%); color: white; border-left: 4px solid #460E0F; }
 .mensaje-flex { display: flex; align-items: center; gap: 10px; }
 .mensaje-icon { font-size: 1.2rem; flex-shrink: 0; }
 
@@ -470,7 +470,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
   50% {
-    box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 0 20px rgba(25, 154, 117, 0.3);
   }
   100% {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -489,7 +489,7 @@
   }
 }
 
-/* Clases para efectos visuales en Materias */
+/* Clases para efectos visuales en Asignaturas */
 .ra-detail-panel {
   animation: fadeIn 0.3s ease-in;
 }
@@ -566,7 +566,7 @@
 /* Texto debajo del spinner */
 .spinner-text {
   font-size: 0.95rem;
-  color: #6c757d;
+  color: var(--uv-muted, #575756);
   font-weight: 500;
   animation: pulse 1.5s ease-in-out infinite;
 }
@@ -599,7 +599,7 @@
 
 /* Color rojo Univalle para spinner */
 .spinner-border.text-danger {
-  color: #C8102E !important;
+  color: var(--uv-red, #E30613) !important;
   border-color: currentColor transparent transparent transparent !important;
 }
 

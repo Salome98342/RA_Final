@@ -11,6 +11,8 @@ from ..views.views import (
     actividades_multi_view, ra_actividad_detail_view, course_grade_view, course_detail_view, course_analytics_view,
     coordinador_asignaturas_view, coordinador_asignatura_estudiantes_view, coordinador_import_matriculados_view, coordinador_asignatura_ras_view,
     coordinador_crear_asignatura_ra_view,
+    coordinador_asignatura_detalle_edicion_view,
+    coordinador_actualizar_asignatura_ra_view,
     coordinador_import_docentes_view, coordinador_import_asignaturas_ras_view, coordinador_import_estudiantes_view, coordinador_estudiantes_view,
     coordinador_download_template_view,
     coordinador_periodos_view,
@@ -65,6 +67,8 @@ urlpatterns = [
     path("coordinador/estudiantes/<int:id_estudiante>/perfil", coordinador_estudiante_perfil_view),  # GET: Perfil completo del estudiante
     path("coordinador/asignaturas", coordinador_asignaturas_view),
     path("coordinador/asignaturas/crear-ra", coordinador_crear_asignatura_ra_view),
+    path("coordinador/asignaturas/detalle-edicion", coordinador_asignatura_detalle_edicion_view),
+    path("coordinador/asignaturas/actualizar-ra", coordinador_actualizar_asignatura_ra_view),
     path("coordinador/asignaturas/estudiantes", coordinador_asignatura_estudiantes_view),
     path("coordinador/asignaturas/ras", coordinador_asignatura_ras_view),
     path("coordinador/asignaturas/avance", coordinador_asignatura_avance_view),

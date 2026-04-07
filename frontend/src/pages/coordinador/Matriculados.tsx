@@ -33,12 +33,12 @@ const Matriculados: React.FC = () => {
           ? 'asignaturas-ra'
           : location.pathname.includes('/imports')
             ? 'imports'
-            : 'materias'
+            : 'asignaturas'
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -307,7 +307,7 @@ const Matriculados: React.FC = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -330,7 +330,7 @@ const Matriculados: React.FC = () => {
               Gestión de Matriculados
             </div>
             <button
-              className="btn btn-sm btn-outline-primary"
+              className="btn btn-sm btn-outline-danger"
               onClick={() => navigate('/coordinador/imports?modulo=mat')}
             >
               <i className="bi bi-upload me-1"></i>
@@ -373,13 +373,13 @@ const Matriculados: React.FC = () => {
                   </div>
 
                   <div className="col-md-6">
-                    <label className="form-label">Periodo <span className="text-danger">*</span></label>
+                    <label className="form-label">Período <span className="text-danger">*</span></label>
                     <select
                       className="form-select"
                       value={formData.periodo}
                       onChange={(e) => setFormData((prev) => ({ ...prev, periodo: e.target.value }))}
                       disabled={loading || !formData.id_asignatura}
-                      aria-label="Seleccionar periodo"
+                      aria-label="Seleccionar período"
                     >
                       <option value="">Seleccione...</option>
                       {periodos.map((p) => (
@@ -414,7 +414,7 @@ const Matriculados: React.FC = () => {
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
-                      <button type="button" className="btn btn-sm btn-outline-primary" onClick={selectVisible}>
+                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={selectVisible}>
                         Seleccionar visibles
                       </button>
                       <button type="button" className="btn btn-sm btn-outline-secondary" onClick={clearSelection}>
@@ -516,25 +516,6 @@ const Matriculados: React.FC = () => {
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-header">
-              <h5 className="mb-0">
-                <i className="bi bi-lightning-charge me-2"></i>
-                Registro rápido
-              </h5>
-            </div>
-            <div className="card-body">
-              <p className="text-muted mb-3">
-                Puedes matricular uno o varios estudiantes sin escribir códigos manuales. Para grandes volúmenes, usa la carga masiva.
-              </p>
-              <div className="d-flex flex-wrap gap-2">
-                <span className="badge bg-light text-dark border">Validación de duplicados</span>
-                <span className="badge bg-light text-dark border">Validación de existencia</span>
-                <span className="badge bg-light text-dark border">Selección múltiple</span>
-                <span className="badge bg-light text-dark border">Compatibilidad CSV/Excel</span>
-              </div>
-            </div>
-          </div>
         </main>
       </div>
     </div>

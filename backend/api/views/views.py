@@ -26,7 +26,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import NotFound
 from django.core import signing
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import send_mail
 from django.conf import settings
 from django_ratelimit.decorators import ratelimit
 import uuid
@@ -62,6 +61,7 @@ from ..utils.security import (
     check_account_lockout, registrar_intento_login, manejar_intento_fallido,
     limpiar_intentos_exitosos, registrar_evento_seguridad, validate_password_strength
 )
+from ..utils.mailer import send_email_with_logging
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7
 logger = logging.getLogger("ra_manager.coordinador")
@@ -182,9 +182,8 @@ def _send_welcome_email(estudiante, password_provisional):
         estudiante: Objeto Estudiante
         password_provisional: Contraseña en texto plano (sin hashear)
     """
-    try:
-        subject = "Bienvenido a RA Manager"
-        message = f"""
+    subject = "Bienvenido a RA Manager"
+    message = f"""
 ¡Bienvenido/a a RA Manager!
 
 Hola {estudiante.nombre} {estudiante.apellido},
@@ -207,18 +206,16 @@ Si tienes alguna duda, contacta al coordinador del programa.
 
 Saludos,
 Equipo RA Manager
-        """.strip()
-        
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[estudiante.correo],
-            fail_silently=True,  # No fallar si el correo no se envía
-        )
-        logger.info(f"Correo de bienvenida enviado a {estudiante.correo}")
-    except Exception as e:
-        logger.error(f"Error enviando correo de bienvenida a {estudiante.correo}: {str(e)}")
+    """.strip()
+
+    return send_email_with_logging(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[estudiante.correo],
+        logger=logger,
+        context="bienvenida_estudiante",
+    )
 
 
 def _send_welcome_email_docente(docente, password_provisional):
@@ -228,9 +225,8 @@ def _send_welcome_email_docente(docente, password_provisional):
         docente: Objeto Docente
         password_provisional: Contraseña en texto plano (sin hashear)
     """
-    try:
-        subject = "Bienvenido/a a RA Manager"
-        message = f"""
+    subject = "Bienvenido/a a RA Manager"
+    message = f"""
 ¡Bienvenido/a a RA Manager!
 
 Hola {docente.nombre} {docente.apellido},
@@ -253,29 +249,26 @@ Si tienes alguna duda, contacta al coordinador del programa.
 
 Saludos,
 Equipo RA Manager
-        """.strip()
+    """.strip()
 
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[docente.correo],
-            fail_silently=True,
-        )
-        logger.info(f"Correo de bienvenida enviado a docente {docente.correo}")
-    except Exception as e:
-        logger.error(f"Error enviando correo de bienvenida a docente {docente.correo}: {str(e)}")
+    return send_email_with_logging(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[docente.correo],
+        logger=logger,
+        context="bienvenida_docente",
+    )
 
 
 def _send_account_deactivated_email(estudiante, coordinador=None, programa=None):
     """
     Notifica al estudiante que su cuenta fue desactivada por coordinación.
     """
-    try:
-        subject = "Cuenta desactivada en RA Manager"
-        coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
-        programa_ref = getattr(programa, "nombre", None) or "tu programa"
-        message = f"""
+    subject = "Cuenta desactivada en RA Manager"
+    coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
+    programa_ref = getattr(programa, "nombre", None) or "tu programa"
+    message = f"""
 Hola {estudiante.nombre} {estudiante.apellido},
 
 Te informamos que tu cuenta de estudiante en RA Manager ha sido desactivada temporalmente.
@@ -287,29 +280,26 @@ Si tienes dudas o consideras que esto es un error, por favor contacta al coordin
 
 Saludos,
 Equipo RA Manager
-        """.strip()
+    """.strip()
 
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[estudiante.correo],
-            fail_silently=True,
-        )
-        logger.info(f"Correo de desactivación enviado a {estudiante.correo}")
-    except Exception as e:
-        logger.error(f"Error enviando correo de desactivación a {estudiante.correo}: {str(e)}")
+    return send_email_with_logging(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[estudiante.correo],
+        logger=logger,
+        context="desactivacion_cuenta",
+    )
 
 
 def _send_account_reactivated_email(estudiante, coordinador=None, programa=None):
     """
     Notifica al estudiante que su cuenta fue reactivada por coordinación.
     """
-    try:
-        subject = "Cuenta reactivada en RA Manager"
-        coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
-        programa_ref = getattr(programa, "nombre", None) or "tu programa"
-        message = f"""
+    subject = "Cuenta reactivada en RA Manager"
+    coord_ref = getattr(coordinador, "codigo_coordinador", "coordinador del programa") if coordinador else "coordinador del programa"
+    programa_ref = getattr(programa, "nombre", None) or "tu programa"
+    message = f"""
 Hola {estudiante.nombre} {estudiante.apellido},
 
 Te informamos que tu cuenta de estudiante en RA Manager ha sido reactivada.
@@ -322,18 +312,16 @@ Si tienes alguna duda, por favor contacta al coordinador del programa ({coord_re
 
 Saludos,
 Equipo RA Manager
-        """.strip()
+    """.strip()
 
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[estudiante.correo],
-            fail_silently=True,
-        )
-        logger.info(f"Correo de reactivación enviado a {estudiante.correo}")
-    except Exception as e:
-        logger.error(f"Error enviando correo de reactivación a {estudiante.correo}: {str(e)}")
+    return send_email_with_logging(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[estudiante.correo],
+        logger=logger,
+        context="reactivacion_cuenta",
+    )
 
 
 def _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10):
@@ -358,8 +346,8 @@ def _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10):
                 if not estudiante:
                     logger.warning(f"Estudiante {email_data['codigo']} no encontrado para envio de correo")
                     continue
-                _send_welcome_email(estudiante, email_data['password'])
-                sent += 1
+                if _send_welcome_email(estudiante, email_data['password']):
+                    sent += 1
             except Exception as e:
                 logger.error(f"Error enviando correo a {email_data.get('correo')}: {str(e)}")
 
@@ -405,14 +393,15 @@ def _send_bulk_enrollment_emails_async(enrollments_for_emails):
                     f"Sistema de Gestión Académica"
                 )
 
-                send_mail(
+                if send_email_with_logging(
                     subject=subject,
                     message=message,
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[estudiante_correo],
-                    fail_silently=True,
-                )
-                sent += 1
+                    logger=logger,
+                    context="matricula_masiva",
+                ):
+                    sent += 1
             except Exception as e:
                 logger.error(f"Error enviando correo de matricula a {item.get('estudiante_correo')}: {str(e)}")
 
@@ -597,7 +586,7 @@ def login_view(request):
             motivo_fallo="Cuenta desactivada por coordinador"
         )
         return Response(
-            {"detail": "Tu perfil de estudiante está desactivado. Contacta al coordinador."},
+            {"detail": "Tu perfil de estudiante está inactivo. Contacta al coordinador."},
             status=status.HTTP_403_FORBIDDEN,
         )
     
@@ -675,7 +664,7 @@ def me_view(request):
 
     if rol == "estudiante" and not getattr(u, "activo", True):
         return Response(
-            {"detail": "Tu perfil de estudiante está desactivado. Contacta al coordinador."},
+            {"detail": "Tu perfil de estudiante está inactivo. Contacta al coordinador."},
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -910,7 +899,7 @@ def coordinador_estudiantes_view(request):
             )
             
             # Enviar correo de bienvenida
-            _send_welcome_email(estudiante, password_provisional)
+            email_sent = _send_welcome_email(estudiante, password_provisional)
             
             # Registrar auditoría
             try:
@@ -929,6 +918,7 @@ def coordinador_estudiantes_view(request):
             
             return Response({
                 "detail": "Estudiante creado exitosamente",
+                "email_sent": email_sent,
                 "estudiante": {
                     "id_estudiante": estudiante.id_estudiante,
                     "codigo_estudiante": estudiante.codigo_estudiante,
@@ -980,7 +970,7 @@ def coordinador_estudiante_desactivar_view(request, id_estudiante: int):
     if not estudiante.activo:
         return Response(
             {
-                "detail": "El perfil del estudiante ya estaba desactivado",
+                "detail": "El perfil del estudiante ya estaba inactivo",
                 "estudiante": {
                     "id_estudiante": estudiante.id_estudiante,
                     "codigo_estudiante": estudiante.codigo_estudiante,
@@ -996,7 +986,7 @@ def coordinador_estudiante_desactivar_view(request, id_estudiante: int):
     _send_account_deactivated_email(estudiante, coordinador=coord, programa=detected_program)
 
     logger.info(
-        "Perfil de estudiante desactivado",
+        "Perfil de estudiante inactivado",
         extra={
             "coordinador": getattr(coord, "codigo_coordinador", None),
             "id_estudiante": estudiante.id_estudiante,
@@ -1006,7 +996,7 @@ def coordinador_estudiante_desactivar_view(request, id_estudiante: int):
 
     return Response(
         {
-            "detail": "Perfil de estudiante desactivado exitosamente",
+            "detail": "Perfil de estudiante inactivado exitosamente",
             "estudiante": {
                 "id_estudiante": estudiante.id_estudiante,
                 "codigo_estudiante": estudiante.codigo_estudiante,
@@ -1327,7 +1317,7 @@ def coordinador_docentes_view(request):
             num_documento=num_documento,
         )
 
-        _send_welcome_email_docente(docente, password_provisional)
+        email_sent = _send_welcome_email_docente(docente, password_provisional)
 
         try:
             ImportAudit.objects.create(
@@ -1344,7 +1334,8 @@ def coordinador_docentes_view(request):
         logger.info(f"Docente creado: {codigo} por coordinador {coord.codigo_coordinador}")
 
         return Response({
-            "detail": "Docente creado exitosamente. Se envió un correo de bienvenida.",
+            "detail": "Docente creado exitosamente",
+            "email_sent": email_sent,
             "docente": {
                 "id_docente": docente.id_docente,
                 "codigo_docente": docente.codigo_docente,
@@ -1388,7 +1379,7 @@ def coordinador_docente_perfil_view(request, id_docente: int):
     if not Asignatura.objects.filter(docente=docente, programa=detected_program).exists():
         return Response({"detail": "Docente fuera del alcance de tu programa"}, status=status.HTTP_404_NOT_FOUND)
 
-    asignaturas = Asignatura.objects.filter(docente=docente, programa=detected_program).select_related('programa').order_by('codigo_asignatura')
+    asignaturas = Asignatura.objects.filter(docente=docente, programa=detected_program).select_related('programa', 'periodo').order_by('codigo_asignatura')
 
     asignaturas_data = []
     total_estudiantes = 0
@@ -1405,6 +1396,8 @@ def coordinador_docente_perfil_view(request, id_docente: int):
             "codigo_asignatura": asig.codigo_asignatura,
             "nombre": asig.nombre,
             "grupo": asig.grupo,
+            "id_periodo": asig.periodo.id_periodo if asig.periodo else None,
+            "periodo": asig.periodo.descripcion if asig.periodo else None,
             "programa": asig.programa.nombre if asig.programa else None,
             "total_estudiantes": count_est,
             "total_ras": count_ras,
@@ -2189,6 +2182,449 @@ def coordinador_crear_asignatura_ra_view(request):
             ),
         },
         status=status.HTTP_201_CREATED if asignatura_creada else status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_asignatura_detalle_edicion_view(request):
+    """Retorna una asignatura exacta (codigo + periodo + grupo + sede) con RAs e indicadores para edición."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    codigo_asignatura = str(request.query_params.get("codigo_asignatura") or "").strip()
+    periodo_desc = str(request.query_params.get("periodo") or "").strip()
+    grupo = str(request.query_params.get("grupo") or "").strip()
+    sede = str(request.query_params.get("sede") or "").strip()
+
+    if not (codigo_asignatura and periodo_desc and grupo and sede):
+        return Response(
+            {"detail": "codigo_asignatura, periodo, grupo y sede son obligatorios"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    detected_program = _infer_program_for_coordinador(coord)
+
+    asig_qs = Asignatura.objects.select_related("docente", "programa", "periodo").filter(
+        codigo_asignatura=codigo_asignatura,
+        periodo__descripcion=periodo_desc,
+        grupo=grupo,
+        sede=sede,
+    )
+
+    if detected_program:
+        asig_qs = asig_qs.filter(programa=detected_program)
+
+    total_matches = asig_qs.count()
+    if total_matches == 0:
+        return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+    if total_matches > 1:
+        return Response(
+            {"detail": "La combinación código + periodo + grupo + sede no es única."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    asig = asig_qs.first()
+    ras = ResultadoDeAprendizaje.objects.filter(asignatura=asig).order_by("id_ra")
+
+    ras_payload = []
+    for ra in ras:
+        indicadores = IndicadoresDeLogro.objects.filter(ra=ra).order_by("id_ind")
+        ras_payload.append(
+            {
+                "id_ra": ra.id_ra,
+                "descripcion": ra.descripcion,
+                "porcentaje_ra": float(ra.porcentaje_ra or 0),
+                "indicadores": [
+                    {
+                        "id_ind": ind.id_ind,
+                        "descripcion": ind.descripcion,
+                        "porcentaje_ind": float(ind.porcentaje_ind or 0),
+                    }
+                    for ind in indicadores
+                ],
+            }
+        )
+
+    return Response(
+        {
+            "asignatura": {
+                "id_asignatura": asig.id_asignatura,
+                "codigo_asignatura": asig.codigo_asignatura,
+                "nombre_asignatura": asig.nombre,
+                "codigo_docente": getattr(asig.docente, "codigo_docente", None),
+                "codigo_programa": getattr(asig.programa, "codigo_programa", None),
+                "programa_nombre": getattr(asig.programa, "nombre", None),
+                "periodo": getattr(asig.periodo, "descripcion", None),
+                "creditos": int(getattr(asig, "creditos", 0) or 0),
+                "grupo": asig.grupo,
+                "sede": asig.sede,
+            },
+            "ras": ras_payload,
+            "total_ra_asignatura": float(sum((r["porcentaje_ra"] for r in ras_payload), 0.0)),
+        }
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_actualizar_asignatura_ra_view(request):
+    """Actualiza datos base de asignatura y permite editar/crear RAs e indicadores."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    data = request.data if isinstance(request.data, dict) else {}
+
+    codigo_asignatura = str(data.get("codigo_asignatura") or "").strip()
+    nombre_asignatura = str(data.get("nombre_asignatura") or "").strip()
+    codigo_docente = str(data.get("codigo_docente") or "").strip()
+    codigo_programa = str(data.get("codigo_programa") or "").strip()
+    periodo_desc = str(data.get("periodo") or "").strip()
+    raw_creditos = data.get("creditos")
+    grupo = str(data.get("grupo") or "").strip()
+    sede = str(data.get("sede") or "").strip()
+    ras_input = data.get("ras") or []
+
+    if not (codigo_asignatura and nombre_asignatura and codigo_docente and periodo_desc and grupo and sede):
+        return Response(
+            {"detail": "codigo_asignatura, nombre_asignatura, codigo_docente, periodo, grupo y sede son obligatorios"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(ras_input, list):
+        return Response({"detail": "ras debe ser una lista"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        creditos = int(raw_creditos)
+    except (TypeError, ValueError):
+        return Response({"detail": "creditos es obligatorio y debe ser un entero"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if creditos <= 0:
+        return Response({"detail": "creditos debe ser mayor que 0"}, status=status.HTTP_400_BAD_REQUEST)
+
+    periodo = PeriodoAcademico.objects.filter(descripcion=periodo_desc).first()
+    if not periodo:
+        return Response({"detail": f"Periodo no encontrado en BD: {periodo_desc}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    docente = Docente.objects.filter(codigo_docente=codigo_docente).first()
+    if not docente:
+        return Response({"detail": f"Docente no encontrado: {codigo_docente}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    programa = _infer_program_for_coordinador(coord)
+    if not programa and codigo_programa:
+        programa = Programa.objects.filter(codigo_programa=codigo_programa).first()
+    if not programa:
+        return Response(
+            {"detail": "No se pudo detectar automáticamente el programa del coordinador. Configura el perfil o envía codigo_programa válido."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    asig_qs = Asignatura.objects.filter(
+        codigo_asignatura=codigo_asignatura,
+        periodo=periodo,
+        grupo=grupo,
+        sede=sede,
+    )
+    if programa:
+        asig_qs = asig_qs.filter(programa=programa)
+
+    asig = asig_qs.first()
+    if not asig:
+        return Response({"detail": "Asignatura no encontrada para actualización"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Validaciones de RAs e indicadores
+    ra_desc_seen = set()
+    ras_normalizados = []
+    for idx, item in enumerate(ras_input):
+        if not isinstance(item, dict):
+            return Response({"detail": f"RA en posición {idx + 1} inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ra_id = item.get("id_ra")
+        descripcion = str(item.get("descripcion") or "").strip()
+        raw_pct = item.get("porcentaje_ra")
+        indicadores_input = item.get("indicadores") or []
+
+        if not descripcion:
+            return Response({"detail": f"La descripción es obligatoria para el RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            porcentaje_ra = float(raw_pct)
+        except (TypeError, ValueError):
+            return Response({"detail": f"porcentaje_ra inválido en RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if porcentaje_ra <= 0 or porcentaje_ra > 100:
+            return Response(
+                {"detail": f"El porcentaje del RA {idx + 1} debe ser mayor que 0 y no exceder 100"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        key_desc = descripcion.lower()
+        if key_desc in ra_desc_seen:
+            return Response({"detail": f"La descripción '{descripcion}' está repetida en los RAs"}, status=status.HTTP_400_BAD_REQUEST)
+        ra_desc_seen.add(key_desc)
+
+        if not isinstance(indicadores_input, list):
+            return Response({"detail": f"indicadores debe ser lista en RA {idx + 1}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ind_desc_seen = set()
+        indicadores_normalizados = []
+        sum_ind = 0.0
+        for ind_idx, ind_item in enumerate(indicadores_input):
+            if not isinstance(ind_item, dict):
+                return Response(
+                    {"detail": f"Indicador inválido en RA {idx + 1}, posición {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            ind_id = ind_item.get("id_ind")
+            ind_desc = str(ind_item.get("descripcion") or "").strip()
+            raw_pct_ind = ind_item.get("porcentaje_ind")
+
+            if not ind_desc:
+                return Response(
+                    {"detail": f"La descripción del indicador es obligatoria en RA {idx + 1}, indicador {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                porcentaje_ind = float(raw_pct_ind)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": f"porcentaje_ind inválido en RA {idx + 1}, indicador {ind_idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if porcentaje_ind <= 0 or porcentaje_ind > 100:
+                return Response(
+                    {"detail": f"El porcentaje del indicador en RA {idx + 1}, indicador {ind_idx + 1} debe ser mayor que 0 y no exceder 100"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            ind_key = ind_desc.lower()
+            if ind_key in ind_desc_seen:
+                return Response(
+                    {"detail": f"Indicador duplicado '{ind_desc}' en RA {idx + 1}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ind_desc_seen.add(ind_key)
+
+            indicadores_normalizados.append(
+                {
+                    "id_ind": ind_id,
+                    "descripcion": ind_desc,
+                    "porcentaje_ind": porcentaje_ind,
+                }
+            )
+            sum_ind += porcentaje_ind
+
+        if not indicadores_normalizados:
+            return Response(
+                {"detail": f"Cada RA debe tener al menos un indicador. RA {idx + 1} no tiene indicadores válidos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if sum_ind > 100:
+            return Response(
+                {"detail": f"La suma de indicadores del RA {idx + 1} excede 100% ({sum_ind:.2f}%)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ras_normalizados.append(
+            {
+                "id_ra": ra_id,
+                "descripcion": descripcion,
+                "porcentaje_ra": porcentaje_ra,
+                "indicadores": indicadores_normalizados,
+            }
+        )
+
+    total_ra_form = sum((ra["porcentaje_ra"] for ra in ras_normalizados), 0.0)
+    if total_ra_form > 100:
+        return Response(
+            {"detail": f"La suma de porcentajes de RA en el formulario excede 100% ({total_ra_form:.2f}%)"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            updates = {}
+            if asig.nombre != nombre_asignatura:
+                updates["nombre"] = nombre_asignatura
+            if asig.docente_id != docente.id_docente:
+                updates["docente"] = docente
+            if asig.programa_id != programa.id_programa:
+                updates["programa"] = programa
+            if asig.periodo_id != periodo.id_periodo:
+                updates["periodo"] = periodo
+            if asig.grupo != grupo:
+                updates["grupo"] = grupo
+            if asig.sede != sede:
+                updates["sede"] = sede
+            if int(getattr(asig, "creditos", 0) or 0) != creditos:
+                updates["creditos"] = creditos
+
+            if updates:
+                for field, value in updates.items():
+                    setattr(asig, field, value)
+                asig.save(update_fields=list(updates.keys()))
+
+            existing_ras = {r.id_ra: r for r in ResultadoDeAprendizaje.objects.filter(asignatura=asig)}
+            ras_actualizados = 0
+            ras_creados = 0
+            inds_actualizados = 0
+            inds_creados = 0
+            ras_eliminados = 0
+            inds_eliminados = 0
+
+            submitted_existing_ra_ids = set()
+
+            for ra_item in ras_normalizados:
+                ra_obj = None
+                ra_id = ra_item.get("id_ra")
+                if ra_id is not None:
+                    try:
+                        ra_id_int = int(ra_id)
+                    except (TypeError, ValueError):
+                        return Response({"detail": f"id_ra inválido: {ra_id}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                    ra_obj = existing_ras.get(ra_id_int)
+                    if not ra_obj:
+                        return Response(
+                            {"detail": f"El RA {ra_id_int} no pertenece a la asignatura seleccionada"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    submitted_existing_ra_ids.add(ra_id_int)
+
+                    changed_fields = []
+                    if (ra_obj.descripcion or "") != ra_item["descripcion"]:
+                        ra_obj.descripcion = ra_item["descripcion"]
+                        changed_fields.append("descripcion")
+                    if float(ra_obj.porcentaje_ra or 0) != float(ra_item["porcentaje_ra"]):
+                        ra_obj.porcentaje_ra = ra_item["porcentaje_ra"]
+                        changed_fields.append("porcentaje_ra")
+                    if changed_fields:
+                        ra_obj.save(update_fields=changed_fields)
+                        ras_actualizados += 1
+                else:
+                    ra_obj = ResultadoDeAprendizaje.objects.create(
+                        asignatura=asig,
+                        descripcion=ra_item["descripcion"],
+                        porcentaje_ra=ra_item["porcentaje_ra"],
+                    )
+                    ras_creados += 1
+
+                existing_inds = {ind.id_ind: ind for ind in IndicadoresDeLogro.objects.filter(ra=ra_obj)}
+                submitted_existing_ind_ids = set()
+                for ind_item in ra_item["indicadores"]:
+                    ind_obj = None
+                    ind_id = ind_item.get("id_ind")
+                    if ind_id is not None:
+                        try:
+                            ind_id_int = int(ind_id)
+                        except (TypeError, ValueError):
+                            return Response({"detail": f"id_ind inválido: {ind_id}"}, status=status.HTTP_400_BAD_REQUEST)
+
+                        ind_obj = existing_inds.get(ind_id_int)
+                        if not ind_obj:
+                            return Response(
+                                {"detail": f"El indicador {ind_id_int} no pertenece al RA {ra_obj.id_ra}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        submitted_existing_ind_ids.add(ind_id_int)
+
+                        ind_changes = []
+                        if (ind_obj.descripcion or "") != ind_item["descripcion"]:
+                            ind_obj.descripcion = ind_item["descripcion"]
+                            ind_changes.append("descripcion")
+                        if float(ind_obj.porcentaje_ind or 0) != float(ind_item["porcentaje_ind"]):
+                            ind_obj.porcentaje_ind = ind_item["porcentaje_ind"]
+                            ind_changes.append("porcentaje_ind")
+                        if ind_changes:
+                            ind_obj.save(update_fields=ind_changes)
+                            inds_actualizados += 1
+                    else:
+                        IndicadoresDeLogro.objects.create(
+                            ra=ra_obj,
+                            descripcion=ind_item["descripcion"],
+                            porcentaje_ind=ind_item["porcentaje_ind"],
+                        )
+                        inds_creados += 1
+
+                # Eliminar indicadores que se quitaron del formulario (solo los existentes)
+                inds_to_delete_ids = set(existing_inds.keys()) - submitted_existing_ind_ids
+                if inds_to_delete_ids:
+                    for ind_id in inds_to_delete_ids:
+                        has_links = RaActividadIndicador.objects.filter(indicador_id=ind_id).exists()
+                        has_notes = NotasActividad.objects.filter(indicador_id=ind_id).exists()
+                        if has_links or has_notes:
+                            return Response(
+                                {
+                                    "detail": (
+                                        f"No se puede eliminar el indicador {ind_id} porque tiene actividades o notas asociadas. "
+                                        "Retíralo manualmente de esas asociaciones primero."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                    IndicadoresDeLogro.objects.filter(id_ind__in=list(inds_to_delete_ids)).delete()
+                    inds_eliminados += len(inds_to_delete_ids)
+
+            # Eliminar RAs que se quitaron del formulario (solo RAs existentes)
+            ras_to_delete_ids = set(existing_ras.keys()) - submitted_existing_ra_ids
+            if ras_to_delete_ids:
+                for ra_id in ras_to_delete_ids:
+                    has_activities = RaActividad.objects.filter(ra_id=ra_id).exists()
+                    if has_activities:
+                        return Response(
+                            {
+                                "detail": (
+                                    f"No se puede eliminar el RA {ra_id} porque tiene actividades asociadas. "
+                                    "Elimina o reasigna esas actividades primero."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                ResultadoDeAprendizaje.objects.filter(id_ra__in=list(ras_to_delete_ids)).delete()
+                ras_eliminados += len(ras_to_delete_ids)
+
+            total_ra_asignatura = float(
+                ResultadoDeAprendizaje.objects.filter(asignatura=asig).aggregate(v=Sum("porcentaje_ra"))["v"] or 0
+            )
+            if total_ra_asignatura > 100:
+                raise IntegrityError(f"La suma de porcentajes de RA excede 100% ({total_ra_asignatura:.2f}%)")
+    except IntegrityError as db_err:
+        return Response({"detail": str(db_err)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(
+        {
+            "detail": "Asignatura y RAs actualizados correctamente",
+            "asignatura": {
+                "codigo": asig.codigo_asignatura,
+                "nombre": asig.nombre,
+                "periodo": getattr(asig.periodo, "descripcion", None),
+                "grupo": asig.grupo,
+                "sede": asig.sede,
+                "creditos": int(getattr(asig, "creditos", 0) or 0),
+                "programa_codigo": getattr(asig.programa, "codigo_programa", None),
+                "docente_codigo": getattr(asig.docente, "codigo_docente", None),
+            },
+            "resumen": {
+                "ras_actualizados": ras_actualizados,
+                "ras_creados": ras_creados,
+                "ras_eliminados": ras_eliminados,
+                "indicadores_actualizados": inds_actualizados,
+                "indicadores_creados": inds_creados,
+                "indicadores_eliminados": inds_eliminados,
+            },
+            "total_ra_asignatura": total_ra_asignatura,
+        },
+        status=status.HTTP_200_OK,
     )
 
 @api_view(["GET"])
@@ -3137,15 +3573,17 @@ def docente_agregar_estudiante_view(request, codigo_asignatura: str):
                 f"Sistema de Gestión Académica"
             )
             
-            send_mail(
+            email_sent = send_email_with_logging(
                 subject=subject,
                 message=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[estudiante.correo],
-                fail_silently=True
+                logger=logger,
+                context="matricula_individual",
             )
         except Exception as e:
             logger.error(f"Error enviando email: {str(e)}")
+            email_sent = False
     
     return Response({
         "ok": True,
@@ -3157,7 +3595,11 @@ def docente_agregar_estudiante_view(request, codigo_asignatura: str):
             "apellido": estudiante.apellido,
             "correo": estudiante.correo
         },
-        "message": f"{estudiante.nombre} {estudiante.apellido} ha sido agregado exitosamente. Se envió una notificación a {estudiante.correo}"
+        "email_sent": email_sent,
+        "message": (
+            f"{estudiante.nombre} {estudiante.apellido} ha sido agregado exitosamente. "
+            + (f"Se envió una notificación a {estudiante.correo}" if email_sent else "No se pudo enviar la notificación por correo en este momento")
+        )
     }, status=status.HTTP_201_CREATED)
 
 @api_view(["POST"])
@@ -3797,13 +4239,20 @@ def password_forgot_view(request):
             )
             
             # Enviar correo
-            send_mail(
+            email_sent = send_email_with_logging(
                 subject=subject,
                 message=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
-                fail_silently=False  # Cambiar a True en producción si se desea
+                logger=logging.getLogger(__name__),
+                context="otp_recuperacion",
             )
+            if not email_sent:
+                PasswordResetOTP.objects.filter(
+                    email=email.lower(),
+                    otp_code=otp_code,
+                    is_used=False,
+                ).update(is_used=True)
             
         except Exception as e:
             # Log del error pero no exponer detalles al usuario
@@ -5337,33 +5786,21 @@ def profile_view(request):
         if not u:
             return Response({"detail": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         
-        # Obtener asignaturas del docente
-        asignaturas_qs = Asignatura.objects.filter(docente=u).select_related("programa")
-        
-        # Obtener matrículas de esas asignaturas para agrupar por período
-        # Usar un conjunto para trackear combinaciones (asignatura, periodo) y evitar duplicados
-        matriculas = (Matricula.objects
-            .filter(asignatura__docente=u)
-            .select_related("asignatura__programa", "periodo")
-            .order_by("periodo__fecha_inicio"))
+        # Obtener asignaturas del docente y agrupar por el periodo propio de la asignatura.
+        # Esto evita ocultar asignaturas nuevas que aún no tienen matrículas.
+        asignaturas_qs = (
+            Asignatura.objects
+            .filter(docente=u)
+            .select_related("programa", "periodo")
+            .order_by("periodo__fecha_inicio", "id_asignatura")
+        )
         
         cursos = []
         grupos = {}
         programas_set = set()
         programas = []
-        asignaturas_procesadas = set()
-        combinaciones_vistas = set()  # Para evitar duplicados (asignatura_id, periodo_id)
         
-        for mat in matriculas:
-            a = mat.asignatura
-            p = mat.periodo
-            
-            # Evitar procesar la misma combinación (asignatura, periodo) más de una vez
-            combo_key = (a.id_asignatura, p.id_periodo)
-            if combo_key in combinaciones_vistas:
-                continue
-            combinaciones_vistas.add(combo_key)
-            
+        for a in asignaturas_qs:
             # Construir datos del curso
             curso_data = {
                 "codigo": a.codigo_asignatura, 
@@ -5371,17 +5808,17 @@ def profile_view(request):
                 "grupo": a.grupo, 
                 "programa": getattr(a.programa, "nombre", None)
             }
-            
-            # Agregar a la lista general de cursos (sin duplicados)
-            if a.codigo_asignatura not in asignaturas_procesadas:
-                cursos.append(curso_data)
-                asignaturas_procesadas.add(a.codigo_asignatura)
-            
+            cursos.append(curso_data)
+
             # Agrupar por período
-            key = str(p.id_periodo)
+            p = getattr(a, "periodo", None)
+            key = str(getattr(p, "id_periodo", "sin_periodo"))
             if key not in grupos:
                 grupos[key] = {
-                    "periodo": {"id": p.id_periodo, "descripcion": p.descripcion}, 
+                    "periodo": {
+                        "id": getattr(p, "id_periodo", None),
+                        "descripcion": getattr(p, "descripcion", "Sin periodo")
+                    }, 
                     "cursos": []
                 }
             
@@ -5395,27 +5832,6 @@ def profile_view(request):
                 if prog_key not in programas_set:
                     programas_set.add(prog_key)
                     programas.append({"codigo": prog_key[0], "nombre": prog_key[1]})
-        
-        # Si no se encontraron matrículas, cargar todas las asignaturas del docente sin agrupar por período
-        if not grupos:
-            for a in asignaturas_qs:
-                if a.codigo_asignatura not in asignaturas_procesadas:
-                    curso_data = {
-                        "codigo": a.codigo_asignatura, 
-                        "nombre": a.nombre, 
-                        "grupo": a.grupo, 
-                        "programa": getattr(a.programa, "nombre", None)
-                    }
-                    cursos.append(curso_data)
-                    asignaturas_procesadas.add(a.codigo_asignatura)
-                    
-                    # Recopilar programas únicos
-                    prog = getattr(a, "programa", None)
-                    if prog:
-                        prog_key = (getattr(prog, "codigo_programa", None), getattr(prog, "nombre", None))
-                        if prog_key not in programas_set:
-                            programas_set.add(prog_key)
-                            programas.append({"codigo": prog_key[0], "nombre": prog_key[1]})
         
         # Determinar período actual (último por fecha de inicio)
         periodo_actual = None

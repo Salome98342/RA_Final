@@ -14,7 +14,7 @@ const AsignaturaAnalisis = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const returnTo = (location.state as any)?.returnTo || '/coordinador/materias'
+  const returnTo = (location.state as any)?.returnTo || '/coordinador/asignaturas'
   const idAsignatura = (location.state as any)?.id_asignatura as number | undefined
   const grupo = (location.state as any)?.grupo as string | undefined
   const sede = (location.state as any)?.sede as string | undefined
@@ -44,11 +44,11 @@ const AsignaturaAnalisis = () => {
     loadData()
   }, [codigo, idAsignatura, grupo, sede])
 
-  const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
+  const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'asignaturas'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -67,7 +67,7 @@ const AsignaturaAnalisis = () => {
             onClick={(key) => {
               if (key === 'inicio') navigate('/coordinador')
               else if (key === 'desempenio') navigate('/coordinador/desempenio')
-              else if (key === 'materias') navigate('/coordinador/materias')
+              else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
               else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -99,7 +99,7 @@ const AsignaturaAnalisis = () => {
             onClick={(key) => {
               if (key === 'inicio') navigate('/coordinador')
               else if (key === 'desempenio') navigate('/coordinador/desempenio')
-              else if (key === 'materias') navigate('/coordinador/materias')
+              else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
               else if (key === 'docentes') navigate('/coordinador/docentes')
               else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
               else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -135,7 +135,7 @@ const AsignaturaAnalisis = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -147,8 +147,8 @@ const AsignaturaAnalisis = () => {
           <ModuleBreadcrumbs
             items={[
               { label: 'Coordinador', to: '/coordinador' },
-              { label: 'Materias', to: '/coordinador/materias' },
-              { label: 'Analisis General' },
+              { label: 'Asignaturas', to: '/coordinador/asignaturas' },
+              { label: 'Análisis General' },
             ]}
             onNavigate={(to) => navigate(to)}
           />
@@ -181,7 +181,7 @@ const AsignaturaAnalisis = () => {
                     <strong>{asignatura.programa.nombre || 'N/A'}</strong>
                   </div>
                   <div className="col-md-4">
-                    <small className="text-muted d-block">Periodo</small>
+                    <small className="text-muted d-block">Período</small>
                     <strong>{asignatura.periodo.descripcion || 'N/A'}</strong>
                   </div>
                   <div className="col-md-4">

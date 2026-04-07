@@ -52,12 +52,12 @@ const AsignaturaDetalle: React.FC = () => {
           ? 'asignaturas-ra'
           : location.pathname.includes('/imports')
             ? 'imports'
-            : 'materias'
+            : 'asignaturas'
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -216,7 +216,7 @@ const AsignaturaDetalle: React.FC = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -228,19 +228,19 @@ const AsignaturaDetalle: React.FC = () => {
         <main className="dash-content">
           <div className="content-title d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
-              <i className="bi bi-journal-text me-2"></i>
+              <i className="bi bi-journal-bookmark me-2"></i>
               Detalle de Asignatura: {selectedCodigo || 'Sin código'}
             </div>
-            <button className="btn btn-sm btn-outline-primary" onClick={() => navigate('/coordinador/materias')}>
+            <button className="btn btn-sm btn-outline-primary" onClick={() => navigate('/coordinador/asignaturas')}>
               <i className="bi bi-arrow-left me-1"></i>
-              Volver a Materias
+              Volver a Asignaturas
             </button>
           </div>
 
           <ModuleBreadcrumbs
             items={[
               { label: 'Coordinador', to: '/coordinador' },
-              { label: 'Materias', to: '/coordinador/materias' },
+              { label: 'Asignaturas', to: '/coordinador/asignaturas' },
               { label: 'Detalle de Asignatura' },
             ]}
             onNavigate={(to) => navigate(to)}
@@ -274,15 +274,15 @@ const AsignaturaDetalle: React.FC = () => {
                 </div>
 
                 <div className="col-md-6 col-lg-4">
-                  <label className="form-label">Periodo</label>
+                  <label className="form-label">Período</label>
                   <div className="d-flex gap-2">
                     <select
                       className="form-select"
                       value={periodo}
                       onChange={(e) => setPeriodo(e.target.value)}
-                      aria-label="Seleccionar periodo"
+                      aria-label="Seleccionar período"
                     >
-                      {!periodos.length && <option value="">Sin periodos desde 2024-I</option>}
+                      {!periodos.length && <option value="">Sin períodos desde 2024-I</option>}
                       {periodos.map((p) => (
                         <option key={p.id} value={p.descripcion}>
                           {p.descripcion}

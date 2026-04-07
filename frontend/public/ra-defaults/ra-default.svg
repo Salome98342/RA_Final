@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220" role="img" aria-label="Imagen general de resultado de aprendizaje">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7f7f7"/>
+      <stop offset="1" stop-color="#ececec"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="220" fill="url(#bg)"/>
+  <circle cx="132" cy="110" r="58" fill="#ffffff" stroke="#9A1915" stroke-width="6"/>
+  <circle cx="132" cy="110" r="22" fill="#E30613"/>
+  <line x1="204" y1="86" x2="286" y2="86" stroke="#9A1915" stroke-width="8" stroke-linecap="round"/>
+  <line x1="204" y1="112" x2="340" y2="112" stroke="#6d6d6d" stroke-width="8" stroke-linecap="round"/>
+  <line x1="204" y1="138" x2="314" y2="138" stroke="#9A1915" stroke-width="8" stroke-linecap="round"/>
+  <text x="366" y="104" fill="#1f1f1f" font-family="Verdana, sans-serif" font-size="30" font-weight="700">RESULTADO DE</text>
+  <text x="366" y="138" fill="#1f1f1f" font-family="Verdana, sans-serif" font-size="30" font-weight="700">APRENDIZAJE</text>
+  <text x="366" y="170" fill="#6a6a6a" font-family="Verdana, sans-serif" font-size="22">Tarjeta general</text>
+</svg>

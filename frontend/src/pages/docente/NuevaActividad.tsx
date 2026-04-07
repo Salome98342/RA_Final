@@ -215,6 +215,7 @@ const NuevaActividadCurso: React.FC = () => {
             if (k === 'crear' && curso) navigate(`/docente/${curso}/actividades/nueva`)
             if (k === 'calificar' && curso) navigate(`/docente/${curso}/calificar`)
             if (k === 'recursos' && curso) navigate(`/docente/${curso}/recursos`)
+            if (k === 'volver-coordinador') navigate('/coordinador/asignaturas')
           }}
           items={[
             { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
@@ -222,6 +223,7 @@ const NuevaActividadCurso: React.FC = () => {
             { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
             { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
             { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
+            ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
           ]}
         />
         <main className="dash-content">
@@ -242,7 +244,7 @@ const NuevaActividadCurso: React.FC = () => {
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary shadow-sm"
-                onClick={() => navigate('/coordinador/materias')}
+                onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>

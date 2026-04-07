@@ -14,7 +14,7 @@ import Profile from '@/pages/Profile'
 import CoordinadorDashboard from '@/pages/coordinador/Dashboard'
 import CoordinadorAsignatura from '@/pages/coordinador/Asignatura'
 import CoordinadorImports from '@/pages/coordinador/Imports'
-import CoordinadorMaterias from '@/pages/coordinador/Materias'
+import CoordinadorAsignaturas from '@/pages/coordinador/Asignaturas'
 import CoordinadorEstudiantes from '@/pages/coordinador/Estudiantes'
 import CoordinadorDocentes from '@/pages/coordinador/Docentes'
 import CoordinadorMatriculados from '@/pages/coordinador/Matriculados'
@@ -101,15 +101,15 @@ const App: React.FC = () => {
       {/* Ruta de Estudiante - Protegida y basada en token (no en ID) */}
       <Route path="/estudiante/inicio" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteHome /></ProtectedRoute>} />
       <Route path="/estudiante" element={<ProtectedRoute allowedRoles={['estudiante']}><Estudiante /></ProtectedRoute>} />
-      <Route path="/estudiante/materias/:codigo/detalle" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteMateriaDetalle /></ProtectedRoute>} />
+      <Route path="/estudiante/asignaturas/:codigo/detalle" element={<ProtectedRoute allowedRoles={['estudiante']}><EstudianteMateriaDetalle /></ProtectedRoute>} />
       
       {/* Perfil - Accesible para todos los roles autenticados */}
       <Route path="/perfil" element={<ProtectedRoute allowedRoles={['docente', 'estudiante', 'coordinador']}><Profile /></ProtectedRoute>} />
   {/* Coordinador */}
   <Route path="/coordinador" element={<CoordinatorRoute><CoordinadorDashboard /></CoordinatorRoute>} />
   <Route path="/coordinador/desempenio" element={<CoordinatorRoute><CoordinadorDesempenio /></CoordinatorRoute>} />
-  <Route path="/coordinador/materias" element={<CoordinatorRoute><CoordinadorMaterias /></CoordinatorRoute>} />
-  <Route path="/coordinador/materias/:codigo/analitica" element={<CoordinatorRoute><CoordinadorAsignaturaAnalisis /></CoordinatorRoute>} />
+  <Route path="/coordinador/asignaturas" element={<CoordinatorRoute><CoordinadorAsignaturas /></CoordinatorRoute>} />
+  <Route path="/coordinador/asignaturas/:codigo/analitica" element={<CoordinatorRoute><CoordinadorAsignaturaAnalisis /></CoordinatorRoute>} />
   <Route path="/coordinador/docentes" element={<CoordinatorRoute><CoordinadorDocentes /></CoordinatorRoute>} />
   <Route path="/coordinador/estudiantes" element={<CoordinatorRoute><CoordinadorEstudiantes /></CoordinatorRoute>} />
   <Route path="/coordinador/matriculados" element={<CoordinatorRoute><CoordinadorMatriculados /></CoordinatorRoute>} />

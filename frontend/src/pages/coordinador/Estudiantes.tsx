@@ -37,11 +37,11 @@ const Estudiantes: React.FC = () => {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'materias'
+  const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'asignaturas'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -184,7 +184,7 @@ const Estudiantes: React.FC = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -199,7 +199,7 @@ const Estudiantes: React.FC = () => {
               Gestión de Estudiantes
             </div>
             <button 
-              className="btn btn-sm btn-outline-primary"
+              className="btn btn-sm btn-outline-danger"
               onClick={() => navigate('/coordinador/imports')}
             >
               <i className="bi bi-upload me-1"></i>
@@ -481,7 +481,7 @@ const Estudiantes: React.FC = () => {
                           </td>
                           <td>
                             {est.activo === false ? (
-                              <span className="badge bg-secondary">Desactivado</span>
+                              <span className="badge bg-secondary">Inactivo</span>
                             ) : (
                               <span className="badge bg-success">Activo</span>
                             )}
@@ -495,7 +495,7 @@ const Estudiantes: React.FC = () => {
                                 e.stopPropagation()
                                 handleDesactivarPerfil(est)
                               }}
-                              title={est.activo === false ? 'Perfil ya desactivado' : 'Desactivar perfil'}
+                              title={est.activo === false ? 'Perfil ya inactivo' : 'Desactivar perfil'}
                             >
                               {deactivatingId === est.id_estudiante ? (
                                 <>
@@ -519,12 +519,12 @@ const Estudiantes: React.FC = () => {
             </div>
           </div>
 
-          {/* Lista de estudiantes desactivados */}
+          {/* Lista de estudiantes inactivos */}
           <div className="card">
             <div className="card-header">
               <h5 className="mb-0">
                 <i className="bi bi-person-x me-2"></i>
-                Lista de Estudiantes desactivados ({estudiantesDesactivados.length})
+                Lista de Estudiantes inactivos ({estudiantesDesactivados.length})
               </h5>
             </div>
             <div className="card-body p-0">
@@ -539,7 +539,7 @@ const Estudiantes: React.FC = () => {
               {!loading && estudiantesDesactivados.length === 0 && (
                 <div className="text-center text-muted py-5">
                   <i className="bi bi-check2-circle display-4 d-block mb-3"></i>
-                  {searchTerm ? 'No se encontraron estudiantes desactivados con ese criterio' : 'No hay estudiantes desactivados'}
+                  {searchTerm ? 'No se encontraron estudiantes inactivos con ese criterio' : 'No hay estudiantes inactivos'}
                 </div>
               )}
 
@@ -589,7 +589,7 @@ const Estudiantes: React.FC = () => {
                             )}
                           </td>
                           <td>
-                            <span className="badge bg-secondary">Desactivado</span>
+                            <span className="badge bg-secondary">Inactivo</span>
                           </td>
                           <td className="text-end">
                             <button

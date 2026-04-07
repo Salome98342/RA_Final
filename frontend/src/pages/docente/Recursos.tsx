@@ -124,6 +124,7 @@ const DocenteRecursos: React.FC = () => {
             if (k === 'crear' && curso) navigate(`/docente/${curso}/actividades/nueva`)
             if (k === 'calificar' && curso) navigate(`/docente/${curso}/calificar`)
             if (k === 'recursos' && curso) navigate(`/docente/${curso}/recursos`)
+            if (k === 'volver-coordinador') navigate('/coordinador/asignaturas')
           }}
           items={[
             { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
@@ -131,6 +132,7 @@ const DocenteRecursos: React.FC = () => {
             { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
             { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
             { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
+            ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
           ]}
         />
         <main className="dash-content">
@@ -147,7 +149,7 @@ const DocenteRecursos: React.FC = () => {
             {state.role === 'coordinador' && (
               <button
                 className="btn btn-outline-primary"
-                onClick={() => navigate('/coordinador/materias')}
+                onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>
@@ -157,7 +159,7 @@ const DocenteRecursos: React.FC = () => {
           </div>
 
           {/* Tabs de navegación */}
-          <ul className="nav nav-pills mb-4 gap-2 flex-wrap">
+          <ul className="nav nav-pills mb-4 gap-2 flex-wrap docente-recursos-tabs">
             {visibleTabs.map(t => (
               <li className="nav-item" key={t.key}>
                 <button

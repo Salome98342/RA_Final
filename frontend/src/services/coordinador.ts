@@ -154,6 +154,80 @@ export type CreateAsignaturaWithRAResponse = {
   total_ra_asignatura: number
 }
 
+export type EditableIndicador = {
+  id_ind: number
+  descripcion: string | null
+  porcentaje_ind: number
+}
+
+export type EditableRA = {
+  id_ra: number
+  descripcion: string | null
+  porcentaje_ra: number
+  indicadores: EditableIndicador[]
+}
+
+export type AsignaturaDetalleEdicionResponse = {
+  asignatura: {
+    id_asignatura: number
+    codigo_asignatura: string
+    nombre_asignatura: string
+    codigo_docente: string | null
+    codigo_programa: string | null
+    programa_nombre: string | null
+    periodo: string | null
+    creditos: number
+    grupo: string
+    sede: string
+  }
+  ras: EditableRA[]
+  total_ra_asignatura: number
+}
+
+export type UpdateAsignaturaWithRAPayload = {
+  codigo_asignatura: string
+  nombre_asignatura: string
+  codigo_docente: string
+  codigo_programa: string
+  periodo: string
+  creditos: number
+  grupo: string
+  sede: string
+  ras: Array<{
+    id_ra?: number
+    descripcion: string
+    porcentaje_ra: number
+    indicadores: Array<{
+      id_ind?: number
+      descripcion: string
+      porcentaje_ind: number
+    }>
+  }>
+}
+
+export type UpdateAsignaturaWithRAResponse = {
+  detail: string
+  asignatura: {
+    codigo: string
+    nombre: string
+    periodo: string | null
+    grupo: string | null
+    sede: string | null
+    creditos: number
+    programa_codigo: string | null
+    docente_codigo: string | null
+  }
+  resumen: {
+    ras_actualizados: number
+    ras_creados: number
+    ras_eliminados: number
+    indicadores_actualizados: number
+    indicadores_creados: number
+    indicadores_eliminados: number
+  }
+  total_ra_asignatura: number
+}
+
 // ========== GESTIÓN DE DOCENTES ==========
 export type DocenteListItem = {
   id_docente: number
@@ -305,6 +379,23 @@ export async function fetchProgramas(): Promise<ProgramaItem[]> {
 
 export async function createAsignaturaWithRAs(payload: CreateAsignaturaWithRAPayload): Promise<CreateAsignaturaWithRAResponse> {
   const { data } = await api.post(endpoints.coordinador.crearAsignaturaRA, payload)
+  return data
+}
+
+export async function fetchAsignaturaDetalleEdicion(params: {
+  codigo_asignatura: string
+  periodo: string
+  grupo: string
+  sede: string
+}): Promise<AsignaturaDetalleEdicionResponse> {
+  const { data } = await api.get(endpoints.coordinador.detalleEdicionAsignaturaRA, { params })
+  return data
+}
+
+export async function updateAsignaturaWithRAs(
+  payload: UpdateAsignaturaWithRAPayload
+): Promise<UpdateAsignaturaWithRAResponse> {
+  const { data } = await api.patch(endpoints.coordinador.actualizarAsignaturaRA, payload)
   return data
 }
 
@@ -484,6 +575,8 @@ export interface DocentePerfilCompleto {
     codigo_asignatura: string
     nombre: string
     grupo: string | null
+    id_periodo?: number | null
+    periodo?: string | null
     programa: string | null
     total_estudiantes: number
     total_ras: number

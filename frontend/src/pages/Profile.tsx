@@ -290,10 +290,10 @@ const Profile: React.FC = () => {
                           <div><span className="ra-small">Total cursos</span><div className="text-body ms-2 d-inline-block">{data.totalCursos}</div></div>
                         )}
                         {data.rol === 'estudiante' && data.periodoActual && (
-                          <div><span className="ra-small">Periodo actual</span><div className="text-body ms-2 d-inline-block">{data.periodoActual.descripcion}</div></div>
+                          <div><span className="ra-small">Período actual</span><div className="text-body ms-2 d-inline-block">{data.periodoActual.descripcion}</div></div>
                         )}
                         {data.rol === 'estudiante' && typeof data.totalCursosPeriodoActual === 'number' && (
-                          <div><span className="ra-small">Cursos en periodo</span><div className="text-body ms-2 d-inline-block">{data.totalCursosPeriodoActual}</div></div>
+                          <div><span className="ra-small">Cursos en período</span><div className="text-body ms-2 d-inline-block">{data.totalCursosPeriodoActual}</div></div>
                         )}
                       </div>
                     </div></div>

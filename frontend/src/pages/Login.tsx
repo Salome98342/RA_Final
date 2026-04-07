@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { login } from '@/services/auth'
@@ -9,22 +9,8 @@ import HeaderBar from '@/components/HeaderBar'
 export default function Login() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
-  const [langOpen, setLangOpen] = useState(false);
-  const [lang, setLang] = useState("Español - Internacional (es)");
-  const ddRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { setName, setRole, setCode } = useSession()
-
-  // Cerrar dropdown al hacer clic fuera
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (ddRef.current && !ddRef.current.contains(e.target as Node)) { 
-        setLangOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,36 +126,6 @@ export default function Login() {
           </div>
 
           <div className="top-bar">
-            {/* Custom dropdown */}
-            {/* eslint-disable-next-line jsx-a11y/aria-props */}
-            <div
-              className="dropdown"
-              id="langDropdown"
-              ref={ddRef}
-              onClick={() => setLangOpen((v) => !v)}
-              role="combobox"
-              aria-haspopup="listbox"
-              aria-expanded={langOpen}
-              aria-label="Idioma"
-              tabIndex={0}
-              aria-controls="langOptions"
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLangOpen(v => !v) } if (e.key === 'Escape') setLangOpen(false) }}
-            >
-              <div className="dropdown-selected">{lang}</div>
-              <ul
-                id="langOptions"
-                className={`dropdown-list ${langOpen ? '' : 'd-none'}`}
-                role="listbox"
-                aria-label="Opciones de idioma"
-              >
-                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("Español - Internacional (es)"); setLangOpen(false) } }} onClick={() => { setLang("Español - Internacional (es)"); setLangOpen(false) }}>
-                  Español - Internacional (es)
-                </li>
-                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("English (en)"); setLangOpen(false) } }} onClick={() => { setLang("English (en)"); setLangOpen(false) }}>English (en)</li>
-                <li role="option" tabIndex={0} onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLang("Français (fr)"); setLangOpen(false) } }} onClick={() => { setLang("Français (fr)"); setLangOpen(false) }}>Français (fr)</li>
-              </ul>
-            </div>
-            {/* Aviso de cookies */}
             <div
               className="cookies"
               id="cookiesBtn"

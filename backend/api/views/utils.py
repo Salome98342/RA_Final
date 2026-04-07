@@ -1,7 +1,6 @@
 """
 Funciones auxiliares compartidas entre las vistas de la API.
 """
-from django.core.mail import send_mail
 from django.conf import settings
 from django.core import signing
 import logging
@@ -10,6 +9,7 @@ import unicodedata
 import io
 
 from ..models.models import Docente, Estudiante, Coordinador, Notificacion
+from ..utils.mailer import send_email_with_logging
 
 TOKEN_MAX_AGE = 60 * 60 * 24 * 7  # 7 días
 logger = logging.getLogger("api")
@@ -81,9 +81,8 @@ def _send_welcome_email(estudiante, password_provisional):
         estudiante: Objeto Estudiante
         password_provisional: Contraseña en texto plano (sin hashear)
     """
-    try:
-        subject = "Bienvenido a RA Manager"
-        message = f"""
+    subject = "Bienvenido a RA Manager"
+    message = f"""
 ¡Bienvenido/a a RA Manager!
 
 Hola {estudiante.nombre} {estudiante.apellido},
@@ -106,18 +105,16 @@ Si tienes alguna duda, contacta al coordinador del programa.
 
 Saludos,
 Equipo RA Manager
-        """.strip()
-        
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[estudiante.correo],
-            fail_silently=True,
-        )
-        logger.info(f"Correo de bienvenida enviado a {estudiante.correo}")
-    except Exception as e:
-        logger.error(f"Error enviando correo de bienvenida a {estudiante.correo}: {str(e)}")
+    """.strip()
+
+    return send_email_with_logging(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[estudiante.correo],
+        logger=logger,
+        context="bienvenida_estudiante_utils",
+    )
 
 
 def _read_imported_file(file_obj):

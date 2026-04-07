@@ -41,8 +41,8 @@ const AgregarEstudianteCard: React.FC<Props> = ({ curso, onSuccess }) => {
           showCancelButton: true,
           confirmButtonText: 'Sí, agregar',
           cancelButtonText: 'Cancelar',
-          confirmButtonColor: '#0d6efd',
-          cancelButtonColor: '#6c757d'
+          confirmButtonColor: '#199A75',
+          cancelButtonColor: '#575756'
         })
         
         if (confirmResult.isConfirmed) {
@@ -108,7 +108,7 @@ const AgregarEstudianteCard: React.FC<Props> = ({ curso, onSuccess }) => {
             para que el docente pueda agregarlo y calificarle en el curso.
             <br />
             Ingresa el <strong>código del estudiante</strong> para buscarlo.
-            Puedes usar el formato <code>codigo-programa</code> (ej: <code>202388558-2724</code>)
+            Puedes usar el formato <code className="text-danger">codigo-programa</code> (ej: <code className="text-danger">202388558-2724</code>)
             y verificar sus datos antes de agregarlo.
           </div>
         </div>

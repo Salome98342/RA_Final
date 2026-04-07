@@ -16,7 +16,8 @@ const Sidebar: React.FC<Props> = ({ active, onClick, items }) => {
   }
   return (
     <aside className="dash-sidebar" aria-label="Barra lateral">
-      {items.map((it) => (
+      {items.map((it) => {
+        return (
         <button
           key={it.key}
           className={`side-btn ${active === it.key ? 'active' : ''}`}
@@ -26,7 +27,8 @@ const Sidebar: React.FC<Props> = ({ active, onClick, items }) => {
         >
           <i className={`bi ${it.icon}`} />
         </button>
-      ))}
+        )
+      })}
       <button className="side-btn" onClick={handleLogout} title="Salir" aria-label="Salir"><i className="bi bi-box-arrow-right" /></button>
     </aside>
   )

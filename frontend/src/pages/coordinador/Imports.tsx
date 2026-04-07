@@ -107,11 +107,10 @@ const cardConfigs: ImportCardConfig[] = [
     kind: 'doc',
     title: 'Docentes',
     iconClass: 'bi bi-person-badge-fill',
-    accentClass: 'text-warning',
+    accentClass: 'text-danger',
     description: 'Importa docentes con documento, correo y datos de contacto.',
     acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento, num_telefono (opcional), password (opcional)',
     templateCandidates: [
-      { fileName: 'plantilla_docentes.csv', downloadName: 'plantilla_docentes.csv' },
       { fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' },
     ],
     headerRule: {
@@ -123,11 +122,10 @@ const cardConfigs: ImportCardConfig[] = [
     kind: 'est',
     title: 'Estudiantes',
     iconClass: 'bi bi-people-fill',
-    accentClass: 'text-primary',
+    accentClass: 'text-danger',
     description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional.',
     acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada (opcional)',
     templateCandidates: [
-      { fileName: 'plantilla_estudiantes.csv', downloadName: 'plantilla_estudiantes.csv' },
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },
     ],
     headerRule: {
@@ -143,8 +141,6 @@ const cardConfigs: ImportCardConfig[] = [
     description: 'Crea o actualiza asignaturas, RAs e indicadores de logro (IL) en una sola carga.',
     acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, periodo, grupo, sede, creditos, ra_descripcion, ra_porcentaje, indicador_descripcion, indicador_porcentaje',
     templateCandidates: [
-      { fileName: 'plantilla_asignaturas_ras_il.csv', downloadName: 'plantilla_asignaturas_ras_il.csv' },
-      { fileName: 'plantilla_asignaturas_ras.csv', downloadName: 'plantilla_asignaturas_ras.csv' },
       { fileName: 'plantilla_asignaturas_ras_il.xlsx', downloadName: 'plantilla_asignaturas_ras_il.xlsx' },
       { fileName: 'plantilla_asignaturas_ras.xlsx', downloadName: 'plantilla_asignaturas_ras.xlsx' },
     ],
@@ -158,11 +154,10 @@ const cardConfigs: ImportCardConfig[] = [
     kind: 'mat',
     title: 'Matriculados',
     iconClass: 'bi bi-clipboard-check-fill',
-    accentClass: 'text-success',
+    accentClass: 'text-danger',
     description: 'Relaciona estudiantes con asignaturas y periodo académico de matrícula.',
-    acceptedColumns: 'codigo_estudiante, periodo, codigo_asignatura, grupo, sede (codigo_asignatura/grupo/sede opcionales si seleccionas materias en la alerta)',
+    acceptedColumns: 'codigo_estudiante, periodo, codigo_asignatura, grupo, sede (codigo_asignatura/grupo/sede opcionales si seleccionas asignaturas en la alerta)',
     templateCandidates: [
-      { fileName: 'plantilla_matriculados.csv', downloadName: 'plantilla_matriculados.csv' },
       { fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' },
     ],
     headerRule: {
@@ -487,11 +482,11 @@ const Imports: React.FC<ImportsProps> = ({
           ? 'asignaturas-ra'
           : location.pathname.includes('/imports')
             ? 'imports'
-            : 'materias'
+            : 'asignaturas'
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -633,7 +628,7 @@ const Imports: React.FC<ImportsProps> = ({
 
   const requestMatriculadosAsignaturas = async (): Promise<number[] | null> => {
     if (!matriculadosAsignaturas.length) {
-      Alert.toast.warning('No hay materias disponibles para seleccionar en la importación de matriculados.')
+      Alert.toast.warning('No hay asignaturas disponibles para seleccionar en la importación de matriculados.')
       return null
     }
 
@@ -653,10 +648,10 @@ const Imports: React.FC<ImportsProps> = ({
 
     const result = await Swal.fire<{ selectedIds: number[] }>({
       icon: 'warning',
-      title: 'Selecciona materia(s) para matricular',
+      title: 'Selecciona asignatura(s) para matricular',
       html: `
         <div class="text-start small text-muted mb-2">
-          El archivo se cargará en las materias seleccionadas. Puedes elegir una o varias antes de continuar.
+          El archivo se cargará en las asignaturas seleccionadas. Puedes elegir una o varias antes de continuar.
         </div>
         <div style="max-height:280px; overflow:auto; border:1px solid #dee2e6; border-radius:8px; padding:8px;">
           ${optionsHtml}
@@ -693,7 +688,7 @@ const Imports: React.FC<ImportsProps> = ({
           .filter((id) => Number.isFinite(id))
 
         if (!selected.length) {
-          Swal.showValidationMessage('Debes seleccionar al menos una materia para continuar.')
+          Swal.showValidationMessage('Debes seleccionar al menos una asignatura para continuar.')
           return undefined
         }
 
@@ -731,7 +726,7 @@ const Imports: React.FC<ImportsProps> = ({
 
       if (kind === 'mat') {
         if (loadingMatriculadosAsignaturas) {
-          Alert.toast.info('Cargando materias disponibles. Intenta nuevamente en unos segundos.')
+          Alert.toast.info('Cargando asignaturas disponibles. Intenta nuevamente en unos segundos.')
           setSingleCardState(kind, { status: 'ready', validationError: null, result: null })
           return
         }
@@ -834,7 +829,7 @@ const Imports: React.FC<ImportsProps> = ({
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
