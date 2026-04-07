@@ -35,7 +35,7 @@ const DesempenioEstudiantes: React.FC = () => {
   const sidebarItems = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -142,8 +142,8 @@ const DesempenioEstudiantes: React.FC = () => {
         datasets: [
           {
             data: [totalBajo, normalDesempenio],
-            backgroundColor: ['#dc3545', '#28a745'],
-            borderColor: ['#c82333', '#1e7e34'],
+            backgroundColor: ['#E73431', '#199A75'],
+            borderColor: ['#9A1915', '#0F6B50'],
             borderWidth: 2,
             label: 'Estudiantes',
           },
@@ -208,7 +208,7 @@ const DesempenioEstudiantes: React.FC = () => {
             datasets: [
               {
                 data: [bajoDesempenio, normalDesempenio],
-                backgroundColor: ['#ff6b6b', '#51cf66'],
+                backgroundColor: ['#E73431', '#199A75'],
                 borderColor: ['#ffffff'],
                 borderWidth: 2,
               },
@@ -271,9 +271,9 @@ const DesempenioEstudiantes: React.FC = () => {
       
       // Definir colores basado en el porcentaje
       const colors = porcentajes.map(pct => {
-        if (pct >= 50) return '#dc3545' // Rojo - crítico
-        if (pct >= 30) return '#ffc107' // Amarillo - alerta
-        return '#28a745' // Verde - bajo riesgo
+        if (pct >= 50) return '#9A1915' // Rojo - critico
+        if (pct >= 30) return '#E73431' // Rojo - alerta
+        return '#199A75' // Verde - bajo riesgo
       })
 
       const barChart = new ChartJS(ctx, {

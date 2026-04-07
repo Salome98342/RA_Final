@@ -235,7 +235,7 @@ const DocenteCrearActividad: React.FC = () => {
             {state.role === 'coordinador' && (
               <button 
                 className="btn btn-outline-primary shadow-sm"
-                onClick={() => navigate('/coordinador/materias')}
+                onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
                 <i className="bi bi-arrow-left me-2"></i>

@@ -39,27 +39,27 @@ const Toast: React.FC<Props> = ({ text, type = 'ok', duration = 3500, onClose })
   const toastConfig = {
     ok: {
       icon: 'bi-check-circle-fill',
-      gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-      shadow: '0 8px 32px rgba(16, 185, 129, 0.35)',
-      borderColor: '#10b981'
+      gradient: 'linear-gradient(135deg, #199A75 0%, #0F6B50 100%)',
+      shadow: '0 8px 32px rgba(25, 154, 117, 0.35)',
+      borderColor: '#199A75'
     },
     error: {
       icon: 'bi-x-circle-fill',
-      gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-      shadow: '0 8px 32px rgba(239, 68, 68, 0.35)',
-      borderColor: '#ef4444'
+      gradient: 'linear-gradient(135deg, #E73431 0%, #9A1915 100%)',
+      shadow: '0 8px 32px rgba(154, 25, 21, 0.35)',
+      borderColor: '#9A1915'
     },
     warning: {
       icon: 'bi-exclamation-triangle-fill',
-      gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-      shadow: '0 8px 32px rgba(245, 158, 11, 0.35)',
-      borderColor: '#f59e0b'
+      gradient: 'linear-gradient(135deg, #9A1915 0%, #460E0F 100%)',
+      shadow: '0 8px 32px rgba(70, 14, 15, 0.35)',
+      borderColor: '#9A1915'
     },
     info: {
       icon: 'bi-info-circle-fill',
-      gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-      shadow: '0 8px 32px rgba(59, 130, 246, 0.35)',
-      borderColor: '#3b82f6'
+      gradient: 'linear-gradient(135deg, #575756 0%, #1D1D1B 100%)',
+      shadow: '0 8px 32px rgba(29, 29, 27, 0.35)',
+      borderColor: '#575756'
     }
   }
 

@@ -55,7 +55,7 @@
 
 /* Bell icon colors */
 .bell-icon-unread {
-  color: #dc3545;
+  color: var(--uv-red);
 }
 
 .bell-icon-normal {

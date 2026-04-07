@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { fetchDocentePerfil, type DocentePerfilCompleto } from '@/services/coordinador'
+import { fetchDocentePerfil, fetchPeriodosCoordinador, type DocentePerfilCompleto } from '@/services/coordinador'
+import { sortPeriodosDesc } from '@/utils/periodos'
 
 interface DocentePerfilModalProps {
   id_docente: number
@@ -8,6 +9,8 @@ interface DocentePerfilModalProps {
 
 const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onClose }) => {
   const [data, setData] = useState<DocentePerfilCompleto | null>(null)
+  const [periodos, setPeriodos] = useState<Array<{ id_periodo: number; descripcion: string }>>([])
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -16,7 +19,28 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
       setLoading(true)
       setError(null)
       try {
-        const result = await fetchDocentePerfil(id_docente)
+        const [result, periodosResponse] = await Promise.all([
+          fetchDocentePerfil(id_docente),
+          fetchPeriodosCoordinador(),
+        ])
+
+        const sortedPeriodos = sortPeriodosDesc(periodosResponse || [])
+        setPeriodos(sortedPeriodos)
+
+        const latestFromPeriodos = sortedPeriodos.length ? String(sortedPeriodos[0].id_periodo) : ''
+        const latestFromAsignaturas = sortPeriodosDesc(
+          result.asignaturas
+            .filter((asig) => !!asig.id_periodo && !!asig.periodo)
+            .map((asig) => ({
+              id_periodo: Number(asig.id_periodo),
+              descripcion: String(asig.periodo),
+            }))
+        )
+        const latestFromAsignaturasValue = latestFromAsignaturas.length
+          ? String(latestFromAsignaturas[0].id_periodo)
+          : ''
+
+        setPeriodoSeleccionado(latestFromPeriodos || latestFromAsignaturasValue)
         setData(result)
       } catch (err: any) {
         setError(err?.response?.data?.detail || 'Error al cargar el perfil del docente')
@@ -26,6 +50,16 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
     }
     loadData()
   }, [id_docente])
+
+  const asignaturasMostradas = data
+    ? (periodoSeleccionado
+        ? data.asignaturas.filter((asig) => String(asig.id_periodo || '') === periodoSeleccionado)
+        : data.asignaturas)
+    : []
+  const totalAsignaturasPeriodo = asignaturasMostradas.length
+  const totalEstudiantesPeriodo = asignaturasMostradas.reduce((acc, asig) => acc + asig.total_estudiantes, 0)
+  const totalRasPeriodo = asignaturasMostradas.reduce((acc, asig) => acc + asig.total_ras, 0)
+  const periodoActual = periodos.find((p) => String(p.id_periodo) === periodoSeleccionado)
 
   return (
     <div className="modal fade show d-block modal-overlay-backdrop" tabIndex={-1}>
@@ -100,7 +134,7 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                     <div className="card shadow-sm border-primary h-100">
                       <div className="card-body text-center">
                         <i className="bi bi-journal-bookmark text-primary fs-2"></i>
-                        <h4 className="mt-2 mb-0">{data.estadisticas.total_asignaturas}</h4>
+                        <h4 className="mt-2 mb-0">{totalAsignaturasPeriodo}</h4>
                         <small className="text-muted">Asignaturas</small>
                       </div>
                     </div>
@@ -109,7 +143,7 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                     <div className="card shadow-sm border-success h-100">
                       <div className="card-body text-center">
                         <i className="bi bi-people text-success fs-2"></i>
-                        <h4 className="mt-2 mb-0">{data.estadisticas.total_estudiantes}</h4>
+                        <h4 className="mt-2 mb-0">{totalEstudiantesPeriodo}</h4>
                         <small className="text-muted">Estudiantes</small>
                       </div>
                     </div>
@@ -118,25 +152,48 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                     <div className="card shadow-sm border-info h-100">
                       <div className="card-body text-center">
                         <i className="bi bi-graph-up text-info fs-2"></i>
-                        <h4 className="mt-2 mb-0">{data.estadisticas.total_ras}</h4>
+                        <h4 className="mt-2 mb-0">{totalRasPeriodo}</h4>
                         <small className="text-muted">RAs</small>
                       </div>
                     </div>
                   </div>
                 </div>
 
+                {periodos.length > 0 && (
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">
+                      <i className="bi bi-calendar3 me-2"></i>
+                      Período Académico:
+                    </label>
+                    <select
+                      className="form-select"
+                      value={periodoSeleccionado}
+                      onChange={(e) => setPeriodoSeleccionado(e.target.value)}
+                      aria-label="Seleccionar período académico"
+                    >
+                      {periodos.map((periodo) => (
+                        <option key={periodo.id_periodo} value={String(periodo.id_periodo)}>
+                          {periodo.descripcion}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="card shadow-sm">
                   <div className="card-header bg-light">
                     <h6 className="mb-0">
                       <i className="bi bi-book me-2"></i>
-                      Asignaturas Asociadas
+                      Asignaturas Asociadas{periodoActual ? ` - ${periodoActual.descripcion}` : ''}
                     </h6>
                   </div>
                   <div className="card-body p-0">
-                    {data.asignaturas.length === 0 ? (
+                    {asignaturasMostradas.length === 0 ? (
                       <div className="text-center text-muted py-4">
                         <i className="bi bi-inbox d-block mb-2"></i>
-                        Este docente aún no tiene asignaturas asociadas.
+                        {periodoActual
+                          ? `No hay información para el período ${periodoActual.descripcion}.`
+                          : 'Este docente aún no tiene asignaturas asociadas.'}
                       </div>
                     ) : (
                       <div className="table-responsive">
@@ -151,7 +208,7 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                             </tr>
                           </thead>
                           <tbody>
-                            {data.asignaturas.map((asig) => (
+                            {asignaturasMostradas.map((asig) => (
                               <tr key={asig.id_asignatura}>
                                 <td><span className="badge bg-secondary">{asig.codigo_asignatura}</span></td>
                                 <td>{asig.nombre}{asig.grupo ? ` (Grupo ${asig.grupo})` : ''}</td>

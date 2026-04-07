@@ -50,8 +50,8 @@ const ImportEstudiantesCard: React.FC<Props> = ({ curso, onSuccess, onError }) =
         <div className="alert alert-info d-flex align-items-start mb-3">
           <i className="bi bi-info-circle me-2 mt-1"></i>
           <div>
-            <strong>Formato esperado:</strong> Archivo CSV con columna <code>codigo_estudiante</code> (o sinónimos: <code>estudiante</code>, <code>code</code>, <code>matricula</code>).
-            <br/>Opcionalmente puede incluir <code>periodo</code>. Los estudiantes deben existir en el sistema.
+            <strong>Formato esperado:</strong> Archivo CSV con columna <code className="text-danger">codigo_estudiante</code> (o sinónimos: <code className="text-danger">estudiante</code>, <code className="text-danger">code</code>, <code className="text-danger">matricula</code>).
+            <br/>Opcionalmente puede incluir <code className="text-danger">periodo</code>. Los estudiantes deben existir en el sistema.
           </div>
         </div>
 

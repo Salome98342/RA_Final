@@ -258,15 +258,15 @@ const HELP_MATCHERS: HelpMatcher[] = [
     match: (pathname) => pathname === '/estudiante/inicio' || pathname === '/estudiante',
     content: {
       module: 'Inicio estudiante',
-      description: 'Es tu panel principal. Resume materias, pendientes y avance.',
+      description: 'Es tu panel principal. Resume asignaturas, pendientes y avance.',
       actions: [
-        'Ver materias del período activo.',
+        'Ver asignaturas del período activo.',
         'Identificar actividades próximas o pendientes.',
         'Entrar al detalle para revisar notas y cobertura.',
       ],
       faqs: [
         {
-          question: '¿Dónde veo mis materias activas?',
+          question: '¿Dónde veo mis asignaturas activas?',
           answer: 'En el panel principal de esta vista, con acceso directo al detalle por materia.',
         },
         {
@@ -281,7 +281,7 @@ const HELP_MATCHERS: HelpMatcher[] = [
     },
   },
   {
-    match: (pathname) => /^\/estudiante\/materias\/[^/]+\/detalle$/.test(pathname),
+    match: (pathname) => /^\/estudiante\/asignaturas\/[^/]+\/detalle$/.test(pathname),
     content: {
       module: 'Detalle de materia',
       description: 'Muestra notas, cobertura por RA, recursos y anuncios de la materia.',
@@ -312,18 +312,18 @@ const HELP_MATCHERS: HelpMatcher[] = [
       module: 'Dashboard coordinador',
       description: 'Tablero general del programa para monitoreo académico y operativo.',
       actions: [
-        'Ver indicadores globales de materias, docentes y estudiantes.',
+        'Ver indicadores globales de asignaturas, docentes y estudiantes.',
         'Identificar módulos que requieren acción.',
         'Navegar a gestión detallada.',
       ],
       faqs: [
         {
           question: '¿Qué indicadores debo vigilar aquí?',
-          answer: 'Cobertura de RAs, materias activas, docentes asignados e importaciones pendientes.',
+          answer: 'Cobertura de RAs, asignaturas activas, docentes asignados e importaciones pendientes.',
         },
         {
           question: '¿Desde dónde navego a gestión detallada?',
-          answer: 'Desde el menú: materias, docentes, estudiantes, matrícula e importaciones.',
+          answer: 'Desde el menú: asignaturas, docentes, estudiantes, matrícula e importaciones.',
         },
         {
           question: '¿Este panel está disponible para docentes?',
@@ -333,12 +333,12 @@ const HELP_MATCHERS: HelpMatcher[] = [
     },
   },
   {
-    match: (pathname) => pathname === '/coordinador/materias',
+    match: (pathname) => pathname === '/coordinador/asignaturas',
     content: {
-      module: 'Materias',
-      description: 'Aquí el coordinador administra materias y su estructura académica.',
+      module: 'Asignaturas',
+      description: 'Aquí el coordinador administra asignaturas y su estructura académica.',
       actions: [
-        'Listar materias con filtros y búsqueda.',
+        'Listar asignaturas con filtros y búsqueda.',
         'Crear o actualizar asignaturas.',
         'Entrar a analítica por materia.',
       ],
@@ -352,8 +352,8 @@ const HELP_MATCHERS: HelpMatcher[] = [
           answer: 'Verifica importación o regístrala manualmente.',
         },
         {
-          question: '¿Puede un docente crear materias desde su módulo?',
-          answer: 'No. La gestión de materias es responsabilidad de coordinación.',
+          question: '¿Puede un docente crear asignaturas desde su módulo?',
+          answer: 'No. La gestión de asignaturas es responsabilidad de coordinación.',
         },
       ],
     },
@@ -385,7 +385,7 @@ const HELP_MATCHERS: HelpMatcher[] = [
     },
   },
   {
-    match: (pathname) => /^\/coordinador\/materias\/[^/]+\/analitica$/.test(pathname),
+    match: (pathname) => /^\/coordinador\/asignaturas\/[^/]+\/analitica$/.test(pathname),
     content: {
       module: 'Analítica de asignatura',
       description: 'Vista consolidada del curso para tomar decisiones académicas con datos.',
@@ -531,7 +531,7 @@ const HELP_MATCHERS: HelpMatcher[] = [
         },
         {
           question: '¿Cómo regreso al listado general?',
-          answer: 'Usa la navegación de la pantalla o vuelve al módulo de materias.',
+          answer: 'Usa la navegación de la pantalla o vuelve al módulo de asignaturas.',
         },
         {
           question: '¿Esta vista permite calificar estudiantes?',
@@ -640,9 +640,11 @@ const ContextualHelp = () => {
   const location = useLocation()
   const { state } = useSession()
   const [isOpen, setIsOpen] = useState(false)
+  const isPublicRoute = location.pathname === '/login' || location.pathname === '/recuperar' || location.pathname === '/reset'
+  const effectiveRole: Role = isPublicRoute ? null : state.role
 
   const content = useMemo(() => getHelpForPath(location.pathname), [location.pathname])
-  const roleGuidance = useMemo(() => getRoleGuidance(location.pathname, state.role), [location.pathname, state.role])
+  const roleGuidance = useMemo(() => getRoleGuidance(location.pathname, effectiveRole), [location.pathname, effectiveRole])
 
   useEffect(() => {
     setIsOpen(false)
@@ -677,7 +679,7 @@ const ContextualHelp = () => {
           <p className="context-help-description">{content.description}</p>
 
           <div className="context-help-role-note" role="note">
-            <p className="context-help-role-note-title">Rol actual: {getRoleLabel(state.role)}</p>
+            <p className="context-help-role-note-title">Rol actual: {getRoleLabel(effectiveRole)}</p>
             <p className="context-help-role-note-text">{roleGuidance}</p>
           </div>
 

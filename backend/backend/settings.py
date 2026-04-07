@@ -12,6 +12,13 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -223,10 +230,11 @@ LOGGING = {
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@univalle.local')
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
 
 # Configuración para recuperación de contraseña con OTP
 OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '5'))  # Tiempo de expiración del OTP en minutos
@@ -236,7 +244,7 @@ OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '5'))  # Tiempo de expi
 DEFAULT_BULK_STUDENT_PASSWORD = os.getenv('DEFAULT_BULK_STUDENT_PASSWORD', 'Estudiante123*')
 
 # Si está en True, la importación masiva intentará enviar correos de bienvenida.
-SEND_WELCOME_EMAILS_ON_IMPORT = os.getenv('SEND_WELCOME_EMAILS_ON_IMPORT', 'True') == 'True'
+SEND_WELCOME_EMAILS_ON_IMPORT = _env_bool('SEND_WELCOME_EMAILS_ON_IMPORT', True)
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

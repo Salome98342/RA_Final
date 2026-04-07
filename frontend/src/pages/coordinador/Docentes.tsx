@@ -40,12 +40,12 @@ const Docentes: React.FC = () => {
           ? 'asignaturas-ra'
       : location.pathname.includes('/imports')
         ? 'imports'
-        : 'materias'
+        : 'asignaturas'
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -127,7 +127,7 @@ const Docentes: React.FC = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -160,7 +160,7 @@ const Docentes: React.FC = () => {
                 + Agregar Docente Individual
               </button>
               <button
-                className="btn btn-sm btn-outline-primary"
+                className="btn btn-sm btn-outline-danger"
                 onClick={() => navigate('/coordinador/imports')}
               >
                 <i className="bi bi-upload me-1"></i>

@@ -1,7 +1,7 @@
 # Documentación funcional del sistema (generada desde el código)
 
 ## 1. Resumen del sistema
-El sistema es una plataforma de gestión académica enfocada en Resultados de Aprendizaje (RAs). Permite la administración de asignaturas, matrículas y calificaciones bajó un modelo de competencias.
+El sistema es una plataforma de gestión académica enfocada en Resultados de Aprendizaje (RAs). Permite la administración de asignaturas, matrículas y calificaciones bajo un modelo de competencias.
 
 El sistema está construido con una arquitectura desacoplada:
 *   **Backend**: Django (Python) expone una API REST.
@@ -68,7 +68,7 @@ Aplicación SPA (Single Page Application):
 
 | Vista | Ruta | Rol que puede acceder | Acciones disponibles |
 |------|------|------|------|
-| Login | `/login` | Publico | Iniciar sesión, ir a "olvidé contraseña" |
+| Login | `/login` | Público | Iniciar sesión, ir a "olvidé contraseña" |
 | Dashboard Coordinador | `/coordinador` | Coordinador | Ver métricas generales |
 | Gestión Materias | `/coordinador/materias` | Coordinador | Listar materias, ver analíticas |
 | Analítica Asignatura | `/coordinador/materias/:codigo/analitica`| Coordinador | Ver progreso por RA, cobertura del curso |

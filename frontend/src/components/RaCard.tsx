@@ -2,15 +2,56 @@ import { useRef, type ReactNode } from 'react'
 
 type Props = { 
   headTone?: 'dark' | 'light'; 
+  cardType?: 'asignatura' | 'ra';
   title: ReactNode; 
   subtitle?: ReactNode; 
+  imageSrc?: string;
+  imageVariant?: number;
+  imageAlt?: string;
   onClick?: () => void; 
   onDoubleClick?: () => void;
   ariaLabel?: string 
 }
 
-const RaCard = ({ headTone = 'light', title, subtitle, onClick, onDoubleClick, ariaLabel }: Props) => {
+const RA_TOP_IMAGES = [
+  '/ra-defaults/fondos4.png',
+  '/ra-defaults/fondos5.png'
+]
+
+const ASIGNATURA_TOP_IMAGES = [
+  '/ra-defaults/fondos1.png',
+  '/ra-defaults/fondos2.png',
+  '/ra-defaults/fondos3.png'
+]
+
+const getCardImageIndex = (seed: string, total: number): number => {
+  if (!seed || total <= 0) return 0
+
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  }
+
+  return hash % total
+}
+
+const RaCard = ({ headTone = 'light', cardType = 'ra', title, subtitle, imageSrc, imageVariant, imageAlt, onClick, onDoubleClick, ariaLabel }: Props) => {
   const clickTimer = useRef<NodeJS.Timeout | null>(null)
+  const variantSeed =
+    (typeof title === 'string' && title) ||
+    (typeof subtitle === 'string' && subtitle) ||
+    ariaLabel ||
+    cardType
+  const imagePool = cardType === 'asignatura' ? ASIGNATURA_TOP_IMAGES : RA_TOP_IMAGES
+  const autoImageIndex = getCardImageIndex(variantSeed, imagePool.length)
+  const normalizedVariantIndex = typeof imageVariant === 'number' && imageVariant > 0
+    ? (imageVariant - 1) % imagePool.length
+    : autoImageIndex
+  const fallbackSrc = imagePool[normalizedVariantIndex]
+  const resolvedImageSrc = imageSrc || fallbackSrc
+  const resolvedAlt = imageAlt || (cardType === 'asignatura'
+    ? 'Imagen decorativa superior de asignatura'
+    : 'Imagen decorativa superior de resultado de aprendizaje')
 
   const handleClick = () => {
     // Si hay doble clic configurado, esperar para ver si es doble clic
@@ -44,7 +85,7 @@ const RaCard = ({ headTone = 'light', title, subtitle, onClick, onDoubleClick, a
 
   return (
     <div
-      className="ra-card"
+      className={`ra-card ra-card--${cardType}`}
       role="button"
       tabIndex={0}
       aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
@@ -57,6 +98,14 @@ const RaCard = ({ headTone = 'light', title, subtitle, onClick, onDoubleClick, a
       }}
     >
       <div className={`ra-card-head ${headTone === 'dark' ? 'bg-secondary' : 'bg-secondary-subtle'}`}>
+        {resolvedImageSrc && (
+          <img
+            src={resolvedImageSrc}
+            alt={resolvedAlt}
+            className="ra-card-image"
+            loading="lazy"
+          />
+        )}
         {onDoubleClick && (
           <div className="position-absolute top-0 end-0 p-2 opacity-50">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">

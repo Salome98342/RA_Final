@@ -13,6 +13,7 @@ const DocenteHome: React.FC = () => {
     { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
     { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
     { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
+    ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
   ]
 
   const moduleCards = [
@@ -48,6 +49,7 @@ const DocenteHome: React.FC = () => {
     else if (key === 'crear') navigate('/docente/cursos')
     else if (key === 'calificar') navigate('/docente/cursos')
     else if (key === 'recursos') navigate('/docente/cursos')
+    else if (key === 'volver-coordinador') navigate('/coordinador/asignaturas')
   }
 
   return (

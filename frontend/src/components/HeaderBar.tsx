@@ -20,10 +20,12 @@ const HeaderBar: React.FC<Props> = ({ subtitle, avatarUrl, roleLabel, showWhenLo
   const navigate = useNavigate()
   const name = state.name ?? ''
   const role = state.role
+  const isPublicMode = showWhenLoggedOut
+  const showUserInfo = Boolean(role) && !isPublicMode
   if (!role && !showWhenLoggedOut) return null
 
   const goToHome = () => {
-    if (!role) navigate('/login')
+    if (isPublicMode || !role) navigate('/login')
     else if (role === 'coordinador') navigate('/coordinador')
     else if (role === 'docente') navigate('/docente/inicio')
     else if (role === 'estudiante') navigate('/estudiante/inicio')
@@ -33,7 +35,7 @@ const HeaderBar: React.FC<Props> = ({ subtitle, avatarUrl, roleLabel, showWhenLo
   const roleText = (roleLabel || role || 'usuario').toString().toUpperCase()
 
   return (
-    <header className="dash-header px-3" data-role={role || 'public'}>
+    <header className="dash-header px-3" data-role={isPublicMode ? 'public' : (role || 'public')}>
       <div className="container-fluid d-flex align-items-center justify-content-between">
         <div className="d-flex align-items-center">
           <a
@@ -53,7 +55,8 @@ const HeaderBar: React.FC<Props> = ({ subtitle, avatarUrl, roleLabel, showWhenLo
           </a>
         </div>
 
-        {role && <div className="text-end d-flex align-items-center gap-2">
+        <div className="text-end d-flex align-items-center gap-2">
+        {showUserInfo && <>
           {/* Notificaciones solo para estudiantes */}
           {role === 'estudiante' && <NotificationsBell intervalMs={30000} />}
           
@@ -74,7 +77,8 @@ const HeaderBar: React.FC<Props> = ({ subtitle, avatarUrl, roleLabel, showWhenLo
               {avatarUrl ? <img src={avatarUrl} alt="avatar" className="avatar-img" /> : <i className="bi bi-person" />}
             </div>
           )}
-        </div>}
+        </>}
+        </div>
       </div>
     </header>
   )

@@ -31,7 +31,7 @@ Sistema integral de gestión de Resultados de Aprendizaje (RAs) para institucion
 - Modo oscuro y temas personalizables
 - Accesibilidad WCAG 2.1 AA compliant
 
-### � **Sistema de Notificaciones**
+### 🔔 **Sistema de Notificaciones**
 - Alertas contextuales con 4 tipos (success, error, warning, info)
 - Toasts flotantes con auto-cierre configurable
 - Mensajes estandarizados en español
@@ -79,7 +79,7 @@ Sistema integral de gestión de Resultados de Aprendizaje (RAs) para institucion
 
 ---
 
-## � Sistema de Correo de Bienvenida
+## 📧 Sistema de Correo de Bienvenida
 
 ### **Registro Automático de Estudiantes**
 
@@ -126,7 +126,7 @@ DEFAULT_FROM_EMAIL=tu_correo@gmail.com
 
 ---
 
-## �🛠️ Stack Tecnológico
+## 🛠️ Stack Tecnológico
 
 ### **Backend**
 - **Django 5.2.6** - Framework web robusto en Python
@@ -1385,7 +1385,7 @@ Para problemas más específicos, consultar:
 - 🔮 Kubernetes manifests para producción
 - 🔮 Monitoreo con Prometheus + Grafana
 
-### � Métricas Actuales
+### 📈 Métricas Actuales
 
 | Métrica | Valor |
 |---------|-------|
@@ -1452,7 +1452,7 @@ Para problemas más específicos, consultar:
 
 ---
 
-## � Documentación Adicional
+## 📚 Documentación Adicional
 
 ### Guías de Referencia
 
@@ -1506,7 +1506,7 @@ Para problemas más específicos, consultar:
 
 ---
 
-## �📞 Soporte y Contacto
+## 📞 Soporte y Contacto
 
 ### 🔗 Enlaces del Proyecto
 - **Repositorio**: [github.com/Salome98342/RA_Final](https://github.com/Salome98342/RA_Final)

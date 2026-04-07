@@ -56,6 +56,8 @@ export const endpoints = {
     docentes: '/coordinador/docentes',  // GET: listar, POST: crear individual
     asignaturas: '/coordinador/asignaturas',
     crearAsignaturaRA: '/coordinador/asignaturas/crear-ra',
+    detalleEdicionAsignaturaRA: '/coordinador/asignaturas/detalle-edicion',
+    actualizarAsignaturaRA: '/coordinador/asignaturas/actualizar-ra',
     asignaturaEstudiantes: '/coordinador/asignaturas/estudiantes',
     asignaturaRAs: '/coordinador/asignaturas/ras',
     asignaturaAvance: '/coordinador/asignaturas/avance',

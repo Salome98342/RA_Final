@@ -82,6 +82,7 @@ const DocenteCursos: React.FC = () => {
           onClick={(k)=>{
             if (k === 'inicio') { navigate('/docente/inicio'); return }
             if (k === 'cursos') { setView('cursos'); return }
+            if (k === 'volver-coordinador') { navigate('/coordinador/asignaturas'); return }
 
             const list = filtered
             const singleCourse = list.length === 1 ? list[0].id : null
@@ -109,6 +110,7 @@ const DocenteCursos: React.FC = () => {
             {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
             {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
             {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
+            ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
           ]}
         />
         <main className="dash-content">
@@ -136,7 +138,7 @@ const DocenteCursos: React.FC = () => {
                 {state.role === 'coordinador' && (
                   <button 
                     className="btn btn-outline-primary"
-                    onClick={() => navigate('/coordinador/materias')}
+                    onClick={() => navigate('/coordinador/asignaturas')}
                     title="Volver a la vista del coordinador"
                   >
                     <i className="bi bi-arrow-left me-2"></i>
@@ -155,6 +157,10 @@ const DocenteCursos: React.FC = () => {
                 </div>
               </section>
               <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
+              <div className="alert alert-info shadow-sm d-flex align-items-center mt-3" role="note">
+                <i className="bi bi-info-circle-fill me-2"></i>
+                Debes seleccionar una asignatura para acceder a las opciones de la misma.
+              </div>
               {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
               {loading ? (
             <CardGrid>
@@ -164,9 +170,9 @@ const DocenteCursos: React.FC = () => {
             <>
               {hasGroups ? (
                 <>
-                  <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del periodo actual">
+                  <div className="d-flex align-items-center gap-2 mb-3" aria-label="Cursos del período actual">
                     <i className="bi bi-calendar-check text-success"></i>
-                    <span className="fw-bold">Periodo actual</span>
+                    <span className="fw-bold">Período actual</span>
                     {filteredCurrent.length > 0 && (
                       <span className="badge bg-success rounded-pill">{filteredCurrent.length}</span>
                     )}
@@ -175,22 +181,22 @@ const DocenteCursos: React.FC = () => {
                     {filteredCurrent.length === 0 ? (
                       <div className="alert alert-info d-flex align-items-center">
                         <i className="bi bi-info-circle me-2"></i>
-                        Sin cursos en el periodo actual{filter ? ' (filtro aplicado)' : ''}.
+                        Sin cursos en el período actual{filter ? ' (filtro aplicado)' : ''}.
                       </div>
                     ) : (
                       filteredCurrent.map((c, idx) => (
-                        <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                        <RaCard key={c.id} cardType="asignatura" headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                       ))
                     )}
                   </CardGrid>
-                  <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de periodos anteriores">
+                  <div className="d-flex align-items-center gap-2 mb-3 mt-4" aria-label="Cursos de períodos anteriores">
                     <i className="bi bi-clock-history text-muted"></i>
-                    <span className="fw-bold">Periodos anteriores</span>
+                    <span className="fw-bold">Períodos anteriores</span>
                   </div>
                   {previousGroups.length === 0 ? (
                     <div className="alert alert-secondary d-flex align-items-center">
                       <i className="bi bi-inbox me-2"></i>
-                      Sin cursos en periodos anteriores{filter ? ' (filtro aplicado)' : ''}.
+                      Sin cursos en períodos anteriores{filter ? ' (filtro aplicado)' : ''}.
                     </div>
                   ) : (
                     previousGroups.map(pg => {
@@ -198,7 +204,7 @@ const DocenteCursos: React.FC = () => {
                         .map(c => filteredMap.get(c.codigo))
                         .filter((x): x is Course => Boolean(x))
                       return (
-                        <section key={pg.periodo.id} className="mb-3" aria-label={`Periodo ${pg.periodo.descripcion}`}>
+                        <section key={pg.periodo.id} className="mb-3" aria-label={`Período ${pg.periodo.descripcion}`}>
                           <div className="d-flex align-items-center gap-2 mb-2">
                             <i className="bi bi-calendar2 text-muted ra-small"></i>
                             <span className="ra-small text-muted fw-semibold">{pg.periodo.descripcion}</span>
@@ -214,7 +220,7 @@ const DocenteCursos: React.FC = () => {
                               </div>
                             ) : (
                               periodCourses.map(c => (
-                                <RaCard key={c.id} headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                                <RaCard key={c.id} cardType="asignatura" headTone={'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                               ))
                             )}
                           </CardGrid>
@@ -233,7 +239,7 @@ const DocenteCursos: React.FC = () => {
                   ) : (
                     <CardGrid>
                       {filtered.map((c, idx) => (
-                        <RaCard key={c.id} headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
+                        <RaCard key={c.id} cardType="asignatura" headTone={idx===0?'dark':'light'} title={c.nombre} subtitle={`${c.codigo ?? c.id} · ${c.carrera}`} onClick={()=>navigate(`/docente/${c.id}/ras`)} />
                       ))}
                     </CardGrid>
                   )}

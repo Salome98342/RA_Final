@@ -236,7 +236,7 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                       </h6>
                     </div>
                     <div className="card-body p-0">
-                      <div className="accordion" id="accordionAsignaturas">
+                      <div className="accordion estudiante-perfil-accordion" id="accordionAsignaturas">
                         {asignaturasMostradas.map((asig, idx) => {
                           const collapseId = `collapse-${String(asig._periodoId)}-${String(asig.id_asignatura)}-${idx}`
                           return (

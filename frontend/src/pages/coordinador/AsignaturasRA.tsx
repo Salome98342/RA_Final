@@ -6,8 +6,10 @@ import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import {
   createAsignaturaWithRAs,
+  fetchAsignaturaDetalleEdicion,
   fetchDocentes,
   fetchPeriodosCoordinador,
+  updateAsignaturaWithRAs,
   type CreateAsignaturaWithRAItem,
   type DocenteListItem,
   type ProgramaItem,
@@ -17,6 +19,7 @@ import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
 
 type RAFormItem = {
   key: string
+  id_ra?: number
   descripcion: string
   porcentaje_ra: string
   indicadores: IndicadorFormItem[]
@@ -24,8 +27,15 @@ type RAFormItem = {
 
 type IndicadorFormItem = {
   key: string
+  id_ind?: number
   descripcion: string
   porcentaje_ind: string
+}
+
+type UpdateSnapshotRA = {
+  id_ra: number
+  descripcion: string
+  indicadores: Array<{ id_ind: number; descripcion: string }>
 }
 
 const createEmptyIndicador = (): IndicadorFormItem => ({
@@ -57,12 +67,12 @@ const AsignaturasRA: React.FC = () => {
           ? 'asignaturas-ra'
           : location.pathname.includes('/imports')
             ? 'imports'
-            : 'materias'
+            : 'asignaturas'
 
   const items = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'desempenio', icon: 'bi-graph-up-arrow', title: 'Desempeño' },
-    { key: 'materias', icon: 'bi-journals', title: 'Materias' },
+    { key: 'asignaturas', icon: 'bi-journals', title: 'Asignaturas' },
     { key: 'docentes', icon: 'bi-person-badge', title: 'Docentes' },
     { key: 'estudiantes', icon: 'bi-people', title: 'Estudiantes' },
     { key: 'matriculados', icon: 'bi-clipboard-check', title: 'Matriculados' },
@@ -88,6 +98,31 @@ const AsignaturasRA: React.FC = () => {
     grupo: '',
     sede: '',
   })
+
+  const [updateFilter, setUpdateFilter] = useState({
+    codigo_asignatura: '',
+    periodo: '',
+    grupo: '',
+    sede: '',
+  })
+
+  const [updateFormData, setUpdateFormData] = useState({
+    codigo_asignatura: '',
+    nombre_asignatura: '',
+    codigo_docente: '',
+    periodo: '',
+    creditos: '',
+    grupo: '',
+    sede: '',
+  })
+
+  const [updateDocenteSearch, setUpdateDocenteSearch] = useState('')
+  const [updateFoundId, setUpdateFoundId] = useState<number | null>(null)
+  const [loadingLookup, setLoadingLookup] = useState(false)
+  const [loadingUpdateSubmit, setLoadingUpdateSubmit] = useState(false)
+  const [updateRaList, setUpdateRaList] = useState<RAFormItem[]>([])
+  const [updateSnapshotRAs, setUpdateSnapshotRAs] = useState<UpdateSnapshotRA[]>([])
+  const [activeForm, setActiveForm] = useState<'create' | 'update' | null>(null)
 
   const [raList, setRaList] = useState<RAFormItem[]>([createEmptyRA()])
 
@@ -215,6 +250,115 @@ const AsignaturasRA: React.FC = () => {
       }))
   }, [raParsed])
 
+  const updateRaParsed = useMemo(() => {
+    return updateRaList.map((ra) => {
+      const descripcion = ra.descripcion.trim()
+      const pctRaw = ra.porcentaje_ra.trim()
+      const hasAnyValue = Boolean(descripcion || pctRaw)
+      const pct = pctRaw ? Number(pctRaw) : Number.NaN
+      const hasPct = pctRaw.length > 0
+      const pctValid = hasPct && !Number.isNaN(pct) && pct > 0 && pct <= 100
+      const complete = Boolean(descripcion && hasPct)
+
+      const indicadoresParsed = (ra.indicadores || []).map((ind) => {
+        const indDescripcion = ind.descripcion.trim()
+        const indPctRaw = ind.porcentaje_ind.trim()
+        const indHasAnyValue = Boolean(indDescripcion || indPctRaw)
+        const indPct = indPctRaw ? Number(indPctRaw) : Number.NaN
+        const indHasPct = indPctRaw.length > 0
+        const indPctValid = indHasPct && !Number.isNaN(indPct) && indPct > 0 && indPct <= 100
+        const indComplete = Boolean(indDescripcion && indHasPct)
+        return {
+          ...ind,
+          descripcion: indDescripcion,
+          pct: indPct,
+          hasPct: indHasPct,
+          pctValid: indPctValid,
+          complete: indComplete,
+          hasAnyValue: indHasAnyValue,
+        }
+      })
+
+      const indDescriptions = new Set<string>()
+      let hasDuplicateIndicadorDescription = false
+      for (const ind of indicadoresParsed) {
+        if (!ind.complete) continue
+        const key = ind.descripcion.toLowerCase()
+        if (indDescriptions.has(key)) {
+          hasDuplicateIndicadorDescription = true
+          break
+        }
+        indDescriptions.add(key)
+      }
+
+      const validIndicadoresForSubmit = indicadoresParsed
+        .filter((ind) => ind.complete && ind.pctValid)
+        .map((ind) => ({
+          id_ind: ind.id_ind,
+          descripcion: ind.descripcion,
+          porcentaje_ind: Number(ind.pct.toFixed(2)),
+        }))
+
+      const sumIndicadores = validIndicadoresForSubmit.reduce((acc, ind) => acc + ind.porcentaje_ind, 0)
+
+      return {
+        ...ra,
+        descripcion,
+        pct,
+        pctValid,
+        complete,
+        hasAnyValue,
+        validIndicadoresForSubmit,
+        sumIndicadores,
+        hasDuplicateIndicadorDescription,
+      }
+    })
+  }, [updateRaList])
+
+  const updateSumPct = useMemo(() => {
+    return updateRaParsed.reduce((acc, ra) => (ra.complete && ra.pctValid ? acc + ra.pct : acc), 0)
+  }, [updateRaParsed])
+
+  const updateHasDuplicateDescription = useMemo(() => {
+    const seen = new Set<string>()
+    for (const ra of updateRaParsed) {
+      if (!ra.complete) continue
+      const key = ra.descripcion.toLowerCase()
+      if (seen.has(key)) return true
+      seen.add(key)
+    }
+    return false
+  }, [updateRaParsed])
+
+  const updateHasInvalidRA = useMemo(() => {
+    return updateRaParsed.some((ra) => {
+      if (!ra.hasAnyValue) return false
+      if (!ra.complete || !ra.pctValid) return true
+      if (!ra.validIndicadoresForSubmit.length) return true
+      if (ra.hasDuplicateIndicadorDescription) return true
+      if (ra.sumIndicadores > 100) return true
+      return false
+    })
+  }, [updateRaParsed])
+
+  const updateValidRAsForSubmit = useMemo(() => {
+    return updateRaParsed
+      .filter(
+        (ra) =>
+          ra.complete &&
+          ra.pctValid &&
+          ra.validIndicadoresForSubmit.length > 0 &&
+          !ra.hasDuplicateIndicadorDescription &&
+          ra.sumIndicadores <= 100
+      )
+      .map((ra) => ({
+        id_ra: ra.id_ra,
+        descripcion: ra.descripcion,
+        porcentaje_ra: Number(ra.pct.toFixed(2)),
+        indicadores: ra.validIndicadoresForSubmit,
+      }))
+  }, [updateRaParsed])
+
   const requiredValid = Boolean(
     formData.codigo_asignatura.trim() &&
     formData.nombre_asignatura.trim() &&
@@ -229,6 +373,37 @@ const AsignaturasRA: React.FC = () => {
   const canSubmit = requiredValid && !hasInvalidRA && !hasDuplicateDescription && sumPct <= 100
 
   const progressStep = Math.round(Math.max(0, Math.min(100, sumPct)) / 10) * 10
+
+  const isCreateDirty = useMemo(() => {
+    const hasBaseData = Boolean(
+      formData.codigo_asignatura.trim() ||
+      formData.nombre_asignatura.trim() ||
+      formData.codigo_docente.trim() ||
+      formData.creditos.trim() ||
+      formData.grupo.trim() ||
+      formData.sede.trim()
+    )
+    const hasRAData = raParsed.some((ra) => ra.hasAnyValue || ra.indicadoresParsed.some((ind) => ind.hasAnyValue))
+    return hasBaseData || hasRAData
+  }, [formData, raParsed])
+
+  const isUpdateDirty = useMemo(() => {
+    const hasFilterData = Boolean(
+      updateFilter.codigo_asignatura.trim() ||
+      updateFilter.grupo.trim() ||
+      updateFilter.sede.trim()
+    )
+    const hasUpdateBaseData = Boolean(
+      updateFormData.codigo_asignatura.trim() ||
+      updateFormData.nombre_asignatura.trim() ||
+      updateFormData.codigo_docente.trim() ||
+      updateFormData.creditos.trim() ||
+      updateFormData.grupo.trim() ||
+      updateFormData.sede.trim()
+    )
+    const hasRAData = updateRaParsed.some((ra) => ra.hasAnyValue)
+    return hasFilterData || hasUpdateBaseData || hasRAData || Boolean(updateFoundId)
+  }, [updateFilter, updateFormData, updateRaParsed, updateFoundId])
 
   const docentesOrdenados = useMemo(() => {
     return [...docentes].sort((a, b) => `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`))
@@ -248,6 +423,20 @@ const AsignaturasRA: React.FC = () => {
     })
   }, [docenteSearch, docentesOrdenados])
 
+  const updateDocentesFiltrados = useMemo(() => {
+    const q = updateDocenteSearch.trim().toLowerCase()
+    if (!q) return docentesOrdenados
+    return docentesOrdenados.filter((d) => {
+      const full = `${d.nombre} ${d.apellido}`.toLowerCase()
+      return (
+        full.includes(q) ||
+        d.codigo_docente.toLowerCase().includes(q) ||
+        d.correo.toLowerCase().includes(q) ||
+        d.num_documento.toLowerCase().includes(q)
+      )
+    })
+  }, [updateDocenteSearch, docentesOrdenados])
+
   useEffect(() => {
     const load = async () => {
       setLoadingCatalogs(true)
@@ -261,6 +450,10 @@ const AsignaturasRA: React.FC = () => {
         const filteredPeriodos = sortPeriodosDesc((periodosData || []).filter((p) => isPeriodoAtLeast2024I(p.descripcion)))
         setPeriodos(filteredPeriodos)
         setFormData((prev) => ({
+          ...prev,
+          periodo: prev.periodo || filteredPeriodos[0]?.descripcion || '',
+        }))
+        setUpdateFilter((prev) => ({
           ...prev,
           periodo: prev.periodo || filteredPeriodos[0]?.descripcion || '',
         }))
@@ -331,8 +524,75 @@ const AsignaturasRA: React.FC = () => {
     )
   }
 
+  const addUpdateRA = () => {
+    setUpdateRaList((prev) => [...prev, createEmptyRA()])
+  }
+
+  const removeUpdateRA = (key: string) => {
+    setUpdateRaList((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((ra) => ra.key !== key)
+    })
+  }
+
+  const updateUpdateRA = (key: string, patch: Partial<RAFormItem>) => {
+    setUpdateRaList((prev) => prev.map((ra) => (ra.key === key ? { ...ra, ...patch } : ra)))
+  }
+
+  const addUpdateIndicador = (raKey: string) => {
+    setUpdateRaList((prev) =>
+      prev.map((ra) =>
+        ra.key === raKey ? { ...ra, indicadores: [...(ra.indicadores || []), createEmptyIndicador()] } : ra
+      )
+    )
+  }
+
+  const removeUpdateIndicador = (raKey: string, indicadorKey: string) => {
+    setUpdateRaList((prev) =>
+      prev.map((ra) => {
+        if (ra.key !== raKey) return ra
+        const next = (ra.indicadores || []).filter((ind) => ind.key !== indicadorKey)
+        return { ...ra, indicadores: next.length ? next : [createEmptyIndicador()] }
+      })
+    )
+  }
+
+  const updateUpdateIndicador = (raKey: string, indicadorKey: string, patch: Partial<IndicadorFormItem>) => {
+    setUpdateRaList((prev) =>
+      prev.map((ra) => {
+        if (ra.key !== raKey) return ra
+        return {
+          ...ra,
+          indicadores: (ra.indicadores || []).map((ind) => (ind.key === indicadorKey ? { ...ind, ...patch } : ind)),
+        }
+      })
+    )
+  }
+
   const resetForm = () => {
+    const defaultPeriodo = periodos[0]?.descripcion || ''
     setFormData({
+      codigo_asignatura: '',
+      nombre_asignatura: '',
+      codigo_docente: '',
+      periodo: defaultPeriodo,
+      creditos: '',
+      grupo: '',
+      sede: '',
+    })
+    setDocenteSearch('')
+    setRaList([createEmptyRA()])
+  }
+
+  const resetUpdateForm = () => {
+    const defaultPeriodo = periodos[0]?.descripcion || ''
+    setUpdateFilter({
+      codigo_asignatura: '',
+      periodo: defaultPeriodo,
+      grupo: '',
+      sede: '',
+    })
+    setUpdateFormData({
       codigo_asignatura: '',
       nombre_asignatura: '',
       codigo_docente: '',
@@ -341,7 +601,39 @@ const AsignaturasRA: React.FC = () => {
       grupo: '',
       sede: '',
     })
-    setRaList([createEmptyRA()])
+    setUpdateDocenteSearch('')
+    setUpdateFoundId(null)
+    setUpdateRaList([])
+    setUpdateSnapshotRAs([])
+  }
+
+  const handleToggleForm = async (target: 'create' | 'update') => {
+    if (activeForm !== target) {
+      setActiveForm(target)
+      return
+    }
+
+    const hasData = target === 'create' ? isCreateDirty : isUpdateDirty
+    if (!hasData) {
+      if (target === 'create') resetForm()
+      if (target === 'update') resetUpdateForm()
+      setActiveForm(null)
+      return
+    }
+
+    const confirmed = await Alert.confirm({
+      title: 'Cerrar formulario',
+      text: 'Hay datos ingresados. ¿Deseas cerrar este formulario?',
+      confirmButtonText: 'Sí, cerrar',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    })
+
+    if (confirmed) {
+      if (target === 'create') resetForm()
+      if (target === 'update') resetUpdateForm()
+      setActiveForm(null)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -444,6 +736,215 @@ const AsignaturasRA: React.FC = () => {
     }
   }
 
+  const handleLookupAsignatura = async () => {
+    const codigo = normalizeCode(updateFilter.codigo_asignatura)
+    const periodo = updateFilter.periodo.trim()
+    const grupo = updateFilter.grupo.trim()
+    const sede = updateFilter.sede.trim()
+
+    if (!codigo || !periodo || !grupo || !sede) {
+      Alert.toast.warning('Para buscar debes indicar código, semestre (período), grupo y sede.')
+      return
+    }
+
+    setLoadingLookup(true)
+    try {
+      const detail = await fetchAsignaturaDetalleEdicion({
+        codigo_asignatura: codigo,
+        periodo,
+        grupo,
+        sede,
+      })
+
+      setUpdateFoundId(detail.asignatura.id_asignatura)
+      setUpdateFormData({
+        codigo_asignatura: detail.asignatura.codigo_asignatura,
+        nombre_asignatura: detail.asignatura.nombre_asignatura || '',
+        codigo_docente: detail.asignatura.codigo_docente || '',
+        periodo: detail.asignatura.periodo || periodo,
+        creditos: String(detail.asignatura.creditos ?? ''),
+        grupo: detail.asignatura.grupo || grupo,
+        sede: detail.asignatura.sede || '',
+      })
+
+      const parsedRAs: RAFormItem[] = (detail.ras || []).map((ra) => ({
+        key: `existing-ra-${ra.id_ra}`,
+        id_ra: ra.id_ra,
+        descripcion: String(ra.descripcion || ''),
+        porcentaje_ra: String(ra.porcentaje_ra ?? ''),
+        indicadores: (ra.indicadores || []).map((ind) => ({
+          key: `existing-ind-${ra.id_ra}-${ind.id_ind}`,
+          id_ind: ind.id_ind,
+          descripcion: String(ind.descripcion || ''),
+          porcentaje_ind: String(ind.porcentaje_ind ?? ''),
+        })),
+      }))
+
+      setUpdateRaList(parsedRAs.length ? parsedRAs : [createEmptyRA()])
+      setUpdateSnapshotRAs(
+        (detail.ras || []).map((ra) => ({
+          id_ra: ra.id_ra,
+          descripcion: String(ra.descripcion || ''),
+          indicadores: (ra.indicadores || []).map((ind) => ({
+            id_ind: ind.id_ind,
+            descripcion: String(ind.descripcion || ''),
+          })),
+        }))
+      )
+      Alert.toast.success('Asignatura encontrada. Puedes actualizar base, RAs e indicadores.')
+    } catch (e: any) {
+      setUpdateFoundId(null)
+      setUpdateRaList([])
+      setUpdateSnapshotRAs([])
+      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible consultar la asignatura.')
+    } finally {
+      setLoadingLookup(false)
+    }
+  }
+
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!updateFoundId) {
+      Alert.toast.warning('Primero busca y carga una asignatura existente para actualizar.')
+      return
+    }
+
+    const codigo = normalizeCode(updateFormData.codigo_asignatura)
+    const nombre = updateFormData.nombre_asignatura.trim()
+    const docente = normalizeCode(updateFormData.codigo_docente)
+    const periodo = updateFormData.periodo.trim()
+    const grupo = updateFormData.grupo.trim()
+    const sede = updateFormData.sede.trim()
+
+    if (!codigo || !nombre || !docente || !periodo || !grupo || !sede) {
+      Alert.toast.warning('Completa nombre, docente, semestre (período), grupo y sede para actualizar.')
+      return
+    }
+
+    const creditosNum = Number(updateFormData.creditos)
+    if (!Number.isInteger(creditosNum) || creditosNum <= 0) {
+      Alert.toast.warning('Créditos debe ser un entero mayor que 0.')
+      return
+    }
+
+    if (updateHasDuplicateDescription) {
+      Alert.toast.warning('Hay RAs repetidos en la actualización. Corrige las descripciones.')
+      return
+    }
+
+    if (updateHasInvalidRA) {
+      Alert.error('Verifica RAs/indicadores: cada RA debe tener descripción, porcentaje válido y al menos un indicador válido.')
+      return
+    }
+
+    if (updateSumPct > 100) {
+      Alert.toast.error('La suma de porcentajes RA excede 100%.')
+      return
+    }
+
+    if (!detectedPrograma?.codigo_programa) {
+      Alert.error('No se detectó el programa del coordinador. No se puede actualizar.')
+      return
+    }
+
+    const submittedExistingRaIds = new Set(
+      updateValidRAsForSubmit
+        .filter((ra) => typeof ra.id_ra === 'number')
+        .map((ra) => Number(ra.id_ra))
+    )
+
+    const deletedRAs = updateSnapshotRAs.filter((ra) => !submittedExistingRaIds.has(ra.id_ra))
+
+    const deletedIndicadores: Array<{ raId: number; indicadorId: number; descripcion: string }> = []
+    for (const snapRA of updateSnapshotRAs) {
+      if (!submittedExistingRaIds.has(snapRA.id_ra)) continue
+
+      const currentRA = updateValidRAsForSubmit.find((ra) => Number(ra.id_ra) === snapRA.id_ra)
+      const submittedIndIds = new Set(
+        (currentRA?.indicadores || [])
+          .filter((ind) => typeof ind.id_ind === 'number')
+          .map((ind) => Number(ind.id_ind))
+      )
+
+      for (const snapInd of snapRA.indicadores) {
+        if (!submittedIndIds.has(snapInd.id_ind)) {
+          deletedIndicadores.push({
+            raId: snapRA.id_ra,
+            indicadorId: snapInd.id_ind,
+            descripcion: snapInd.descripcion,
+          })
+        }
+      }
+    }
+
+    const confirmLines: string[] = [
+      `Se actualizará ${codigo} (${periodo}, grupo ${grupo}).`,
+      '',
+      `RAs enviados: ${updateValidRAsForSubmit.length}`,
+      `Suma RA enviada: ${updateSumPct.toFixed(2)}%`,
+    ]
+
+    if (deletedRAs.length || deletedIndicadores.length) {
+      confirmLines.push('', 'Cambios destructivos detectados:')
+      if (deletedRAs.length) {
+        confirmLines.push(`- RAs a eliminar: ${deletedRAs.length}`)
+        deletedRAs.slice(0, 6).forEach((ra) => {
+          const label = ra.descripcion ? `${ra.descripcion}` : `RA ${ra.id_ra}`
+          confirmLines.push(`  • RA ${ra.id_ra}: ${label}`)
+        })
+        if (deletedRAs.length > 6) {
+          confirmLines.push(`  • ... y ${deletedRAs.length - 6} RA(s) más`)
+        }
+      }
+      if (deletedIndicadores.length) {
+        confirmLines.push(`- Indicadores a eliminar: ${deletedIndicadores.length}`)
+        deletedIndicadores.slice(0, 8).forEach((ind) => {
+          const label = ind.descripcion ? ind.descripcion : `Indicador ${ind.indicadorId}`
+          confirmLines.push(`  • RA ${ind.raId} / IND ${ind.indicadorId}: ${label}`)
+        })
+        if (deletedIndicadores.length > 8) {
+          confirmLines.push(`  • ... y ${deletedIndicadores.length - 8} indicador(es) más`)
+        }
+      }
+      confirmLines.push('', 'Esta acción no se puede deshacer.')
+    }
+
+    const confirmed = await Alert.confirm({
+      title: 'Confirmar actualización de asignatura',
+      text: confirmLines.join('\n'),
+      confirmButtonText: 'Sí, actualizar',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    })
+
+    if (!confirmed) return
+
+    setLoadingUpdateSubmit(true)
+    try {
+      const response = await updateAsignaturaWithRAs({
+        codigo_asignatura: codigo,
+        nombre_asignatura: nombre,
+        codigo_docente: docente,
+        codigo_programa: normalizeCode(detectedPrograma.codigo_programa),
+        periodo,
+        creditos: creditosNum,
+        grupo,
+        sede,
+        ras: updateValidRAsForSubmit,
+      })
+
+      Alert.success(
+        `${response.detail} RAs actualizados: ${response.resumen.ras_actualizados}, creados: ${response.resumen.ras_creados}, eliminados: ${response.resumen.ras_eliminados}. ` +
+        `Indicadores actualizados: ${response.resumen.indicadores_actualizados}, creados: ${response.resumen.indicadores_creados}, eliminados: ${response.resumen.indicadores_eliminados}.`
+      )
+    } catch (e: any) {
+      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible actualizar la asignatura.')
+    } finally {
+      setLoadingUpdateSubmit(false)
+    }
+  }
+
   return (
     <div className="dashboard-body min-vh-100">
       <HeaderBar roleLabel="Coordinador" />
@@ -454,7 +955,7 @@ const AsignaturasRA: React.FC = () => {
           onClick={(key) => {
             if (key === 'inicio') navigate('/coordinador')
             else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'materias') navigate('/coordinador/materias')
+            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
             else if (key === 'docentes') navigate('/coordinador/docentes')
             else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
             else if (key === 'matriculados') navigate('/coordinador/matriculados')
@@ -477,7 +978,7 @@ const AsignaturasRA: React.FC = () => {
               Gestión de Asignaturas + RA
             </div>
             <button
-              className="btn btn-sm btn-outline-primary"
+              className="btn btn-sm btn-outline-danger"
               onClick={() => navigate('/coordinador/imports?modulo=asig')}
               type="button"
             >
@@ -486,34 +987,64 @@ const AsignaturasRA: React.FC = () => {
             </button>
           </div>
 
-          <section className="ra-card mb-3 coordinator-individual-hero">
-            <div className="ra-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
-              <div className="d-flex align-items-start gap-3">
-                <div className="coordinator-individual-hero-icon bg-danger-subtle text-danger">
-                  <i className="bi bi-journal-plus"></i>
-                </div>
-                <div>
-                  <h5 className="mb-1">Formulario principal de Asignatura + RAs</h5>
-                  <p className="text-muted mb-0">
-                    Crea o actualiza una asignatura y registra varios RAs en una sola operación validada.
-                  </p>
-                </div>
-              </div>
-              <div className="d-flex flex-wrap gap-2 coordinator-individual-chips">
-                <span className="badge text-bg-light border">Transaccional</span>
-                <span className="badge text-bg-light border">Suma RA &lt;= 100%</span>
-                <span className="badge text-bg-light border">Confirmación previa</span>
-              </div>
-            </div>
-          </section>
+          <div className="alert alert-info d-flex align-items-center py-2" role="note">
+            <i className="bi bi-info-circle me-2"></i>
+            Haz click en uno de los cuadros para abrir el formulario correspondiente.
+          </div>
 
+          <div className="row g-3 mb-3">
+            <div className="col-12 col-lg-6 d-grid">
+              <button
+                type="button"
+                className={`ra-card coordinator-individual-hero text-start w-100 border-0 ${activeForm === 'create' ? 'border border-2 border-danger' : ''}`}
+                onClick={() => void handleToggleForm('create')}
+              >
+                <div className="ra-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                  <div className="d-flex align-items-start gap-3">
+                    <div className="coordinator-individual-hero-icon bg-danger-subtle text-danger">
+                      <i className="bi bi-journal-bookmark"></i>
+                    </div>
+                    <div>
+                      <h5 className="mb-1">Crear Asignatura + RAs</h5>
+                      <p className="text-muted mb-0">
+                        Crea una asignatura nueva y registra varios RAs en una sola operación validada.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="col-12 col-lg-6 d-grid">
+              <button
+                type="button"
+                className={`ra-card coordinator-individual-hero text-start w-100 border-0 ${activeForm === 'update' ? 'border border-2 border-danger' : ''}`}
+                onClick={() => void handleToggleForm('update')}
+              >
+                <div className="ra-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                  <div className="d-flex align-items-start gap-3">
+                    <div className="coordinator-individual-hero-icon bg-warning-subtle text-warning">
+                      <i className="bi bi-pencil-square"></i>
+                    </div>
+                    <div>
+                      <h5 className="mb-1">Actualizar Asignatura existente</h5>
+                      <p className="text-muted mb-0">
+                        Busca por código, semestre y grupo. Si existe, se cargan los datos para actualizar la asignatura.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {activeForm === 'create' && (
           <div className="card mb-4 coordinator-form-card shadow-sm border-0">
             <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
               <span>
                 <i className="bi bi-journal-bookmark-fill me-2"></i>
-                Crear / actualizar Asignatura con RAs
+                Crear Asignatura con RAs
               </span>
-              <span className="badge text-bg-light">Formulario grande</span>
             </div>
 
             <div className="card-body">
@@ -630,14 +1161,14 @@ const AsignaturasRA: React.FC = () => {
                   </div>
 
                   <div className="col-md-3 mb-3">
-                    <label className="form-label fw-semibold">Periodo <span className="text-danger">*</span></label>
+                    <label className="form-label fw-semibold">Período <span className="text-danger">*</span></label>
                     <select
                       className="form-select"
-                      title="Periodo"
+                      title="Período"
                       value={formData.periodo}
                       onChange={(e) => setFormData((prev) => ({ ...prev, periodo: e.target.value }))}
                     >
-                      <option value="">Selecciona periodo</option>
+                      <option value="">Selecciona período</option>
                       {periodos.map((p) => (
                         <option key={p.id_periodo} value={p.descripcion}>{p.descripcion}</option>
                       ))}
@@ -680,7 +1211,7 @@ const AsignaturasRA: React.FC = () => {
                     <i className="bi bi-graph-up-arrow me-2"></i>
                     Resultados de Aprendizaje (RAs)
                   </span>
-                  <button type="button" className="btn btn-outline-secondary btn-sm" onClick={addRA}>
+                  <button type="button" className="btn btn-outline-success btn-sm" onClick={addRA}>
                     <i className="bi bi-plus-lg me-1"></i>
                     Agregar RA
                   </button>
@@ -738,7 +1269,7 @@ const AsignaturasRA: React.FC = () => {
                             <h6 className="mb-0">Indicadores de logro del RA #{index + 1}</h6>
                             <button
                               type="button"
-                              className="btn btn-sm btn-outline-primary"
+                              className="btn btn-sm btn-outline-success"
                               onClick={() => addIndicador(ra.key)}
                             >
                               <i className="bi bi-plus-lg me-1"></i>
@@ -875,6 +1406,302 @@ const AsignaturasRA: React.FC = () => {
               </form>
             </div>
           </div>
+          )}
+
+          {activeForm === 'update' && (
+          <div className="card mb-4 coordinator-form-card shadow-sm border-0">
+            <div className="card-header bg-warning text-white d-flex align-items-center justify-content-between">
+              <span>
+                <i className="bi bi-search me-2"></i>
+                Buscar y actualizar asignatura
+              </span>
+            </div>
+
+            <div className="card-body">
+              <div className="coordinator-form-section-title mb-3">
+                <i className="bi bi-funnel me-2"></i>
+                Filtros de búsqueda
+              </div>
+
+              <div className="row g-3 align-items-end mb-3">
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">Código asignatura</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={updateFilter.codigo_asignatura}
+                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, codigo_asignatura: e.target.value.toUpperCase() }))}
+                    placeholder="Ej: MAT101"
+                  />
+                </div>
+                <div className="col-md-3">
+                  <label className="form-label fw-semibold">Semestre (período)</label>
+                  <select
+                    className="form-select"
+                    value={updateFilter.periodo}
+                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, periodo: e.target.value }))}
+                  >
+                    <option value="">Selecciona semestre</option>
+                    {periodos.map((p) => (
+                      <option key={p.id_periodo} value={p.descripcion}>{p.descripcion}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-md-2">
+                  <label className="form-label fw-semibold">Grupo</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={updateFilter.grupo}
+                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, grupo: e.target.value }))}
+                    placeholder="Ej: A"
+                  />
+                </div>
+                <div className="col-md-2">
+                  <label className="form-label fw-semibold">Sede</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    inputMode="numeric"
+                    pattern="[0-9]+"
+                    maxLength={3}
+                    value={updateFilter.sede}
+                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="Ej: 01"
+                  />
+                </div>
+                <div className="col-md-2 d-grid">
+                  <button type="button" className="btn btn-danger" onClick={handleLookupAsignatura} disabled={loadingLookup}>
+                    {loadingLookup ? 'Buscando...' : 'Buscar'}
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateSubmit}>
+                <div className="row">
+                  <div className="col-md-4 mb-3">
+                    <label className="form-label fw-semibold">Código Asignatura</label>
+                    <input type="text" className="form-control" value={updateFormData.codigo_asignatura} readOnly />
+                  </div>
+                  <div className="col-md-5 mb-3">
+                    <label className="form-label fw-semibold">Nombre Asignatura</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={updateFormData.nombre_asignatura}
+                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, nombre_asignatura: e.target.value }))}
+                      placeholder="Nombre asignatura"
+                    />
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <label className="form-label fw-semibold">Créditos</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      min={1}
+                      step={1}
+                      value={updateFormData.creditos}
+                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, creditos: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="row">
+                  <div className="col-md-4 mb-3">
+                    <label className="form-label fw-semibold">Semestre (período)</label>
+                    <input type="text" className="form-control" value={updateFormData.periodo} readOnly />
+                  </div>
+                  <div className="col-md-2 mb-3">
+                    <label className="form-label fw-semibold">Grupo</label>
+                    <input type="text" className="form-control" value={updateFormData.grupo} readOnly />
+                  </div>
+                  <div className="col-md-2 mb-3">
+                    <label className="form-label fw-semibold">Sede</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      inputMode="numeric"
+                      pattern="[0-9]+"
+                      maxLength={3}
+                      value={updateFormData.sede}
+                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
+                    />
+                  </div>
+                  <div className="col-md-4 mb-3">
+                    <label className="form-label fw-semibold">Programa</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={detectedPrograma ? `${detectedPrograma.codigo_programa} - ${detectedPrograma.nombre}` : 'No detectado'}
+                      readOnly
+                    />
+                  </div>
+                </div>
+
+                <div className="row">
+                  <div className="col-md-12 mb-3">
+                    <label className="form-label fw-semibold">Docente</label>
+                    <input
+                      type="text"
+                      className="form-control mb-2"
+                      placeholder="Buscar docente por nombre, código, correo o documento"
+                      value={updateDocenteSearch}
+                      onChange={(e) => setUpdateDocenteSearch(e.target.value)}
+                    />
+                    <select
+                      className="form-select"
+                      value={updateFormData.codigo_docente}
+                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, codigo_docente: e.target.value }))}
+                    >
+                      <option value="">Selecciona docente</option>
+                      {updateDocentesFiltrados.map((d) => (
+                        <option key={d.id_docente} value={d.codigo_docente}>
+                          {d.codigo_docente} - {d.nombre} {d.apellido}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {updateFoundId && (
+                  <>
+                    <div className="coordinator-form-section-title mb-3 mt-2 d-flex align-items-center justify-content-between">
+                      <span>
+                        <i className="bi bi-graph-up-arrow me-2"></i>
+                        RAs e indicadores (edición)
+                      </span>
+                      <button type="button" className="btn btn-outline-success btn-sm" onClick={addUpdateRA}>
+                        <i className="bi bi-plus-lg me-1"></i>
+                        Agregar RA
+                      </button>
+                    </div>
+
+                    {updateRaList.map((ra, index) => (
+                      <div className="card mb-3" key={ra.key}>
+                        <div className="card-body">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h6 className="mb-0">
+                              RA #{index + 1} {ra.id_ra ? `(ID ${ra.id_ra})` : '(Nuevo)'}
+                            </h6>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => removeUpdateRA(ra.key)}
+                              disabled={updateRaList.length === 1}
+                            >
+                              <i className="bi bi-trash me-1"></i>
+                              Quitar
+                            </button>
+                          </div>
+
+                          <div className="row">
+                            <div className="col-md-8 mb-2">
+                              <label className="form-label">Descripción RA</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={ra.descripcion}
+                                onChange={(e) => updateUpdateRA(ra.key, { descripcion: e.target.value })}
+                              />
+                            </div>
+                            <div className="col-md-4 mb-2">
+                              <label className="form-label">Porcentaje RA</label>
+                              <input
+                                type="number"
+                                className="form-control"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={ra.porcentaje_ra}
+                                onChange={(e) => updateUpdateRA(ra.key, { porcentaje_ra: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="border rounded p-3 bg-light-subtle mt-2">
+                            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                              <h6 className="mb-0">Indicadores de logro</h6>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-success"
+                                onClick={() => addUpdateIndicador(ra.key)}
+                              >
+                                <i className="bi bi-plus-lg me-1"></i>
+                                Agregar indicador
+                              </button>
+                            </div>
+
+                            {(ra.indicadores || []).map((ind, indIdx) => (
+                              <div className="row g-2 align-items-end mb-2" key={ind.key}>
+                                <div className="col-md-7">
+                                  <label className="form-label small mb-1">
+                                    Descripción indicador #{indIdx + 1} {ind.id_ind ? `(ID ${ind.id_ind})` : '(Nuevo)'}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={ind.descripcion}
+                                    onChange={(e) => updateUpdateIndicador(ra.key, ind.key, { descripcion: e.target.value })}
+                                  />
+                                </div>
+                                <div className="col-md-3">
+                                  <label className="form-label small mb-1">% indicador</label>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={ind.porcentaje_ind}
+                                    onChange={(e) => updateUpdateIndicador(ra.key, ind.key, { porcentaje_ind: e.target.value })}
+                                  />
+                                </div>
+                                <div className="col-md-2">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger w-100"
+                                    onClick={() => removeUpdateIndicador(ra.key, ind.key)}
+                                    disabled={(ra.indicadores || []).length === 1}
+                                  >
+                                    <i className="bi bi-trash me-1"></i>
+                                    Quitar
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="mb-3">
+                      <div className="d-flex justify-content-between align-items-center small mb-1">
+                        <span className="text-muted">Suma de porcentajes RA</span>
+                        <span className="fw-semibold">{updateSumPct.toFixed(2)}%</span>
+                      </div>
+                      <div className="progress coordinator-inline-progress">
+                        <div className={`progress-bar ${updateSumPct > 100 ? 'bg-danger' : 'bg-success'} w-pct-${Math.round(Math.max(0, Math.min(100, updateSumPct)) / 10) * 10}`}></div>
+                      </div>
+                    </div>
+
+                    {updateHasDuplicateDescription && (
+                      <div className="alert alert-warning">
+                        <i className="bi bi-exclamation-circle me-2"></i>
+                        Hay descripciones de RA repetidas en la actualización.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="d-flex justify-content-end">
+                  <button type="submit" className="btn btn-warning" disabled={!updateFoundId || loadingUpdateSubmit}>
+                    {loadingUpdateSubmit ? 'Actualizando...' : 'Actualizar asignatura'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          )}
         </main>
       </div>
     </div>
