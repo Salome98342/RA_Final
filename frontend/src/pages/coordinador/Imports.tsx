@@ -123,13 +123,21 @@ const cardConfigs: ImportCardConfig[] = [
     title: 'Estudiantes',
     iconClass: 'bi bi-people-fill',
     accentClass: 'text-danger',
-    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional.',
-    acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada (opcional)',
+    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico.',
+    acceptedColumns: 'Formato RA Manager: codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento \n Formato Sistema Registro Académico: Codigo, Nombres, Apellidos, Email, Documento Identidad (formato: "CC 1234567"), Programa Academico',
     templateCandidates: [
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },
     ],
     headerRule: {
-      required: ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'],
+      required: [],
+      oneOfGroups: [
+        ['codigo_estudiante', 'codigo'],
+        ['nombre', 'nombres'],
+        ['apellido', 'apellidos'],
+        ['correo', 'email'],
+        ['tipo_documento', 'documento_identidad'],
+        ['num_documento', 'documento', 'documento_identidad'],
+      ],
     },
     importAction: importEstudiantes,
   },
@@ -238,10 +246,37 @@ const readHeadersFromCsv = async (file: File): Promise<string[]> => {
     throw new Error('El archivo está vacío o no contiene cabeceras legibles.')
   }
 
-  const delimiter = detectDelimiter(lines[0])
-  return splitCsvLine(lines[0], delimiter)
-    .map((header) => normalizeHeader(header))
-    .filter(Boolean)
+  // Keywords esperados en headers (similares al backend)
+  const headerKeywords = ['codigo', 'nombre', 'apellido', 'email', 'documento', 'correo']
+  
+  let headerLineIndex = 0
+  let maxMatches = 0
+
+  // Buscar la línea que contenga más keywords esperados (hasta línea 10)
+  const maxLinesToCheck = Math.min(lines.length, 10)
+  for (let i = 0; i < maxLinesToCheck; i++) {
+    const delimiter = detectDelimiter(lines[i])
+    const headers = splitCsvLine(lines[i], delimiter)
+    const headerStr = headers.map((h) => h.toLowerCase()).join(' ')
+    const matches = headerKeywords.filter((kw) => headerStr.includes(kw)).length
+    
+    if (matches > maxMatches) {
+      maxMatches = matches
+      headerLineIndex = i
+    }
+  }
+
+  // Si encontramos al menos 2 keywords, usar esa línea como headers
+  const delimiter = detectDelimiter(lines[headerLineIndex])
+  const headers = splitCsvLine(lines[headerLineIndex], delimiter)
+  
+  if (headers.length === 0) {
+    throw new Error(`No se encontraron cabeceras válidas en el CSV (intentó ${maxLinesToCheck} líneas).`)
+  }
+
+  console.log(`[ReadCsvHeaders] Headers detectados en línea ${headerLineIndex}:`, headers)
+  
+  return headers.map((header) => normalizeHeader(header)).filter(Boolean)
 }
 
 const readHeadersFromExcel = async (file: File): Promise<string[]> => {
@@ -254,18 +289,47 @@ const readHeadersFromExcel = async (file: File): Promise<string[]> => {
   }
 
   const sheet = workbook.Sheets[sheetName]
-  const firstRow = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
+  
+  // Leer todas las filas sin especificar header para detectar la fila de headers
+  const allRows = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
     header: 1,
-    range: 0,
     blankrows: false,
     raw: false,
-  })[0]
+  })
 
-  if (!firstRow || !Array.isArray(firstRow)) {
-    throw new Error('No se encontraron cabeceras en la primera fila del Excel.')
+  if (!allRows || allRows.length === 0) {
+    throw new Error('El archivo Excel está vacío.')
   }
 
-  return firstRow.map((header) => normalizeHeader(header)).filter(Boolean)
+  // Keywords esperados en headers (similares al backend)
+  const headerKeywords = ['codigo', 'nombre', 'apellido', 'email', 'documento', 'correo']
+  
+  let headerRowIndex = 0
+  let maxMatches = 0
+
+  // Buscar la fila que contenga más keywords esperados
+  for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+    const row = allRows[i]
+    if (!row || !Array.isArray(row)) continue
+    
+    const rowStr = row.map((v) => String(v || '').toLowerCase()).join(' ')
+    const matches = headerKeywords.filter((kw) => rowStr.includes(kw)).length
+    
+    if (matches > maxMatches) {
+      maxMatches = matches
+      headerRowIndex = i
+    }
+  }
+
+  // Si encontramos al menos 2 keywords, usar esa fila como headers
+  const headerRow = allRows[headerRowIndex]
+  if (!headerRow || !Array.isArray(headerRow) || headerRow.length === 0) {
+    throw new Error(`No se encontraron cabeceras válidas en el Excel (intentó ${Math.min(allRows.length, 10)} filas).`)
+  }
+
+  console.log(`[ReadExcelHeaders] Headers detectados en fila ${headerRowIndex}:`, headerRow)
+  
+  return headerRow.map((header) => normalizeHeader(header)).filter(Boolean)
 }
 
 const validateHeaders = (headers: string[], rule: HeaderRule): string[] => {

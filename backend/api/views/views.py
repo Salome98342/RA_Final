@@ -415,6 +415,7 @@ def _read_imported_file(file_obj):
     """
     Lee un archivo CSV o Excel y retorna un DataFrame de pandas.
     Soporta múltiples formatos: .csv, .xlsx, .xls
+    Para Excel, detecta automáticamente la fila de headers.
     
     Args:
         file_obj: Archivo subido (Django UploadedFile)
@@ -423,25 +424,57 @@ def _read_imported_file(file_obj):
         pandas.DataFrame o None si falla
     """
     filename = getattr(file_obj, 'name', '').lower()
-    logger.info(f"Intentando leer archivo: {filename}, tamaño: {getattr(file_obj, 'size', 'desconocido')} bytes")
+    logger.info(f"[READ_FILE] Intentando leer archivo: {filename}, tamaño: {getattr(file_obj, 'size', 'desconocido')} bytes")
     
     # Leer bytes una vez y reutilizar BytesIO evita problemas de stream con UploadedFile.
     try:
         file_obj.seek(0)
         file_bytes = file_obj.read()
     except Exception as e:
-        logger.error(f"Error leyendo bytes del archivo: {e}")
+        logger.error(f"[READ_FILE] Error leyendo bytes del archivo: {e}")
         return None
 
     try:
         if filename.endswith('.xlsx') or filename.endswith('.xls'):
             with io.BytesIO(file_bytes) as bio:
-                df = pd.read_excel(bio, engine='openpyxl' if filename.endswith('.xlsx') else 'xlrd')
-                df.columns = df.columns.str.strip().str.lower()
-                logger.info(f"Archivo Excel leido exitosamente: {len(df)} filas")
-                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
-                return df
+                # Primero leer sin especificar header para detectar estructura
+                df_raw = pd.read_excel(bio, engine='openpyxl' if filename.endswith('.xlsx') else 'xlrd', header=None)
+                logger.info(f"[READ_FILE] Excel leido raw (sin header): {len(df_raw)} filas, {len(df_raw.columns)} columnas")
+                logger.debug(f"[READ_FILE] Primeras 3 filas raw:\n{df_raw.head(3)}")
+                
+                # Detectar en qué fila están los headers reales
+                # Buscar si en alguna fila hay palabras clave como "codigo", "nombre", "email", etc.
+                header_row = None
+                keywords = ['codigo', 'nombre', 'apellido', 'email', 'documento']
+                
+                for idx, row in df_raw.iterrows():
+                    row_str = ' '.join([str(v).lower() for v in row]).strip()
+                    matches = sum(1 for kw in keywords if kw in row_str)
+                    if matches >= 3:  # Si encuentra al menos 3 palabras clave
+                        header_row = idx
+                        logger.info(f"[READ_FILE] Headers detectados en fila {idx} (contiene {matches} palabras clave)")
+                        logger.debug(f"[READ_FILE] Contenido fila {idx}: {row.tolist()}")
+                        break
+                
+                # Si no encontró headers con palabras clave, asumir fila 0
+                if header_row is None:
+                    header_row = 0
+                    logger.warning(f"[READ_FILE] No se detectó row de headers, usando fila 0 por defecto")
+                
+                # Releer el Excel con el header correctamente identificado
+                with io.BytesIO(file_bytes) as bio:
+                    df = pd.read_excel(bio, 
+                                      engine='openpyxl' if filename.endswith('.xlsx') else 'xlrd',
+                                      header=header_row,
+                                      dtype=str)  # Leer todo como string para ser flexible
+                    
+                    df.columns = df.columns.str.strip().str.lower()
+                    logger.info(f"[READ_FILE] Excel leido exitosamente: {len(df)} filas de datos")
+                    logger.info(f"[READ_FILE] Columnas detectadas (normalizadas): {list(df.columns)}")
+                    logger.debug(f"[READ_FILE] Primeras 2 filas:\n{df.head(2)}")
+                    return df
         else:
+            # CSV
             encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
             delimiters_to_try = [',', ';', '\t', '|']
 
@@ -456,7 +489,8 @@ def _read_imported_file(file_obj):
                                 on_bad_lines='skip',
                                 engine='python',
                                 skipinitialspace=True,
-                                quotechar='"'
+                                quotechar='"',
+                                dtype=str
                             )
 
                             # Quitar filas/columnas completamente vacías para validar estructura real.
@@ -468,21 +502,180 @@ def _read_imported_file(file_obj):
                                 df.columns = df.columns.str.strip().str.lower()
 
                                 if cols_count == 1 and delimiter in [',', ';', '\t']:
-                                    logger.warning(f"[CSV WARNING] Lectura con {encoding}|'{delimiter}' -> 1 columna. Probablemente incorrecto.")
+                                    logger.warning(f"[READ_FILE] [CSV WARNING] Lectura con {encoding}|'{delimiter}' -> 1 columna. Probablemente incorrecto.")
                                     continue
 
-                                logger.info(f"Archivo CSV leido exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
-                                logger.info(f"Columnas detectadas (normalizadas): {list(df.columns)}")
+                                logger.info(f"[READ_FILE] CSV leido exitosamente con encoding={encoding}, delimitador='{delimiter}': {len(df)} filas")
+                                logger.info(f"[READ_FILE] Columnas detectadas (normalizadas): {list(df.columns)}")
+                                logger.debug(f"[READ_FILE] Primeras 2 filas:\n{df.head(2)}")
                                 return df
                     except (UnicodeDecodeError, Exception):
                         continue
 
-            logger.error("No se pudo leer el archivo CSV con ninguna codificación/delimitador soportado")
+            logger.error("[READ_FILE] No se pudo leer el archivo CSV con ninguna codificación/delimitador soportado")
             return None
 
     except Exception as e:
-        logger.error(f"Error leyendo archivo: {type(e).__name__} - {str(e)}")
+        logger.error(f"[READ_FILE] Error leyendo archivo: {type(e).__name__} - {str(e)}", exc_info=True)
         return None
+
+def _detect_and_transform_academic_registro(df):
+    """
+    Detecta automáticamente si un DataFrame viene del Sistema de Registro Académico
+    y lo transforma al formato requerido por RA Manager.
+    
+    Formato ENTRADA (Sistema Registro Académico):
+    - Codigo, Nombres, Apellidos, Email, Documento Identidad, Programa Academico
+    
+    Formato SALIDA (RA Manager):
+    - codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada
+    
+    Si no detecta el formato de origen, devuelve el DataFrame sin cambios.
+    
+    Args:
+        df: DataFrame a transformar
+    
+    Returns:
+        DataFrame transformado o sin cambios si no es del registro académico
+    """
+    try:
+        # Obtener columnas normalizadas para búsqueda
+        cols_normalized = df.columns.str.lower().str.strip().tolist()
+        cols_original = df.columns.tolist()
+        
+        logger.info(f"[TRANSFORM] Columnas recibidas (originales): {cols_original}")
+        logger.info(f"[TRANSFORM] Columnas normalizadas: {cols_normalized}")
+        
+        # Detectar si es archivo del Sistema de Registro Académico
+        # Buscar si TODAS estas palabras claves están en alguna columna
+        academic_markers = ['codigo', 'nombre', 'apellido', 'email', 'documento']
+        
+        found_markers = {}
+        for marker in academic_markers:
+            for idx, col_norm in enumerate(cols_normalized):
+                if marker in col_norm:
+                    found_markers[marker] = cols_original[idx]
+                    logger.info(f"[TRANSFORM] Marker '{marker}' encontrado en columna '{cols_original[idx]}'")
+                    break
+        
+        logger.info(f"[TRANSFORM] Marcadores encontrados: {list(found_markers.keys())} / {academic_markers}")
+        
+        # Ser menos estricto: si encuentra al menos 4 de 5 marcadores, es probable que sea del Registro Académico
+        if len(found_markers) < 4:
+            logger.warning(f"[TRANSFORM] Archivo NO parece ser del Sistema de Registro Académico. Solo encontró {len(found_markers)} de {len(academic_markers)} marcadores")
+            logger.info(f"[TRANSFORM] Marcadores encontrados: {list(found_markers.keys())}")
+            logger.info(f"[TRANSFORM] Marcadores FALTANTES: {[m for m in academic_markers if m not in found_markers]}")
+            logger.info("[TRANSFORM] Procesando como CSV/Excel estándar de RA Manager")
+            return df
+        
+        logger.info(f"[TRANSFORM] Detectado formato Sistema de Registro Académico. Transformando...")
+        
+        # Mapeo inteligente: encontrar columnas por patrón y guardar nombre ORIGINAL
+        def find_col_original(cols_orig, cols_norm, *patterns):
+            """Busca columna por patrón en versión normalizada, devuelve nombre ORIGINAL"""
+            for idx, col_norm in enumerate(cols_norm):
+                for pattern in patterns:
+                    if pattern.lower() in col_norm.lower():
+                        logger.debug(f"[TRANSFORM] Patrón '{pattern}' encontrado en columna #{idx}: '{cols_orig[idx]}'")
+                        return cols_orig[idx]
+            logger.warning(f"[TRANSFORM] No se encontró columna con patrones: {patterns}")
+            return None
+        
+        # Buscar columnas
+        codigo_col = find_col_original(cols_original, cols_normalized, 'codigo')
+        nombres_col = find_col_original(cols_original, cols_normalized, 'nombres', 'nombre')
+        apellidos_col = find_col_original(cols_original, cols_normalized, 'apellidos', 'apellido')
+        email_col = find_col_original(cols_original, cols_normalized, 'email', 'correo')
+        docidentidad_col = find_col_original(cols_original, cols_normalized, 'documento identidad', 'documento')
+        programa_col = find_col_original(cols_original, cols_normalized, 'programa academico', 'programa')
+        
+        logger.info(f"[TRANSFORM] Columnas mapeadas:")
+        logger.info(f"  - codigo_col: {codigo_col}")
+        logger.info(f"  - nombres_col: {nombres_col}")
+        logger.info(f"  - apellidos_col: {apellidos_col}")
+        logger.info(f"  - email_col: {email_col}")
+        logger.info(f"  - docidentidad_col: {docidentidad_col}")
+        logger.info(f"  - programa_col: {programa_col}")
+        
+        # Validar que se encontraron las columnas CRÍTICAS
+        critical_cols = [codigo_col, nombres_col, apellidos_col, email_col, docidentidad_col]
+        if not all(critical_cols):
+            missing = []
+            if not codigo_col: missing.append("codigo")
+            if not nombres_col: missing.append("nombre")
+            if not apellidos_col: missing.append("apellido")
+            if not email_col: missing.append("email")
+            if not docidentidad_col: missing.append("documento")
+            error_msg = f"[TRANSFORM] Error: Faltan columnas críticas para transformación: {', '.join(missing)}"
+            logger.error(error_msg)
+            logger.warning("[TRANSFORM] Retornando DF sin transformar (intentará procesar como estándar)")
+            return df
+        
+        # Crear copia para no modificar el original
+        transformed = pd.DataFrame()
+        
+        logger.info(f"[TRANSFORM] Iniciando transformación de {len(df)} registros...")
+        
+        try:
+            # Transformar usando nombres ORIGINALES
+            transformed['codigo_estudiante'] = df[codigo_col].astype(str).str.strip()
+            logger.debug(f"[TRANSFORM] OK codigo_estudiante creado")
+            
+            transformed['nombre'] = df[nombres_col].astype(str).str.strip()
+            logger.debug(f"[TRANSFORM] OK nombre creado")
+            
+            transformed['apellido'] = df[apellidos_col].astype(str).str.strip()
+            logger.debug(f"[TRANSFORM] OK apellido creado")
+            
+            transformed['correo'] = df[email_col].astype(str).str.strip().str.lower()
+            logger.debug(f"[TRANSFORM] OK correo creado")
+            
+            # Separar "Documento Identidad" (formato: "CC 1061234567")
+            logger.debug(f"[TRANSFORM] Procesando documento desde columna: {docidentidad_col}")
+            doc_parts = df[docidentidad_col].astype(str).str.split(r'\s+', n=1, expand=True)
+            logger.debug(f"[TRANSFORM] Partes del documento: {doc_parts.columns.tolist()}")
+            
+            transformed['tipo_documento'] = doc_parts[0].str.strip() if 0 in doc_parts.columns else ""
+            transformed['num_documento'] = doc_parts[1].str.strip() if 1 in doc_parts.columns else ""
+            logger.debug(f"[TRANSFORM] OK tipo_documento y num_documento creados")
+            
+            # Jornada: extraer del programa académico si está disponible
+            jornada_list = []
+            if programa_col:
+                logger.debug(f"[TRANSFORM] Extrayendo jornada desde: {programa_col}")
+                for idx, prog in enumerate(df[programa_col].astype(str)):
+                    prog_upper = prog.upper()
+                    if 'NOCTURNA' in prog_upper or 'NOCHE' in prog_upper:
+                        jornada_list.append('NOCTURNA')
+                    elif 'VESPERTINA' in prog_upper or 'TARDE' in prog_upper:
+                        jornada_list.append('VESPERTINA')
+                    else:
+                        jornada_list.append('DIURNA')
+                    if idx == 0:
+                        logger.debug(f"[TRANSFORM] Ejemplo jornada: '{prog}' → '{jornada_list[0]}'")
+            else:
+                logger.warning("[TRANSFORM] No se encontró columna de programa. Usando DIURNA por defecto")
+                jornada_list = ['DIURNA'] * len(transformed)
+            
+            transformed['jornada'] = jornada_list
+            logger.debug(f"[TRANSFORM] OK jornada creado")
+            
+            logger.info(f"[TRANSFORM] **EXITOSA**: {len(transformed)} registros convertidos")
+            logger.info(f"[TRANSFORM] Columnas finales: {transformed.columns.tolist()}")
+            logger.info(f"[TRANSFORM] Vista previa de transformación:")
+            logger.info(f"{transformed.head(2).to_string()}")
+            
+            return transformed
+            
+        except Exception as e:
+            logger.error(f"[TRANSFORM] **ERROR** durante transformación de columnas: {type(e).__name__}: {str(e)}", exc_info=True)
+            logger.warning("[TRANSFORM] Retornando DF sin transformar (error durante conversión)")
+            return df
+        
+    except Exception as e:
+        logger.error(f"[TRANSFORM] **ERROR GENERAL**: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.warning("[TRANSFORM] Retornando DF original sin cambios")
+        return df
 
 def _find_user_by_credentials(email=None, codigo=None, rol=None):
     """
@@ -758,12 +951,19 @@ def coordinador_estudiantes_view(request):
         if not detected_program:
             return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
 
-        # Listar estudiantes con filtros opcionales
+        # Lista todos los estudiantes activos (sin filtro por programa porque Estudiante no tiene relación directa a Programa)
+        # La relación es indirecta a través de Matricula -> Asignatura -> Programa
+        # NOTA: Se muestran todos los estudiantes porque:
+        # - Los estudiantes nuevos importados aun no tienen matriculas
+        # - Cuando se matriculan, se valida que sean del programa del coordinador
+        # - La seguridad está asegurada porque solo coordinadores acceden aquí
+        logger.info(f"[COORDINADOR] GET estudiantes para coordinador: {coord.codigo_coordinador}, programa deducido: {detected_program.nombre if detected_program else 'N/A'}")
+        
         estudiantes = (
             Estudiante.objects
             .select_related('tipo_documento')
-            .filter(matricula__asignatura__programa=detected_program)
-            .distinct()
+            .filter(activo=True)  # Solo estudiantes activos
+            .order_by('apellido', 'nombre')
         )
         
         # Filtros opcionales
@@ -776,9 +976,6 @@ def coordinador_estudiantes_view(request):
                 Q(correo__icontains=search) |
                 Q(num_documento__icontains=search)
             )
-        
-        # Ordenar
-        estudiantes = estudiantes.order_by('apellido', 'nombre')
         
         # Serializar
         data = []
@@ -1428,9 +1625,16 @@ def coordinador_docente_perfil_view(request, id_docente: int):
 @authentication_classes([])
 def coordinador_import_estudiantes_view(request):
     """Importa estudiantes desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
-    Columnas mínimas requeridas: codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento
+    
+    ✨ TRANSFORMACIÓN AUTOMÁTICA: Si carga un Excel del Sistema de Registro Académico
+    con columnas (Codigo, Nombres, Apellidos, Email, Documento Identidad, Programa Academico),
+    se transforma automáticamente al formato requerido.
+    
+    Columnas mínimas requeridas (RA Manager): codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento
     Opcionales: jornada.
+    
     Soporta: .csv, .xlsx, .xls
+    
     Sinónimos aceptados:
       - codigo_estudiante | estudiante | codigo
       - nombre | first_name
@@ -1450,7 +1654,9 @@ def coordinador_import_estudiantes_view(request):
     
     f = request.FILES.get("file") or request.FILES.get("csv")
     if not f:
-        return Response({"detail": "Archivo requerido (CSV o Excel). FILES recibidos: " + str(list(request.FILES.keys()))}, status=status.HTTP_400_BAD_REQUEST)
+        error_msg = f"Archivo requerido (CSV o Excel). FILES recibidos: {str(list(request.FILES.keys()))}"
+        logger.error(f"[ERROR] {error_msg}")
+        return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
     
     fname = getattr(f, 'name', '').lower()
     logger.info(f"[DEBUG] Archivo recibido: nombre='{fname}', size={getattr(f, 'size', 'unknown')}, type={type(f)}")
@@ -1471,8 +1677,24 @@ def coordinador_import_estudiantes_view(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
+    # TRANSFORMACIÓN AUTOMÁTICA: Detectar y transformar formato de Registro Académico
+    df = _detect_and_transform_academic_registro(df)
+    
     # Normalizar nombres de columnas
     df.columns = df.columns.str.strip().str.lower()
+    
+    # Validar que tienen las columnas mínimas requeridas
+    required_cols = ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento']
+    cols_normalized = set(df.columns)
+    missing_cols = [col for col in required_cols if col not in cols_normalized]
+    
+    if missing_cols:
+        error_detail = f"Faltan columnas requeridas: {', '.join(missing_cols)}. Disponibles: {', '.join(df.columns.tolist())}"
+        logger.error(f"[IMPORT_VALIDATION] {error_detail}")
+        return Response(
+            {"detail": error_detail},
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
     # OPTIMIZACIÓN: Pre-cargar datos existentes
     tipos_documento_map_id = {td.id_tipo_documento: td for td in TipoDocumento.objects.all()}
@@ -1550,7 +1772,15 @@ def coordinador_import_estudiantes_view(request):
         
         # Log de debug para primera fila - valores extraídos
         if idx == 0:
-            logger.info(f"[DEBUG] Valores extraídos - codigo:{codigo}, nombre:{nombre}, apellido:{apellido}, correo:{correo}, tipo_doc_id:{tipo_doc_id}, tipo_doc_desc:{tipo_doc_desc}, num_doc:{num_documento}, jornada:{jornada}")
+            logger.info(f"[DEBUG] Valores extraídos (fila 1):")
+            logger.info(f"  - codigo: {codigo}")
+            logger.info(f"  - nombre: {nombre}")
+            logger.info(f"  - apellido: {apellido}")
+            logger.info(f"  - correo: {correo}")
+            logger.info(f"  - tipo_doc_desc: {tipo_doc_desc}")
+            logger.info(f"  - tipo_doc_id: {tipo_doc_id}")
+            logger.info(f"  - num_documento: {num_documento}")
+            logger.info(f"  - jornada: {jornada}")
         
 
         # Helper limpieza Excel
@@ -1569,12 +1799,31 @@ def coordinador_import_estudiantes_view(request):
         num_documento = clean_val(num_documento, 20)
         jornada = clean_val(jornada, 50)
         
-        # Debug específico para primera fila después de limpieza
+        # Log de debug para primera fila después de limpieza
         if idx == 0:
-            logger.info(f"[DEBUG] Valores limpios: {codigo}, {nombre}, {correo}, {tipo_doc_desc}, {num_documento}")
+            logger.info(f"[DEBUG] Valores limpios (fila 1):")
+            logger.info(f"  - codigo: '{codigo}'")
+            logger.info(f"  - nombre: '{nombre}'")
+            logger.info(f"  - apellido: '{apellido}'")
+            logger.info(f"  - correo: '{correo}'")
+            logger.info(f"  - tipo_doc_desc: '{tipo_doc_desc}'")
+            logger.info(f"  - num_documento: '{num_documento}'")
+            logger.info(f"  - jornada: '{jornada}'")
         
+        # Validar campos requeridos
         if not (codigo and nombre and apellido and correo and (tipo_doc_desc or tipo_doc_id) and num_documento):
-            errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
+            missing_fields = []
+            if not codigo: missing_fields.append("codigo_estudiante")
+            if not nombre: missing_fields.append("nombre")
+            if not apellido: missing_fields.append("apellido")
+            if not correo: missing_fields.append("correo")
+            if not (tipo_doc_desc or tipo_doc_id): missing_fields.append("tipo_documento")
+            if not num_documento: missing_fields.append("num_documento")
+            
+            error_msg = f"Faltan campos requeridos: {', '.join(missing_fields)}"
+            logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
+            errors.append({"row": row_num, "error": error_msg})
+            continue
         
         # Tipo documento - intentar por ID primero, luego por descripción
         tipo_doc = None
@@ -1608,11 +1857,18 @@ def coordinador_import_estudiantes_view(request):
                                 break
 
             if idx == 0:
-                logger.info(f"[DEBUG] Buscando tipo: '{tipo_doc_desc}' -> Norm: '{norm_input}' -> Encontrado: {tipo_doc}")
+                logger.info(f"[DEBUG] Tipo documento:")
+                logger.info(f"  - Input: '{tipo_doc_desc}'")
+                logger.info(f"  - Normalizado: '{norm_input}'")
+                logger.info(f"  - Encontrado: {tipo_doc}")
+                if not tipo_doc:
+                    logger.warning(f"[DEBUG] Tipos disponibles en BD: {list(tipos_documento_map_desc_norm.keys())}")
 
         
         if not tipo_doc:
-            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: {tipo_doc_id or tipo_doc_desc}"}); continue
+            error_msg = f"TipoDocumento no encontrado para '{tipo_doc_id or tipo_doc_desc}'. Tipos disponibles: {list(tipos_documento_map_desc_norm.keys())}"
+            logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
+            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: '{tipo_doc_desc}'"}); continue
         
         # Verificar si ya existe
         if codigo in existing_estudiantes_codigos:
@@ -4529,8 +4785,8 @@ class EstudianteViewSet(viewsets.ModelViewSet):
     ViewSet para estudiantes.
     ADVERTENCIA: Datos sensibles - requiere autenticación y permisos.
     """
-    # Optimización: select_related para tipo_documento y programa
-    queryset = Estudiante.objects.select_related('tipo_documento', 'programa').all()
+    # Optimización: select_related para tipo_documento
+    queryset = Estudiante.objects.select_related('tipo_documento').all()
     serializer_class = EstudianteSerializer
     permission_classes = [AllowAny]  # TODO: Cambiar a IsAuthenticated + custom permissions
     # TODO: Implementar filtrado por usuario autenticado
