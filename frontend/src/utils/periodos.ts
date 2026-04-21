@@ -8,6 +8,8 @@ const TERM_WEIGHT: Record<string, number> = {
   II: 2,
 }
 
+const VALID_TERM_DESCRIPTIONS = new Set(['I', 'II', '1', '2'])
+
 function normalizeDescripcion(input: string): string {
   return String(input || '').trim().toUpperCase()
 }
@@ -15,13 +17,21 @@ function normalizeDescripcion(input: string): string {
 // Convierte descripciones tipo "2026-I" o "2026-II" a una llave ordenable.
 export function periodoSortKey(descripcion: string): number {
   const normalized = normalizeDescripcion(descripcion)
-  const match = normalized.match(/^(\d{4})\s*[-/]\s*([IVX]+|\d+)$/)
+  const match = normalized.match(/^(\d{4})\s*[-/]\s*(I{1,2}|\d+)$/)
   if (!match) return -1
 
   const year = Number(match[1])
   const termRaw = match[2]
   const term = TERM_WEIGHT[termRaw] ?? Number(termRaw)
   if (!Number.isFinite(year) || !Number.isFinite(term)) return -1
+
+  if (!VALID_TERM_DESCRIPTIONS.has(termRaw) && !(term === 1 || term === 2)) {
+    return -1
+  }
+
+  if (term < 1 || term > 2) {
+    return -1
+  }
 
   return year * 10 + term
 }

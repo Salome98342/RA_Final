@@ -4,6 +4,7 @@ import {
   createEstudiante, 
   deactivateEstudiante,
   activateEstudiante,
+  updateEstudianteJornada,
   fetchTiposDocumento,
   type EstudianteListItem,
   type TipoDocumento
@@ -16,6 +17,7 @@ import Alert from '@/utils/alert'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 const Estudiantes: React.FC = () => {
+  const jornadaOptions = ['', 'Diurna', 'Nocturna']
   const [estudiantes, setEstudiantes] = useState<EstudianteListItem[]>([])
   const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,6 +36,7 @@ const Estudiantes: React.FC = () => {
   const [selectedEstudianteId, setSelectedEstudianteId] = useState<number | null>(null)
   const [deactivatingId, setDeactivatingId] = useState<number | null>(null)
   const [activatingId, setActivatingId] = useState<number | null>(null)
+  const [updatingJornadaId, setUpdatingJornadaId] = useState<number | null>(null)
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -64,7 +67,7 @@ const Estudiantes: React.FC = () => {
   const loadEstudiantes = async () => {
     setLoading(true)
     try {
-      const data = await fetchEstudiantes(searchTerm || undefined)
+      const data = await fetchEstudiantes(searchTerm || undefined, true)
       setEstudiantes(data)
     } catch (e: any) {
       console.error('Error cargando estudiantes:', e)
@@ -82,6 +85,27 @@ const Estudiantes: React.FC = () => {
     }
   }
 
+  const normalizeJornada = (value?: string | null) => {
+    if (!value) return ''
+    const normalized = value.trim().toLowerCase()
+    if (normalized.includes('nocturna') || normalized.includes('noche')) return 'Nocturna'
+    if (normalized.includes('diurna') || normalized.includes('dia') || normalized.includes('manana')) return 'Diurna'
+    return ''
+  }
+
+  const confirmJornadaChange = async (nombreCompleto: string, jornada: string | null) => {
+    const jornadaLabel = jornada || 'Sin asignar'
+    return Alert.confirm({
+      title: 'Confirmar jornada',
+      text: jornada
+        ? `¿Estás seguro de que la jornada de ${nombreCompleto} es ${jornadaLabel}?`
+        : `¿Estás seguro de quitar la jornada de ${nombreCompleto}?`,
+      confirmButtonText: 'Sí, continuar',
+      cancelButtonText: 'Cancelar',
+      type: 'question',
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -92,7 +116,9 @@ const Estudiantes: React.FC = () => {
       return
     }
 
-    const confirmed = await Alert.confirmCreate('estudiante')
+    const confirmed = formData.jornada
+      ? await confirmJornadaChange(`${formData.nombre} ${formData.apellido}`, formData.jornada)
+      : await Alert.confirmCreate('estudiante')
     if (!confirmed) return
 
     setLoading(true)
@@ -171,6 +197,28 @@ const Estudiantes: React.FC = () => {
       Alert.error(msg)
     } finally {
       setActivatingId(null)
+    }
+  }
+
+  const handleJornadaChange = async (estudiante: EstudianteListItem, jornada: string) => {
+    const normalizedJornada = jornada || null
+    const confirmed = await confirmJornadaChange(`${estudiante.nombre} ${estudiante.apellido}`, normalizedJornada)
+    if (!confirmed) return
+
+    setUpdatingJornadaId(estudiante.id_estudiante)
+    try {
+      const result = await updateEstudianteJornada(estudiante.id_estudiante, normalizedJornada)
+      Alert.success(
+        result.estudiante.jornada
+          ? `Jornada de ${estudiante.nombre} ${estudiante.apellido} actualizada a ${result.estudiante.jornada}`
+          : `Jornada de ${estudiante.nombre} ${estudiante.apellido} eliminada`
+      )
+      await loadEstudiantes()
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'No se pudo actualizar la jornada'
+      Alert.error(msg)
+    } finally {
+      setUpdatingJornadaId(null)
     }
   }
 
@@ -472,12 +520,20 @@ const Estudiantes: React.FC = () => {
                               {est.tipo_documento}: {est.num_documento}
                             </span>
                           </td>
-                          <td>
-                            {est.jornada ? (
-                              <span className="badge bg-info">{est.jornada}</span>
-                            ) : (
-                              <span className="text-muted">-</span>
-                            )}
+                          <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                            <select
+                              className="form-select form-select-sm"
+                              value={normalizeJornada(est.jornada)}
+                              disabled={updatingJornadaId === est.id_estudiante}
+                              onChange={(e) => handleJornadaChange(est, e.target.value)}
+                              aria-label={`Cambiar jornada de ${est.nombre} ${est.apellido}`}
+                            >
+                              {jornadaOptions.map((option) => (
+                                <option key={option || 'sin-asignar'} value={option}>
+                                  {option || 'Sin asignar'}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td>
                             {est.activo === false ? (
@@ -581,12 +637,20 @@ const Estudiantes: React.FC = () => {
                               {est.tipo_documento}: {est.num_documento}
                             </span>
                           </td>
-                          <td>
-                            {est.jornada ? (
-                              <span className="badge bg-info">{est.jornada}</span>
-                            ) : (
-                              <span className="text-muted">-</span>
-                            )}
+                          <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                            <select
+                              className="form-select form-select-sm"
+                              value={normalizeJornada(est.jornada)}
+                              disabled={updatingJornadaId === est.id_estudiante}
+                              onChange={(e) => handleJornadaChange(est, e.target.value)}
+                              aria-label={`Cambiar jornada de ${est.nombre} ${est.apellido}`}
+                            >
+                              {jornadaOptions.map((option) => (
+                                <option key={option || 'sin-asignar'} value={option}>
+                                  {option || 'Sin asignar'}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td>
                             <span className="badge bg-secondary">Inactivo</span>

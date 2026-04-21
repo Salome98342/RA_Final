@@ -138,6 +138,24 @@ export default function Login() {
             >
               Aviso de Cookies
             </div>
+            <div
+              className="cookies"
+              id="privacyPolicyBtn"
+              role="button"
+              onClick={() =>
+                Alert.toast.info(
+                  `Apreciado usuario,
+Le informamos que la Universidad del Valle, mediante Resolución de Rectoría No. 2.224 de 2019, adopta el Manual de Política de Tratamiento de Información y Protección de Datos Personales de la Universidad del Valle, dando cumplimiento a la Constitución Política de Colombia en su artículo 15, a la Ley 1581 del 2012 de la República de Colombia, y a los Decretos 1377 del 2013 y 886 del 2014 que regulan la mencionada Ley y que actualmente se encuentran contenidos en los capítulos 25 y 26 del Decreto Único Reglamentario 1074 del 2015 del Sector Comercio, Industria y Turismo.
+
+La recolección, almacenamiento, uso, transmisión y, en general, cualquier actividad con sus datos personales, está regida por lo indicado en el mencionado Manual, e implica de una forma resumida que:
+
+• Sus datos personales serán utilizados para verificar su vinculación (o no) a las actividades académicas que se lleven a cabo a través del RA Manager.
+• Sus datos personales no serán compartidos con terceros salvo por las excepciones contenidas en el Cap 2 Art. 6 de la resolución de rectoría No. 2.224 de 2019.`
+                )
+              }
+            >
+              Política de Privacidad
+            </div>
           </div>
         </section>
       </main>

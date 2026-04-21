@@ -17,11 +17,13 @@ from ..views.views import (
     coordinador_download_template_view,
     coordinador_periodos_view,
     coordinador_estudiantes_para_matricula_view,
+    coordinador_desmatricular_view,
     coordinador_docentes_view,
     coordinador_docente_perfil_view,
     coordinador_asignatura_avance_view, coordinador_estudiante_perfil_view, current_period_view, course_activities_grouped_view,
     coordinador_estudiante_desactivar_view,
     coordinador_estudiante_activar_view,
+    coordinador_estudiante_jornada_view,
     docente_import_estudiantes_view, docente_buscar_estudiante_view, docente_agregar_estudiante_view, anuncio_delete_view,
 )
 from ..views.coordinador_desempenio import coordinador_dashboard_desempenio_view
@@ -60,8 +62,10 @@ urlpatterns = [
     path("coordinador/estudiantes", coordinador_estudiantes_view),  # GET: listar, POST: crear individual
     path("coordinador/estudiantes/<int:id_estudiante>/desactivar", coordinador_estudiante_desactivar_view),
     path("coordinador/estudiantes/<int:id_estudiante>/activar", coordinador_estudiante_activar_view),
+    path("coordinador/estudiantes/<int:id_estudiante>/jornada", coordinador_estudiante_jornada_view),
     path("coordinador/periodos", coordinador_periodos_view),
     path("coordinador/estudiantes-para-matricula", coordinador_estudiantes_para_matricula_view),
+    path("coordinador/matriculas/desmatricular", coordinador_desmatricular_view),
     path("coordinador/docentes", coordinador_docentes_view),  # GET: listar, POST: crear individual
     path("coordinador/docentes/<int:id_docente>/perfil", coordinador_docente_perfil_view),  # GET: Perfil completo del docente
     path("coordinador/estudiantes/<int:id_estudiante>/perfil", coordinador_estudiante_perfil_view),  # GET: Perfil completo del estudiante

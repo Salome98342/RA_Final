@@ -4,10 +4,13 @@ from django.urls import reverse
 from datetime import date, timedelta
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
+from io import BytesIO
+
+import pandas as pd
 
 from .models.models import (
     TipoDocumento, Docente, Programa, Asignatura,
-	ResultadoDeAprendizaje, TipoActividad, Actividad, RaActividad, Coordinador, ImportAudit,
+	ResultadoDeAprendizaje, TipoActividad, Actividad, RaActividad, Coordinador, ImportAudit, Estudiante,
 )
 from django.core import signing
 
@@ -244,6 +247,195 @@ class CoordinadorEndpointsTests(TestCase):
 		# Auditoría registrada
 		self.assertTrue(ImportAudit.objects.filter(kind="matriculados", filename="matriculados.csv", created_count=1).exists())
 
+	def test_import_matriculados_accepts_periodo_alias_roman(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import Estudiante, PeriodoAcademico, Matricula
+
+		per = PeriodoAcademico.objects.create(
+			descripcion="2026-1",
+			fecha_inicio=date.today(),
+			fecha_finalizacion=date.today() + timedelta(days=120),
+		)
+		est = Estudiante.objects.create(
+			codigo_estudiante="E002",
+			nombre="Luis",
+			apellido="M.",
+			correo="e002@example.com",
+			contrasena_estudiante="pwd",
+			tipo_documento=self.tdoc,
+			num_documento="Z2",
+		)
+		csv_content = b"codigo_estudiante,codigo_asignatura,periodo\nE002,EST-1,2026-I"
+		f = SimpleUploadedFile("matriculados_alias.csv", csv_content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/matriculados", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertEqual(payload.get("created"), 1)
+		self.assertTrue(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=self.asig,
+				periodo=per,
+			).exists()
+		)
+
+	def test_import_matriculados_infers_codigo_asignatura_from_filename(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import Estudiante, PeriodoAcademico, Matricula
+
+		per = PeriodoAcademico.objects.create(
+			descripcion="2026-2",
+			fecha_inicio=date.today(),
+			fecha_finalizacion=date.today() + timedelta(days=120),
+		)
+		est = Estudiante.objects.create(
+			codigo_estudiante="E003",
+			nombre="Sofia",
+			apellido="R.",
+			correo="e003@example.com",
+			contrasena_estudiante="pwd",
+			tipo_documento=self.tdoc,
+			num_documento="Z3",
+		)
+		asig_filename = Asignatura.objects.create(
+			nombre="Calculo Avanzado",
+			codigo_asignatura="801126C",
+			docente=self.doc,
+			programa=self.prog,
+		)
+
+		csv_content = b"codigo_estudiante,periodo\nE003,2026-2"
+		f = SimpleUploadedFile("listado_de_clase_801126C.csv", csv_content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/matriculados", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertEqual(payload.get("created"), 1)
+		self.assertTrue(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=asig_filename,
+				periodo=per,
+			).exists()
+		)
+
+	def test_import_matriculados_uses_latest_period_when_missing(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import Estudiante, PeriodoAcademico, Matricula
+
+		old_per = PeriodoAcademico.objects.create(
+			descripcion="2025-2",
+			fecha_inicio=date.today() - timedelta(days=300),
+			fecha_finalizacion=date.today() - timedelta(days=180),
+		)
+		latest_per = PeriodoAcademico.objects.create(
+			descripcion="2026-1",
+			fecha_inicio=date.today() - timedelta(days=10),
+			fecha_finalizacion=date.today() + timedelta(days=110),
+		)
+		est = Estudiante.objects.create(
+			codigo_estudiante="E004",
+			nombre="Carlos",
+			apellido="P.",
+			correo="e004@example.com",
+			contrasena_estudiante="pwd",
+			tipo_documento=self.tdoc,
+			num_documento="Z4",
+		)
+
+		csv_content = b"codigo_estudiante,codigo_asignatura\nE004,EST-1"
+		f = SimpleUploadedFile("matriculados_sin_periodo.csv", csv_content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/matriculados", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertEqual(payload.get("created"), 1)
+		self.assertTrue(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=self.asig,
+				periodo=latest_per,
+			).exists()
+		)
+		self.assertFalse(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=self.asig,
+				periodo=old_per,
+			).exists()
+		)
+
+	def test_import_matriculados_uses_semestre_column_when_present(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import Estudiante, PeriodoAcademico, Matricula
+
+		semestre_objetivo = PeriodoAcademico.objects.create(
+			descripcion="2025-2",
+			fecha_inicio=date.today() - timedelta(days=300),
+			fecha_finalizacion=date.today() - timedelta(days=180),
+		)
+		periodo_reciente = PeriodoAcademico.objects.create(
+			descripcion="2026-1",
+			fecha_inicio=date.today() - timedelta(days=10),
+			fecha_finalizacion=date.today() + timedelta(days=110),
+		)
+		est = Estudiante.objects.create(
+			codigo_estudiante="E006",
+			nombre="Luisa",
+			apellido="K.",
+			correo="e006@example.com",
+			contrasena_estudiante="pwd",
+			tipo_documento=self.tdoc,
+			num_documento="Z6",
+		)
+
+		csv_content = b"codigo_estudiante,codigo_asignatura,semestre\nE006,EST-1,2025-2"
+		f = SimpleUploadedFile("matriculados_con_semestre.csv", csv_content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/matriculados", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertEqual(payload.get("created"), 1)
+		self.assertTrue(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=self.asig,
+				periodo=semestre_objetivo,
+			).exists()
+		)
+		self.assertFalse(
+			Matricula.objects.filter(
+				estudiante=est,
+				asignatura=self.asig,
+				periodo=periodo_reciente,
+			).exists()
+		)
+
+	def test_coordinador_desmatricular_ok(self):
+		from .models.models import Estudiante, PeriodoAcademico, Matricula
+
+		per = PeriodoAcademico.objects.create(
+			descripcion="2026-2",
+			fecha_inicio=date.today(),
+			fecha_finalizacion=date.today() + timedelta(days=120),
+		)
+		est = Estudiante.objects.create(
+			codigo_estudiante="E005",
+			nombre="Nora",
+			apellido="V.",
+			correo="e005@example.com",
+			contrasena_estudiante="pwd",
+			tipo_documento=self.tdoc,
+			num_documento="Z5",
+		)
+		mat = Matricula.objects.create(estudiante=est, periodo=per, asignatura=self.asig)
+
+		res = self.client.post(
+			"/api/coordinador/matriculas/desmatricular",
+			{"id_matricula": mat.id_matricula},
+			format="json",
+			**self.auth_header,
+		)
+		self.assertEqual(res.status_code, 200, res.content)
+		self.assertFalse(Matricula.objects.filter(id_matricula=mat.id_matricula).exists())
+
 	def test_import_docentes_row_limit_exceeded(self):
 		# Generar CSV con 5001 filas válidas (duplicadas) para alcanzar el límite sin crear 5000 hashes.
 		from django.core.files.uploadedfile import SimpleUploadedFile
@@ -263,7 +455,6 @@ class CoordinadorEndpointsTests(TestCase):
 
 	def test_import_estudiantes_csv_basic(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
-		from .models.models import Estudiante
 		content = (
 			b"codigo_estudiante,nombre,apellido,correo,tipo_documento,num_documento,jornada\n"
 			b"E2001,Ana,Perez,ana.perez@example.com,CC,2001,Diurna"
@@ -278,4 +469,86 @@ class CoordinadorEndpointsTests(TestCase):
 		est = Estudiante.objects.get(codigo_estudiante="E2001")
 		self.assertTrue(check_password(settings.DEFAULT_BULK_STUDENT_PASSWORD, est.contrasena_estudiante))
 		self.assertTrue(ImportAudit.objects.filter(kind="estudiantes", filename="estudiantes.csv", created_count=1).exists())
+
+	def _build_estudiantes_xlsx(self, rows, filename="datos_contacto_matriculados.xlsx"):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+
+		buffer = BytesIO()
+		pd.DataFrame(rows).to_excel(buffer, index=False, engine="openpyxl")
+		buffer.seek(0)
+		return SimpleUploadedFile(
+			filename,
+			buffer.read(),
+			content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		)
+
+	def test_import_estudiantes_xlsx_with_jornada_column(self):
+		file_obj = self._build_estudiantes_xlsx([
+			{
+				"Codigo": "E3001",
+				"Nombres": "Laura",
+				"Apellidos": "Gomez",
+				"Email": "laura.gomez@example.com",
+				"Documento Identidad": "CC 3001",
+				"Admitidos primer semestre": "SI",
+				"Jornada": "Nocturna",
+			}
+		])
+		res = self.client.post("/api/coordinador/import/estudiantes", {"file": file_obj}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		data = res.json()
+		self.assertEqual(data.get("created"), 1)
+		est = Estudiante.objects.get(codigo_estudiante="E3001")
+		self.assertEqual(est.jornada, "Nocturna")
+
+	def test_import_estudiantes_xlsx_without_jornada_column_leaves_it_empty(self):
+		file_obj = self._build_estudiantes_xlsx([
+			{
+				"Codigo": "E3002",
+				"Nombres": "Mario",
+				"Apellidos": "Rojas",
+				"Email": "mario.rojas@example.com",
+				"Documento Identidad": "CC 3002",
+				"Admitidos primer semestre": "SI",
+			}
+		])
+		res = self.client.post("/api/coordinador/import/estudiantes", {"file": file_obj}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		data = res.json()
+		self.assertEqual(data.get("created"), 1)
+		est = Estudiante.objects.get(codigo_estudiante="E3002")
+		self.assertIsNone(est.jornada)
+
+	def test_create_estudiante_rejects_invalid_jornada(self):
+		payload = {
+			"codigo_estudiante": "E4001",
+			"nombre": "Juliana",
+			"apellido": "Perez",
+			"correo": "juliana.perez@example.com",
+			"tipo_documento": "CC",
+			"num_documento": "4001",
+			"jornada": "Vespertina",
+		}
+		res = self.client.post("/api/coordinador/estudiantes", payload, format="json", **self.auth_header)
+		self.assertEqual(res.status_code, 400, res.content)
+		self.assertIn("Diurna o Nocturna", res.json().get("detail", ""))
+
+	def test_inactive_students_can_be_listed(self):
+		from .models.models import Estudiante
+		from django.contrib.auth.hashers import make_password
+
+		est = Estudiante.objects.create(
+			codigo_estudiante="E4002",
+			nombre="Carlos",
+			apellido="Lopez",
+			correo="carlos.lopez@example.com",
+			contrasena_estudiante=make_password("pwd"),
+			tipo_documento=self.tdoc,
+			num_documento="4002",
+			activo=False,
+		)
+		res = self.client.get("/api/coordinador/estudiantes", {"include_inactive": 1}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertTrue(any(item["codigo_estudiante"] == est.codigo_estudiante and item["activo"] is False for item in payload))
 

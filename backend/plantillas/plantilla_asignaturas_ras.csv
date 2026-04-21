@@ -1,3 +1,2 @@
-codigo_asignatura,nombre_asignatura,codigo_docente,codigo_programa,periodo,grupo,sede,creditos,ra_descripcion,ra_porcentaje
-MAT201,Calculo Diferencial,DOC001,TDS,2026-I,A,02,3,Resuelve problemas con funciones,50
-MAT201,Calculo Diferencial,DOC001,TDS,2026-I,A,02,3,Modela situaciones reales,50
+﻿codigo_asignatura,nombre_asignatura,codigo_docente,codigo_programa,periodo,grupo,sede,creditos,ra_descripcion,ra_porcentaje
+MAT201,Calculo Diferencial,DOC001,TDS,2026-I,A,02,3,Resuelve problemas con funciones,100
