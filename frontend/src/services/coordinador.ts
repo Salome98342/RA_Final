@@ -334,8 +334,13 @@ export async function importAsignaturasRAs(file: File) {
 }
 
 // ========== FUNCIONES API - ESTUDIANTES ==========
-export async function fetchEstudiantes(search?: string): Promise<EstudianteListItem[]> {
-  const { data } = await api.get(endpoints.coordinador.estudiantes, { params: { search } })
+export async function fetchEstudiantes(search?: string, includeInactive = false): Promise<EstudianteListItem[]> {
+  const { data } = await api.get(endpoints.coordinador.estudiantes, {
+    params: {
+      search,
+      include_inactive: includeInactive ? 1 : undefined,
+    },
+  })
   return data
 }
 
@@ -370,6 +375,23 @@ export async function fetchEstudiantesParaMatricula(params: {
 export async function fetchDocentes(search?: string): Promise<DocenteListItem[]> {
   const { data } = await api.get(endpoints.coordinador.docentes, { params: { search } })
   return data
+}
+
+export async function desmatricularEstudiante(idMatricula: number) {
+  const { data } = await api.post(endpoints.coordinador.desmatricular, {
+    id_matricula: idMatricula,
+  })
+  return data as {
+    detail: string
+    matricula: {
+      id_matricula: number
+      id_estudiante: number
+      codigo_estudiante: string
+      id_asignatura: number
+      codigo_asignatura: string
+      periodo: string
+    }
+  }
 }
 
 export async function fetchProgramas(): Promise<ProgramaItem[]> {
@@ -412,6 +434,20 @@ export async function deactivateEstudiante(idEstudiante: number) {
       id_estudiante: number
       codigo_estudiante: string
       activo: boolean
+    }
+  }
+}
+
+export async function updateEstudianteJornada(idEstudiante: number, jornada: string | null) {
+  const { data } = await api.patch(endpoints.coordinador.estudianteJornada(idEstudiante), {
+    jornada,
+  })
+  return data as {
+    detail: string
+    estudiante: {
+      id_estudiante: number
+      codigo_estudiante: string
+      jornada: string | null
     }
   }
 }

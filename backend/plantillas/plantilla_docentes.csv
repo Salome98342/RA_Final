@@ -1,3 +1,2 @@
-codigo_docente,nombre,apellido,correo,tipo_documento,num_documento,num_telefono,password
+﻿codigo_docente,nombre,apellido,correo,tipo_documento,num_documento,num_telefono,password
 DOC001,Ana,Perez,ana.perez@univalle.edu.co,CC,1001001001,3001234567,Docente123*
-DOC002,Carlos,Rodriguez,carlos.rodriguez@univalle.edu.co,CC,1001001002,3001234568,

@@ -5,12 +5,14 @@ import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
 import {
+  desmatricularEstudiante,
   fetchAsignaturaEstudiantes,
   fetchAsignaturas,
   fetchPeriodosCoordinador,
   fetchEstudiantesParaMatricula,
   importMatriculados,
   type AsignaturaRow,
+  type EstudianteRow,
   type EstudianteListItem,
 } from '@/services/coordinador'
 
@@ -53,7 +55,9 @@ const Matriculados: React.FC = () => {
   const [periodos, setPeriodos] = useState<Array<{ id_periodo: number; descripcion: string }>>([])
   const [students, setStudents] = useState<EstudianteListItem[]>([])
   const [alreadyEnrolledCodes, setAlreadyEnrolledCodes] = useState<Set<string>>(new Set())
+  const [enrolledRowsByCode, setEnrolledRowsByCode] = useState<Record<string, EstudianteRow>>({})
   const [searchTerm, setSearchTerm] = useState('')
+  const [unenrollingCode, setUnenrollingCode] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     id_asignatura: '',
@@ -136,6 +140,8 @@ const Matriculados: React.FC = () => {
     if (!asignatura) {
       setStudents([])
       setSelectedStudents({})
+      setAlreadyEnrolledCodes(new Set())
+      setEnrolledRowsByCode({})
       return
     }
 
@@ -150,6 +156,7 @@ const Matriculados: React.FC = () => {
       setStudents(candidates.results)
 
       const enrolled = new Set<string>()
+      const enrolledByCode: Record<string, EstudianteRow> = {}
       if (period) {
         const existing = await fetchAsignaturaEstudiantes({
           codigo_asignatura: asignatura.codigo,
@@ -159,9 +166,13 @@ const Matriculados: React.FC = () => {
           page: 1,
           page_size: 3000,
         })
-        existing.results.forEach((e) => enrolled.add(e.codigo_estudiante))
+        existing.results.forEach((e) => {
+          enrolled.add(e.codigo_estudiante)
+          enrolledByCode[e.codigo_estudiante] = e
+        })
       }
       setAlreadyEnrolledCodes(enrolled)
+      setEnrolledRowsByCode(enrolledByCode)
 
       setSelectedStudents((prev) => {
         const next: Record<string, boolean> = {}
@@ -176,6 +187,7 @@ const Matriculados: React.FC = () => {
       setStudents([])
       setSelectedStudents({})
       setAlreadyEnrolledCodes(new Set())
+      setEnrolledRowsByCode({})
       Alert.error(e?.response?.data?.detail || e.message || 'No se pudo cargar el listado de estudiantes.')
     } finally {
       setLoadingStudents(false)
@@ -212,6 +224,46 @@ const Matriculados: React.FC = () => {
 
   const clearSelection = () => {
     setSelectedStudents({})
+  }
+
+  const handleUnenroll = async (codigoEstudiante: string) => {
+    const enrolledRow = enrolledRowsByCode[codigoEstudiante]
+    if (!enrolledRow) {
+      Alert.info('No se encontró la matrícula para desmatricular en este periodo.')
+      return
+    }
+
+    const confirmed = await Alert.confirm({
+      title: 'Confirmar desmatrícula',
+      text: [
+        `Estudiante: ${enrolledRow.codigo_estudiante} - ${enrolledRow.nombre} ${enrolledRow.apellido}`,
+        `Periodo: ${enrolledRow.periodo}`,
+        `Asignatura: ${selectedAsignatura?.codigo || '-'} (${selectedAsignatura?.nombre || '-'})`,
+        '',
+        '¿Deseas desmatricular este estudiante?'
+      ].join('\n'),
+      confirmButtonText: 'Sí, desmatricular',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    })
+
+    if (!confirmed) return
+
+    setUnenrollingCode(codigoEstudiante)
+    try {
+      await desmatricularEstudiante(enrolledRow.id_matricula)
+      setSelectedStudents((prev) => {
+        const next = { ...prev }
+        delete next[codigoEstudiante]
+        return next
+      })
+      Alert.success('Estudiante desmatriculado correctamente.')
+      await loadStudents(selectedAsignatura, formData.periodo)
+    } catch (e: any) {
+      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo desmatricular al estudiante.')
+    } finally {
+      setUnenrollingCode(null)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -448,18 +500,31 @@ const Matriculados: React.FC = () => {
                             {availableStudents.map((s) => {
                               const already = alreadyEnrolledCodes.has(s.codigo_estudiante)
                               const checked = !!selectedStudents[s.codigo_estudiante]
+                              const isUnenrolling = unenrollingCode === s.codigo_estudiante
                               return (
                                 <tr key={s.codigo_estudiante}>
                                   <td>
-                                    <button
-                                      type="button"
-                                      className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
-                                      disabled={already || loading}
-                                      onClick={() => toggleStudent(s.codigo_estudiante, !checked)}
-                                      aria-label={`${checked ? 'Quitar' : 'Añadir'} ${s.codigo_estudiante}`}
-                                    >
-                                      {checked ? 'Quitar' : 'Añadir'}
-                                    </button>
+                                    {already ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-danger"
+                                        disabled={loading || isUnenrolling || !enrolledRowsByCode[s.codigo_estudiante]}
+                                        onClick={() => handleUnenroll(s.codigo_estudiante)}
+                                        aria-label={`Desmatricular ${s.codigo_estudiante}`}
+                                      >
+                                        {isUnenrolling ? 'Desmatriculando...' : 'Desmatricular'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
+                                        disabled={loading}
+                                        onClick={() => toggleStudent(s.codigo_estudiante, !checked)}
+                                        aria-label={`${checked ? 'Quitar' : 'Añadir'} ${s.codigo_estudiante}`}
+                                      >
+                                        {checked ? 'Quitar' : 'Añadir'}
+                                      </button>
+                                    )}
                                   </td>
                                   <td><span className="badge bg-secondary">{s.codigo_estudiante}</span></td>
                                   <td>{s.nombre} {s.apellido}</td>

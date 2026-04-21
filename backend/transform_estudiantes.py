@@ -9,6 +9,22 @@ import sys
 import os
 from pathlib import Path
 
+
+def normalize_jornada_value(value):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.lower()
+    if "nocturna" in normalized or "noche" in normalized:
+        return "Nocturna"
+    if "diurna" in normalized or "dia" in normalized or "mañana" in normalized or "manana" in normalized:
+        return "Diurna"
+    return None
+
 def transform_estudiantes_data(input_file, output_file=None):
     """
     Transforma datos del sistema de registro académico al formato de RA Manager.
@@ -67,23 +83,8 @@ def transform_estudiantes_data(input_file, output_file=None):
     transformed['tipo_documento'] = doc_separado[0].str.strip() if 0 in doc_separado.columns else ""
     transformed['num_documento'] = doc_separado[1].str.strip() if 1 in doc_separado.columns else ""
     
-    # Jornada: extraer del programa académico si está disponible
-    jornada = []
-    if 'Programa Academico' in df.columns:
-        for prog in df['Programa Academico'].astype(str):
-            prog_upper = prog.upper()
-            if 'NOCTURNA' in prog_upper or 'NOCHE' in prog_upper:
-                jornada.append('NOCTURNA')
-            elif 'DIURNA' in prog_upper or 'DÍA' in prog_upper or 'MAÑANA' in prog_upper:
-                jornada.append('DIURNA')
-            elif 'VESPERTINA' in prog_upper or 'TARDE' in prog_upper:
-                jornada.append('VESPERTINA')
-            else:
-                jornada.append('DIURNA')  # Por defecto
-    else:
-        jornada = ['DIURNA'] * len(transformed)
-    
-    transformed['jornada'] = jornada
+    if 'Jornada' in df.columns:
+        transformed['jornada'] = df['Jornada'].apply(normalize_jornada_value)
     
     # Validaciones
     print("\n🔍 Validando datos...")

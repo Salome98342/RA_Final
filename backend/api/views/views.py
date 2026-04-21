@@ -33,6 +33,7 @@ from datetime import datetime as dt_module
 import os
 import io
 import csv
+import re
 import secrets
 import threading
 import pandas as pd
@@ -90,6 +91,125 @@ def _get_bulk_student_password() -> str:
     if not password:
         password = "Estudiante123*"
     return password
+
+
+def _validate_jornada_value(value):
+    """Normaliza y valida jornada. Solo admite Diurna o Nocturna."""
+    if value is None:
+        return None, None
+
+    text = str(value).strip()
+    if not text:
+        return None, None
+
+    normalized = _normalize_text(text)
+    if not normalized:
+        return None, None
+
+    if "nocturna" in normalized or "noche" in normalized:
+        return "Nocturna", None
+    if "diurna" in normalized or "dia" in normalized or "manana" in normalized:
+        return "Diurna", None
+
+    return None, "Jornada invalida. Solo se permite Diurna o Nocturna."
+
+
+def _normalize_jornada_value(value):
+    """Compatibilidad: devuelve la jornada canónica o None sin error."""
+    jornada, _ = _validate_jornada_value(value)
+    return jornada
+
+
+def _extract_codigo_asignatura_from_filename(filename: str) -> str | None:
+    """Extrae codigo_asignatura cuando el archivo termina en patron tipo 801126C."""
+    base = os.path.splitext(os.path.basename(str(filename or "").strip()))[0]
+    if not base:
+        return None
+
+    match = re.search(r"(\d+c)$", base, re.IGNORECASE)
+    if not match:
+        return None
+
+    return match.group(1).upper()
+
+
+def _normalize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Normaliza nombres de columnas quitando espacios y tildes."""
+    df = df.copy()
+    df.columns = (
+        df.columns.astype(str)
+        .str.strip()
+        .str.lower()
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("ascii")
+    )
+    return df
+
+
+def _periodo_lookup_keys(value) -> list[str]:
+    """Genera claves equivalentes para descripciones de periodo como 2026-I / 2026-1."""
+    if value is None:
+        return []
+
+    text = str(value).strip().upper()
+    if not text:
+        return []
+
+    compact = re.sub(r"\s+", "", text)
+    compact = compact.replace("_", "-").replace("/", "-")
+
+    keys = {compact}
+
+    roman_to_num = {
+        "I": "1",
+        "II": "2",
+        "III": "3",
+        "IV": "4",
+    }
+    num_to_roman = {v: k for k, v in roman_to_num.items()}
+
+    m = re.match(r"^(\d{4})-?(I{1,3}|IV|[1-4])$", compact)
+    if m:
+        year, term = m.groups()
+        term_num = roman_to_num.get(term, term)
+        term_roman = num_to_roman.get(term_num, term)
+        keys.update({
+            f"{year}-{term_num}",
+            f"{year}-{term_roman}",
+            f"{year}{term_num}",
+            f"{year}{term_roman}",
+        })
+
+    return list(keys)
+
+
+def _build_periodos_lookup(periodos):
+    lookup = {}
+    for p in periodos:
+        for key in _periodo_lookup_keys(getattr(p, "descripcion", "")):
+            lookup.setdefault(key, p)
+    return lookup
+
+
+def _is_valid_periodo_description(value) -> bool:
+    if value is None:
+        return False
+
+    text = str(value).strip().upper()
+    if not text:
+        return False
+
+    compact = re.sub(r"\s+", "", text)
+    compact = compact.replace("_", "-").replace("/", "-")
+    return bool(re.match(r"^\d{4}-?(I|II|1|2)$", compact))
+
+
+def _find_periodo_by_desc(periodos_lookup, periodo_desc):
+    for key in _periodo_lookup_keys(periodo_desc):
+        if key in periodos_lookup:
+            return periodos_lookup[key]
+    return None
 
 
 def _add_notification(id_estudiante: int, kind: str, text: str, link: str = None):
@@ -445,10 +565,10 @@ def _read_imported_file(file_obj):
                 # Detectar en qué fila están los headers reales
                 # Buscar si en alguna fila hay palabras clave como "codigo", "nombre", "email", etc.
                 header_row = None
-                keywords = ['codigo', 'nombre', 'apellido', 'email', 'documento']
+                keywords = ['codigo', 'nombre', 'apellido', 'email', 'correo', 'documento', 'programa', 'calif', 'matricula', 'periodo', 'jornada']
                 
                 for idx, row in df_raw.iterrows():
-                    row_str = ' '.join([str(v).lower() for v in row]).strip()
+                    row_str = _normalize_text(' '.join([str(v) for v in row]))
                     matches = sum(1 for kw in keywords if kw in row_str)
                     if matches >= 3:  # Si encuentra al menos 3 palabras clave
                         header_row = idx
@@ -468,7 +588,16 @@ def _read_imported_file(file_obj):
                                       header=header_row,
                                       dtype=str)  # Leer todo como string para ser flexible
                     
-                    df.columns = df.columns.str.strip().str.lower()
+                    # Quitar filas/columnas completamente vacías (igual que en CSV)
+                    df = df.dropna(how='all', axis=1)
+                    df = df.dropna(how='all', axis=0)
+                    
+                    # Quitar filas donde todos los valores sean vacíos o solo espacios
+                    # Esto elimina las filas formateadas pero sin contenido en Excel
+                    mask = df.fillna('').astype(str).apply(lambda row: any(cell.strip() for cell in row), axis=1)
+                    df = df[mask]
+                    
+                    df = _normalize_dataframe_columns(df)
                     logger.info(f"[READ_FILE] Excel leido exitosamente: {len(df)} filas de datos")
                     logger.info(f"[READ_FILE] Columnas detectadas (normalizadas): {list(df.columns)}")
                     logger.debug(f"[READ_FILE] Primeras 2 filas:\n{df.head(2)}")
@@ -496,10 +625,14 @@ def _read_imported_file(file_obj):
                             # Quitar filas/columnas completamente vacías para validar estructura real.
                             df = df.dropna(how='all', axis=1)
                             df = df.dropna(how='all', axis=0)
+                            
+                            # Quitar filas donde todos los valores sean vacíos o solo espacios
+                            mask = df.fillna('').astype(str).apply(lambda row: any(cell.strip() for cell in row), axis=1)
+                            df = df[mask]
 
                             cols_count = len(df.columns)
                             if cols_count >= 1 and len(df) > 0:
-                                df.columns = df.columns.str.strip().str.lower()
+                                df = _normalize_dataframe_columns(df)
 
                                 if cols_count == 1 and delimiter in [',', ';', '\t']:
                                     logger.warning(f"[READ_FILE] [CSV WARNING] Lectura con {encoding}|'{delimiter}' -> 1 columna. Probablemente incorrecto.")
@@ -545,6 +678,11 @@ def _detect_and_transform_academic_registro(df):
         
         logger.info(f"[TRANSFORM] Columnas recibidas (originales): {cols_original}")
         logger.info(f"[TRANSFORM] Columnas normalizadas: {cols_normalized}")
+
+        manager_required_cols = {'codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento'}
+        if manager_required_cols.issubset(set(cols_normalized)):
+            logger.info("[TRANSFORM] El archivo ya viene en formato RA Manager; no se aplica transformación")
+            return df
         
         # Detectar si es archivo del Sistema de Registro Académico
         # Buscar si TODAS estas palabras claves están en alguna columna
@@ -588,6 +726,7 @@ def _detect_and_transform_academic_registro(df):
         email_col = find_col_original(cols_original, cols_normalized, 'email', 'correo')
         docidentidad_col = find_col_original(cols_original, cols_normalized, 'documento identidad', 'documento')
         programa_col = find_col_original(cols_original, cols_normalized, 'programa academico', 'programa')
+        jornada_col = find_col_original(cols_original, cols_normalized, 'jornada', 'turno', 'shift')
         
         logger.info(f"[TRANSFORM] Columnas mapeadas:")
         logger.info(f"  - codigo_col: {codigo_col}")
@@ -596,6 +735,7 @@ def _detect_and_transform_academic_registro(df):
         logger.info(f"  - email_col: {email_col}")
         logger.info(f"  - docidentidad_col: {docidentidad_col}")
         logger.info(f"  - programa_col: {programa_col}")
+        logger.info(f"  - jornada_col: {jornada_col}")
         
         # Validar que se encontraron las columnas CRÍTICAS
         critical_cols = [codigo_col, nombres_col, apellidos_col, email_col, docidentidad_col]
@@ -639,26 +779,12 @@ def _detect_and_transform_academic_registro(df):
             transformed['num_documento'] = doc_parts[1].str.strip() if 1 in doc_parts.columns else ""
             logger.debug(f"[TRANSFORM] OK tipo_documento y num_documento creados")
             
-            # Jornada: extraer del programa académico si está disponible
-            jornada_list = []
-            if programa_col:
-                logger.debug(f"[TRANSFORM] Extrayendo jornada desde: {programa_col}")
-                for idx, prog in enumerate(df[programa_col].astype(str)):
-                    prog_upper = prog.upper()
-                    if 'NOCTURNA' in prog_upper or 'NOCHE' in prog_upper:
-                        jornada_list.append('NOCTURNA')
-                    elif 'VESPERTINA' in prog_upper or 'TARDE' in prog_upper:
-                        jornada_list.append('VESPERTINA')
-                    else:
-                        jornada_list.append('DIURNA')
-                    if idx == 0:
-                        logger.debug(f"[TRANSFORM] Ejemplo jornada: '{prog}' → '{jornada_list[0]}'")
+            if jornada_col:
+                logger.debug(f"[TRANSFORM] Extrayendo jornada desde: {jornada_col}")
+                transformed['jornada'] = df[jornada_col].apply(_normalize_jornada_value)
+                logger.debug("[TRANSFORM] OK jornada preservada desde el archivo")
             else:
-                logger.warning("[TRANSFORM] No se encontró columna de programa. Usando DIURNA por defecto")
-                jornada_list = ['DIURNA'] * len(transformed)
-            
-            transformed['jornada'] = jornada_list
-            logger.debug(f"[TRANSFORM] OK jornada creado")
+                logger.info("[TRANSFORM] No se encontró columna de jornada; se importará sin asignarla")
             
             logger.info(f"[TRANSFORM] **EXITOSA**: {len(transformed)} registros convertidos")
             logger.info(f"[TRANSFORM] Columnas finales: {transformed.columns.tolist()}")
@@ -951,6 +1077,8 @@ def coordinador_estudiantes_view(request):
         if not detected_program:
             return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
 
+        include_inactive = str(request.query_params.get("include_inactive", "")).strip().lower() in {"1", "true", "yes", "si"}
+
         # Lista todos los estudiantes activos (sin filtro por programa porque Estudiante no tiene relación directa a Programa)
         # La relación es indirecta a través de Matricula -> Asignatura -> Programa
         # NOTA: Se muestran todos los estudiantes porque:
@@ -962,9 +1090,11 @@ def coordinador_estudiantes_view(request):
         estudiantes = (
             Estudiante.objects
             .select_related('tipo_documento')
-            .filter(activo=True)  # Solo estudiantes activos
             .order_by('apellido', 'nombre')
         )
+
+        if not include_inactive:
+            estudiantes = estudiantes.filter(activo=True)
         
         # Filtros opcionales
         search = request.query_params.get('search', '').strip()
@@ -1013,7 +1143,9 @@ def coordinador_estudiantes_view(request):
         correo = data['correo'].strip().lower()
         tipo_doc_desc = data['tipo_documento'].strip()
         num_documento = data['num_documento'].strip()
-        jornada = data.get('jornada', '').strip() or None
+        jornada, jornada_error = _validate_jornada_value(data.get('jornada'))
+        if jornada_error:
+            return Response({"detail": jornada_error}, status=status.HTTP_400_BAD_REQUEST)
 
         # Mantener código de estudiante tal como lo ingresa el coordinador
         # (sin forzar sufijo de programa en el código).
@@ -1271,6 +1403,48 @@ def coordinador_estudiante_activar_view(request, id_estudiante: int):
     )
 
 
+@api_view(["PATCH", "PUT"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_estudiante_jornada_view(request, id_estudiante: int):
+    """Actualiza la jornada de un estudiante de forma individual."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    estudiante = Estudiante.objects.filter(id_estudiante=id_estudiante).first()
+    if not estudiante:
+        return Response({"detail": "Estudiante no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    jornada, jornada_error = _validate_jornada_value(request.data.get("jornada"))
+    if jornada_error:
+        return Response({"detail": jornada_error}, status=status.HTTP_400_BAD_REQUEST)
+    estudiante.jornada = jornada
+    estudiante.save(update_fields=["jornada"])
+
+    logger.info(
+        "Jornada de estudiante actualizada",
+        extra={
+            "coordinador": getattr(coord, "codigo_coordinador", None),
+            "id_estudiante": estudiante.id_estudiante,
+            "codigo_estudiante": estudiante.codigo_estudiante,
+            "jornada": estudiante.jornada,
+        },
+    )
+
+    return Response(
+        {
+            "detail": "Jornada actualizada correctamente",
+            "estudiante": {
+                "id_estudiante": estudiante.id_estudiante,
+                "codigo_estudiante": estudiante.codigo_estudiante,
+                "jornada": estudiante.jornada,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -1374,7 +1548,7 @@ def coordinador_periodos_view(request):
             "fecha_inicio": p.fecha_inicio,
             "fecha_finalizacion": p.fecha_finalizacion,
         }
-        for p in qs
+        for p in qs if _is_valid_periodo_description(p.descripcion)
     ], status=status.HTTP_200_OK)
 
 
@@ -1681,7 +1855,15 @@ def coordinador_import_estudiantes_view(request):
     df = _detect_and_transform_academic_registro(df)
     
     # Normalizar nombres de columnas
-    df.columns = df.columns.str.strip().str.lower()
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("ascii")
+    )
     
     # Validar que tienen las columnas mínimas requeridas
     required_cols = ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento']
@@ -1797,7 +1979,7 @@ def coordinador_import_estudiantes_view(request):
         correo = clean_val(correo, 100)
         tipo_doc_desc = clean_val(tipo_doc_desc)
         num_documento = clean_val(num_documento, 20)
-        jornada = clean_val(jornada, 50)
+        jornada, jornada_error = _validate_jornada_value(clean_val(jornada, 50))
         
         # Log de debug para primera fila después de limpieza
         if idx == 0:
@@ -1821,6 +2003,12 @@ def coordinador_import_estudiantes_view(request):
             if not num_documento: missing_fields.append("num_documento")
             
             error_msg = f"Faltan campos requeridos: {', '.join(missing_fields)}"
+            logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
+            errors.append({"row": row_num, "error": error_msg})
+            continue
+
+        if jornada_error:
+            error_msg = f"Jornada invalida: {jornada}"
             logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
             errors.append({"row": row_num, "error": error_msg})
             continue
@@ -2926,6 +3114,46 @@ def coordinador_asignatura_estudiantes_view(request):
         "page": page, "page_size": page_size, "total": total, "results": rows
     })
 
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def coordinador_desmatricular_view(request):
+    """Elimina una matrícula existente. Solo coordinador."""
+    coord, err = _require_coordinador(request)
+    if err:
+        return err
+
+    id_matricula_raw = request.data.get("id_matricula")
+    try:
+        id_matricula = int(id_matricula_raw)
+    except (TypeError, ValueError):
+        return Response({"detail": "id_matricula inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+    matricula = Matricula.objects.select_related("estudiante", "asignatura", "periodo").filter(id_matricula=id_matricula).first()
+    if not matricula:
+        return Response({"detail": "Matrícula no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    payload = {
+        "id_matricula": matricula.id_matricula,
+        "id_estudiante": matricula.estudiante_id,
+        "codigo_estudiante": matricula.estudiante.codigo_estudiante,
+        "id_asignatura": matricula.asignatura_id,
+        "codigo_asignatura": matricula.asignatura.codigo_asignatura,
+        "periodo": matricula.periodo.descripcion,
+    }
+
+    matricula.delete()
+    logger.info("coordinador_desmatricular", {
+        "coordinador": getattr(coord, "codigo_coordinador", None),
+        **payload,
+    })
+
+    return Response({
+        "detail": "Estudiante desmatriculado correctamente",
+        "matricula": payload,
+    }, status=status.HTTP_200_OK)
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -3270,16 +3498,19 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
 @authentication_classes([])
 def coordinador_import_matriculados_view(request):
     """Importa matriculados desde CSV o Excel con BULK INSERT optimizado. Solo coordinador.
-    Columnas mínimas requeridas: codigo_estudiante, periodo
+    Columnas mínimas requeridas: codigo_estudiante
     Si no se envían asignaturas seleccionadas en el formulario, también requiere codigo_asignatura.
+    Si no se envía periodo en el archivo, usa por defecto el último período académico disponible.
     Recomendado: incluir grupo y sede para desambiguar asignaturas con mismo código.
     Soporta: .csv, .xlsx, .xls
     Campos aceptados (sinónimos):
       - codigo_estudiante | estudiante | code
       - codigo_asignatura | asignatura | curso
+                        (si no viene en columna, se intenta inferir del nombre del archivo: ..._801126C)
             - grupo
             - sede
-      - periodo | periodo_academico
+            - semestre (si existe, tiene prioridad para decidir el periodo)
+            - periodo | periodo_academico (opcional)
     """
     coord, err = _require_coordinador(request)
     if err:
@@ -3287,7 +3518,9 @@ def coordinador_import_matriculados_view(request):
     f = request.FILES.get("file") or request.FILES.get("csv")
     if not f:
         return Response({"detail": "Archivo requerido (CSV o Excel)"}, status=status.HTTP_400_BAD_REQUEST)
-    fname = getattr(f, 'name', '').lower()
+    original_fname = getattr(f, 'name', '')
+    fname = original_fname.lower()
+    inferred_codigo_asignatura = _extract_codigo_asignatura_from_filename(original_fname)
     
     # Validar extensión del archivo
     if not (fname.endswith('.csv') or fname.endswith('.xlsx') or fname.endswith('.xls')):
@@ -3306,7 +3539,7 @@ def coordinador_import_matriculados_view(request):
         )
     
     # Normalizar nombres de columnas
-    df.columns = df.columns.str.strip().str.lower()
+    df = _normalize_dataframe_columns(df)
     
     # OPTIMIZACIÓN: Pre-cargar todos los datos en memoria
     estudiantes_map = {e.codigo_estudiante: e for e in Estudiante.objects.all()}
@@ -3314,7 +3547,10 @@ def coordinador_import_matriculados_view(request):
     asignaturas_por_codigo = {}
     for a in Asignatura.objects.all():
         asignaturas_por_codigo.setdefault(a.codigo_asignatura, []).append(a)
-    periodos_map = {p.descripcion: p for p in PeriodoAcademico.objects.all()}
+    periodos_qs = PeriodoAcademico.objects.all()
+    valid_periodos = [p for p in periodos_qs if _is_valid_periodo_description(p.descripcion)]
+    periodos_map = _build_periodos_lookup(valid_periodos)
+    latest_period = sorted(valid_periodos, key=lambda p: (p.fecha_inicio, p.id_periodo), reverse=True)[0] if valid_periodos else None
 
     # Asignaturas seleccionadas desde el cliente para aplicar la importación a una o varias materias
     selected_asignaturas = []
@@ -3363,25 +3599,33 @@ def coordinador_import_matriculados_view(request):
             break
         
         # Extraer campos con sinónimos
-        cod_est = get_col(row, "codigo_estudiante", "estudiante", "code")
+        cod_est = get_col(row, "codigo_estudiante", "codigo", "cod_estudiante", "estudiante", "code", "matricula")
         cod_asig = get_col(row, "codigo_asignatura", "asignatura", "curso")
         grupo = get_col(row, "grupo")
         sede = get_col(row, "sede")
-        periodo_desc = get_col(row, "periodo", "periodo_academico")
+        semestre_desc = get_col(row, "semestre")
+        periodo_desc = get_col(row, "periodo", "periodo_academico", "periodo academico", "periodo académico")
         
         # Limpiar strings
         if cod_est: cod_est = str(cod_est).strip()[:50]
         if cod_asig: cod_asig = str(cod_asig).strip()[:50]
         if grupo: grupo = str(grupo).strip()[:20]
         if sede: sede = str(sede).strip()[:80]
+        if semestre_desc: semestre_desc = str(semestre_desc).strip()[:100]
         if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
+
+        if semestre_desc:
+            periodo_desc = semestre_desc
+
+        if not cod_asig and inferred_codigo_asignatura:
+            cod_asig = inferred_codigo_asignatura
         
         requires_asignatura_in_file = not selected_asignaturas
-        if not cod_est or not periodo_desc or (requires_asignatura_in_file and not cod_asig):
+        if not cod_est or (requires_asignatura_in_file and not cod_asig):
             if requires_asignatura_in_file:
-                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura, periodo)"})
+                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, codigo_asignatura)"})
             else:
-                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante, periodo)"})
+                errors.append({"row": row_num, "error": "Faltan columnas requeridas (codigo_estudiante)"})
             continue
         
         est = estudiantes_map.get(cod_est)
@@ -3409,10 +3653,16 @@ def coordinador_import_matriculados_view(request):
                 continue
             row_asignaturas = [asig]
         
-        per = periodos_map.get(periodo_desc)
-        if not per:
-            errors.append({"row": row_num, "error": f"Periodo no encontrado: {periodo_desc}"})
-            continue
+        if periodo_desc:
+            per = _find_periodo_by_desc(periodos_map, periodo_desc)
+            if not per:
+                errors.append({"row": row_num, "error": f"Periodo no encontrado: {periodo_desc}"})
+                continue
+        else:
+            per = latest_period
+            if not per:
+                errors.append({"row": row_num, "error": "No existe un período académico para usar por defecto"})
+                continue
         
         for asig in row_asignaturas:
             # Verificar si ya existe
@@ -3566,6 +3816,8 @@ def docente_import_estudiantes_view(request, codigo_asignatura: str):
     
     if not periodo_actual:
         return Response({"detail": "No hay periodo académico configurado"}, status=status.HTTP_400_BAD_REQUEST)
+
+    periodos_lookup = _build_periodos_lookup(PeriodoAcademico.objects.all())
     
     # Lectura CSV
     try:
@@ -3610,11 +3862,12 @@ def docente_import_estudiantes_view(request, codigo_asignatura: str):
         # Usar periodo especificado o periodo actual
         periodo_usar = periodo_actual
         if periodo_desc:
-            per = PeriodoAcademico.objects.filter(descripcion=periodo_desc).first()
+            per = _find_periodo_by_desc(periodos_lookup, periodo_desc)
             if per:
                 periodo_usar = per
             else:
-                errors.append({"row": rownum, "error": f"Periodo no encontrado: {periodo_desc}, usando periodo actual"})
+                errors.append({"row": rownum, "error": f"Periodo no encontrado: {periodo_desc}"})
+                continue
         
         obj, was_created = Matricula.objects.get_or_create(
             estudiante=est,

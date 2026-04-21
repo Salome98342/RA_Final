@@ -6,7 +6,7 @@ import {
   importDocentes,
   importEstudiantes,
   importMatriculados,
-  type AsignaturaRow,
+  type EstudianteListItem,
 } from '@/services/coordinador'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
@@ -109,7 +109,7 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-person-badge-fill',
     accentClass: 'text-danger',
     description: 'Importa docentes con documento, correo y datos de contacto.',
-    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento, num_telefono (opcional), password (opcional)',
+    acceptedColumns: 'codigo_docente, nombre, apellido, correo, tipo_documento, num_documento, num_telefono',
     templateCandidates: [
       { fileName: 'plantilla_docentes.xlsx', downloadName: 'plantilla_docentes.xlsx' },
     ],
@@ -124,7 +124,7 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-people-fill',
     accentClass: 'text-danger',
     description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico.',
-    acceptedColumns: 'Formato RA Manager: codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento \n Formato Sistema Registro Académico: Codigo, Nombres, Apellidos, Email, Documento Identidad (formato: "CC 1234567"), Programa Academico',
+    acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada',
     templateCandidates: [
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },
     ],
@@ -147,7 +147,7 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-journal-bookmark-fill',
     accentClass: 'text-danger',
     description: 'Crea o actualiza asignaturas, RAs e indicadores de logro (IL) en una sola carga.',
-    acceptedColumns: 'codigo_asignatura, nombre_asignatura (o nombre), codigo_docente, codigo_programa, periodo, grupo, sede, creditos, ra_descripcion, ra_porcentaje, indicador_descripcion, indicador_porcentaje',
+    acceptedColumns: 'codigo_asignatura, nombre_asignatura, codigo_docente, codigo_programa, grupo, sede, ra_descripcion, ra_porcentaje, indicador_descripcion (opcional), indicador_porcentaje (opcional)',
     templateCandidates: [
       { fileName: 'plantilla_asignaturas_ras_il.xlsx', downloadName: 'plantilla_asignaturas_ras_il.xlsx' },
       { fileName: 'plantilla_asignaturas_ras.xlsx', downloadName: 'plantilla_asignaturas_ras.xlsx' },
@@ -164,12 +164,15 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-clipboard-check-fill',
     accentClass: 'text-danger',
     description: 'Relaciona estudiantes con asignaturas y periodo académico de matrícula.',
-    acceptedColumns: 'codigo_estudiante, periodo, codigo_asignatura, grupo, sede (codigo_asignatura/grupo/sede opcionales si seleccionas asignaturas en la alerta)',
+    acceptedColumns: 'codigo_estudiante o codigo, codigo_asignatura (opcional por nombre de archivo), grupo, sede, semestre (opcional), periodo (opcional)',
     templateCandidates: [
       { fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' },
     ],
     headerRule: {
-      required: ['codigo_estudiante', 'periodo'],
+      required: [],
+      oneOfGroups: [
+        ['codigo_estudiante', 'codigo'],
+      ],
     },
     importAction: importMatriculados,
   },
@@ -179,6 +182,8 @@ const normalizeHeader = (value: unknown): string => {
   return String(value ?? '')
     .trim()
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, '_')
 }
 
@@ -500,8 +505,6 @@ const Imports: React.FC<ImportsProps> = ({
   })
   const [activeImport, setActiveImport] = useState<ImportKind | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState<ImportKind | null>(null)
-  const [matriculadosAsignaturas, setMatriculadosAsignaturas] = useState<AsignaturaRow[]>([])
-  const [loadingMatriculadosAsignaturas, setLoadingMatriculadosAsignaturas] = useState(false)
   const inputRefs = {
     est: useRef<HTMLInputElement | null>(null),
     mat: useRef<HTMLInputElement | null>(null),
@@ -690,83 +693,6 @@ const Imports: React.FC<ImportsProps> = ({
     }
   }
 
-  const requestMatriculadosAsignaturas = async (): Promise<number[] | null> => {
-    if (!matriculadosAsignaturas.length) {
-      Alert.toast.warning('No hay asignaturas disponibles para seleccionar en la importación de matriculados.')
-      return null
-    }
-
-    const optionsHtml = matriculadosAsignaturas
-      .map((asignatura) => {
-        const label = `${asignatura.codigo} - ${asignatura.nombre} - Grupo ${asignatura.grupo} - Sede ${asignatura.sede || 'N/A'}`
-        const inputId = `mat-asig-${asignatura.id_asignatura}`
-        return `
-          <div class="d-flex align-items-start gap-2 py-1 text-start">
-            <button type="button" class="btn btn-sm btn-outline-success js-mat-toggle" data-target="${inputId}">Añadir</button>
-            <input id="${inputId}" class="d-none js-mat-asig" type="checkbox" value="${asignatura.id_asignatura}" />
-            <span class="pt-1">${escapeHtml(label)}</span>
-          </div>
-        `
-      })
-      .join('')
-
-    const result = await Swal.fire<{ selectedIds: number[] }>({
-      icon: 'warning',
-      title: 'Selecciona asignatura(s) para matricular',
-      html: `
-        <div class="text-start small text-muted mb-2">
-          El archivo se cargará en las asignaturas seleccionadas. Puedes elegir una o varias antes de continuar.
-        </div>
-        <div style="max-height:280px; overflow:auto; border:1px solid #dee2e6; border-radius:8px; padding:8px;">
-          ${optionsHtml}
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Continuar importación',
-      cancelButtonText: 'Cancelar',
-      focusConfirm: false,
-      didOpen: () => {
-        const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>('.js-mat-toggle'))
-        toggles.forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const targetId = btn.dataset.target
-            if (!targetId) return
-            const input = document.getElementById(targetId) as HTMLInputElement | null
-            if (!input) return
-            input.checked = !input.checked
-            if (input.checked) {
-              btn.classList.remove('btn-outline-success')
-              btn.classList.add('btn-danger')
-              btn.textContent = 'Quitar'
-            } else {
-              btn.classList.remove('btn-danger')
-              btn.classList.add('btn-outline-success')
-              btn.textContent = 'Añadir'
-            }
-          })
-        })
-      },
-      preConfirm: () => {
-        const selected = Array.from(document.querySelectorAll<HTMLInputElement>('.js-mat-asig:checked'))
-          .map((node) => Number(node.value))
-          .filter((id) => Number.isFinite(id))
-
-        if (!selected.length) {
-          Swal.showValidationMessage('Debes seleccionar al menos una asignatura para continuar.')
-          return undefined
-        }
-
-        return { selectedIds: selected }
-      },
-    })
-
-    if (!result.isConfirmed) {
-      return null
-    }
-
-    return result.value?.selectedIds || null
-  }
-
   const runImport = async (kind: ImportKind) => {
     const config = configByKind[kind]
     const current = cardState[kind]
@@ -789,19 +715,7 @@ const Imports: React.FC<ImportsProps> = ({
       let response: ImportApiResponse
 
       if (kind === 'mat') {
-        if (loadingMatriculadosAsignaturas) {
-          Alert.toast.info('Cargando asignaturas disponibles. Intenta nuevamente en unos segundos.')
-          setSingleCardState(kind, { status: 'ready', validationError: null, result: null })
-          return
-        }
-
-        const selectedAsignaturaIds = await requestMatriculadosAsignaturas()
-        if (!selectedAsignaturaIds?.length) {
-          setSingleCardState(kind, { status: 'ready', validationError: null, result: null })
-          return
-        }
-
-        response = await importMatriculados(current.file, selectedAsignaturaIds)
+        response = await importMatriculados(current.file)
       } else {
         response = await config.importAction(current.file)
       }
@@ -866,22 +780,6 @@ const Imports: React.FC<ImportsProps> = ({
     if (!target) return
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [highlightedModule])
-
-  useEffect(() => {
-    const loadAsignaturasForMatriculados = async () => {
-      setLoadingMatriculadosAsignaturas(true)
-      try {
-        const data = await fetchAsignaturas({ page: 1, page_size: 1000 })
-        setMatriculadosAsignaturas(data.results || [])
-      } catch {
-        setMatriculadosAsignaturas([])
-      } finally {
-        setLoadingMatriculadosAsignaturas(false)
-      }
-    }
-
-    void loadAsignaturasForMatriculados()
-  }, [])
 
   return (
     <div className="dashboard-body min-vh-100">

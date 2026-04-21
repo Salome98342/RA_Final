@@ -51,8 +51,10 @@ export const endpoints = {
     estudiantes: '/coordinador/estudiantes',  // GET: listar, POST: crear individual
     estudianteDesactivar: (id: number | string) => `/coordinador/estudiantes/${id}/desactivar`,
     estudianteActivar: (id: number | string) => `/coordinador/estudiantes/${id}/activar`,
+    estudianteJornada: (id: number | string) => `/coordinador/estudiantes/${id}/jornada`,
     periodos: '/coordinador/periodos',
     estudiantesParaMatricula: '/coordinador/estudiantes-para-matricula',
+    desmatricular: '/coordinador/matriculas/desmatricular',
     docentes: '/coordinador/docentes',  // GET: listar, POST: crear individual
     asignaturas: '/coordinador/asignaturas',
     crearAsignaturaRA: '/coordinador/asignaturas/crear-ra',
