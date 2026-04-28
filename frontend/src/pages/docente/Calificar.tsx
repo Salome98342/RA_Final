@@ -8,6 +8,7 @@ import { useSession } from '@/state/SessionContext'
 import type { Student, Activity, RA } from '@/types'
 import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade, getIndicatorChart } from '@/services/api'
 import Chart from 'chart.js/auto'
+import StudentList from '@/components/StudentList'
 
 const DocenteCalificar: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId?: string}>()
@@ -676,20 +677,7 @@ const DocenteCalificar: React.FC = () => {
                   Estudiantes
                 </div>
                 {students.length === 0 ? <div className="text-muted ra-small">Sin estudiantes.</div> : (
-                  <ul className="list-group ra-list-group" aria-label="Lista de estudiantes">
-                    {students.map(s => (
-                      <li
-                        key={s.id}
-                        className={`list-group-item d-flex justify-content-between align-items-center ${selectedStudent?.id===s.id?'active':''}`}
-                        tabIndex={0}
-                        onClick={()=>onSelectStudent(s)}
-                        onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); onSelectStudent(s) } }}
-                      >
-                        <span>{s.name}</span>
-                        {selectedStudent?.id===s.id && <i className="bi bi-arrow-right-circle" />}
-                      </li>
-                    ))}
-                  </ul>
+                  <StudentList students={students} onSelect={onSelectStudent} selectedId={selectedStudent?.id} />
                 )}
               </div></div>
             </div>

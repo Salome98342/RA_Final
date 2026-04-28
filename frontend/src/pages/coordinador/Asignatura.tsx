@@ -16,8 +16,9 @@ import {
   type RARow,
 } from '@/services/coordinador'
 import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
+import PaginationControls from '@/components/PaginationControls'
 
-const PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 10
 
 const AsignaturaDetalle: React.FC = () => {
   const { codigo } = useParams<{ codigo: string }>()
@@ -31,6 +32,7 @@ const AsignaturaDetalle: React.FC = () => {
   const [estRows, setEstRows] = useState<EstudianteRow[]>([])
   const [estTotal, setEstTotal] = useState(0)
   const [estPage, setEstPage] = useState(1)
+  const [estPageSize, setEstPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const [rasRows, setRasRows] = useState<RARow[]>([])
   const [avance, setAvance] = useState<AvanceAsignaturaResponse | null>(null)
@@ -65,7 +67,7 @@ const AsignaturaDetalle: React.FC = () => {
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
-  const maxPage = useMemo(() => Math.max(1, Math.ceil(estTotal / PAGE_SIZE)), [estTotal])
+  const maxPage = useMemo(() => Math.max(1, Math.ceil(estTotal / estPageSize)), [estPageSize, estTotal])
 
   const loadAsignaturas = useCallback(async () => {
     setLoadingAsignaturas(true)
@@ -117,7 +119,7 @@ const AsignaturaDetalle: React.FC = () => {
         codigo_asignatura: selectedCodigo,
         periodo: periodo || undefined,
         page: estPage,
-        page_size: PAGE_SIZE,
+        page_size: estPageSize,
       })
       setEstRows(data.results)
       setEstTotal(data.total)
@@ -126,7 +128,7 @@ const AsignaturaDetalle: React.FC = () => {
     } finally {
       setLoadingEst(false)
     }
-  }, [selectedCodigo, periodo, estPage])
+  }, [selectedCodigo, periodo, estPage, estPageSize])
 
   const loadRAs = useCallback(async () => {
     if (!selectedCodigo) return
@@ -179,7 +181,7 @@ const AsignaturaDetalle: React.FC = () => {
 
   useEffect(() => {
     setEstPage(1)
-  }, [periodo])
+  }, [periodo, estPageSize])
 
   useEffect(() => {
     if (!selectedCodigo) return
@@ -434,23 +436,20 @@ const AsignaturaDetalle: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="card-footer d-flex justify-content-end gap-2">
-                  <button
-                    className="btn btn-sm btn-outline-secondary"
-                    disabled={loadingEst || estPage <= 1}
-                    onClick={() => setEstPage((prev) => prev - 1)}
-                  >
-                    <i className="bi bi-chevron-left me-1"></i>
-                    Anterior
-                  </button>
-                  <button
-                    className="btn btn-sm btn-outline-secondary"
-                    disabled={loadingEst || estPage >= maxPage}
-                    onClick={() => setEstPage((prev) => prev + 1)}
-                  >
-                    Siguiente
-                    <i className="bi bi-chevron-right ms-1"></i>
-                  </button>
+                <div className="card-footer">
+                  <PaginationControls
+                    page={estPage}
+                    totalPages={maxPage}
+                    totalItems={estTotal}
+                    pageSize={estPageSize}
+                    onPageChange={setEstPage}
+                    onPageSizeChange={(size) => {
+                      setEstPage(1)
+                      setEstPageSize(size)
+                    }}
+                    label="estudiantes"
+                    className="mt-0"
+                  />
                 </div>
               </div>
             </div>

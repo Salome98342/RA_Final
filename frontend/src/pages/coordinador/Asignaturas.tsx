@@ -8,6 +8,8 @@ import { fetchAsignaturas, fetchAsignaturaAvance, fetchPeriodosCoordinador, type
 import { getIndicatorsByRA, getActivitiesByRA } from '@/services/api'
 import type { Indicator, Activity } from '@/types'
 import { isPeriodoAtLeast2024I, sortPeriodoDescriptionsDesc } from '@/utils/periodos'
+import PaginationControls from '@/components/PaginationControls'
+import { getErrorMessage } from '@/utils/errors'
 
 // Simple helper to compute traffic-light by percentage (0-100)
 function toneByPct(pct: number): 'success' | 'warning' | 'danger' {
@@ -16,10 +18,16 @@ function toneByPct(pct: number): 'success' | 'warning' | 'danger' {
   return 'danger'
 }
 
+const DEFAULT_PAGE_SIZE = 10
+
 const Asignaturas: React.FC = () => {
   const [periodo, setPeriodo] = useState<string>('')
+  const [searchTerm, setSearchTerm] = useState<string>('')
   const [periodos, setPeriodos] = useState<string[]>([])
   const [asignaturas, setAsignaturas] = useState<AsignaturaRow[]>([])
+  const [asignaturasTotal, setAsignaturasTotal] = useState(0)
+  const [asignaturasPage, setAsignaturasPage] = useState(1)
+  const [asignaturasPageSize, setAsignaturasPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selected, setSelected] = useState<AsignaturaRow | null>(null)
   const [avance, setAvance] = useState<AvanceAsignaturaResponse | null>(null)
   const [loadingList, setLoadingList] = useState(false)
@@ -47,12 +55,20 @@ const Asignaturas: React.FC = () => {
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
+  const asignaturasMaxPage = Math.max(1, Math.ceil(asignaturasTotal / asignaturasPageSize))
+
   // Load list of subjects for selected period.
   const loadAsignaturas = async (p: string) => {
     setLoadingList(true)
     try {
-      const data = await fetchAsignaturas({ page: 1, page_size: 100, periodo: p || undefined })
+      const data = await fetchAsignaturas({
+        page: asignaturasPage,
+        page_size: asignaturasPageSize,
+        periodo: p || undefined,
+        search: searchTerm.trim() || undefined,
+      })
       setAsignaturas(data.results)
+      setAsignaturasTotal(data.total)
       // Keep current selection only if it still exists after filtering.
       setSelected((sel) => {
         if (!data.results.length) return null
@@ -60,8 +76,8 @@ const Asignaturas: React.FC = () => {
         const exists = data.results.some((r) => r.id_asignatura === sel.id_asignatura)
         return exists ? sel : data.results[0]
       })
-    } catch (e: any) {
-      Alert.error(String(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de asignaturas'))
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudo cargar la lista de asignaturas'))
     } finally { setLoadingList(false) }
   }
 
@@ -92,9 +108,23 @@ const Asignaturas: React.FC = () => {
   // When period changes, refresh subject list and avance.
   useEffect(() => {
     if (!periodo) return
+    if (asignaturasPage !== 1) {
+      setAsignaturasPage(1)
+      return
+    }
     loadAsignaturas(periodo)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo])
+  }, [periodo, asignaturasPage, searchTerm])
+
+  useEffect(() => {
+    setAsignaturasPage(1)
+  }, [searchTerm])
+
+  useEffect(() => {
+    if (asignaturasPage > asignaturasMaxPage) {
+      setAsignaturasPage(asignaturasMaxPage)
+    }
+  }, [asignaturasMaxPage, asignaturasPage])
 
   // Load RA progress for selected subject & period.
   useEffect(() => {
@@ -131,10 +161,10 @@ const Asignaturas: React.FC = () => {
         if (abort) return
         setRaIndicators(inds)
         setRaActivities(acts)
-      } catch (e: any) {
+      } catch (error: unknown) {
         if (abort) return
         setRaIndicators(null); setRaActivities(null)
-        const msg = String(e?.message || 'Error al cargar detalle del RA')
+        const msg = getErrorMessage(error, 'Error al cargar detalle del RA')
         setRaDataError(msg)
         Alert.toast.error(msg)
       } finally { if (!abort) setLoadingRAData(false) }
@@ -220,6 +250,22 @@ const Asignaturas: React.FC = () => {
                   {periodos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
+              <div className="col-md-5">
+                <label htmlFor="asignaturaSearch" className="form-label">Buscar asignatura</label>
+                <div className="input-group">
+                  <span className="input-group-text">
+                    <i className="bi bi-search" aria-hidden="true"></i>
+                  </span>
+                  <input
+                    id="asignaturaSearch"
+                    type="text"
+                    className="form-control"
+                    placeholder="Código o nombre"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Two-panel layout */}
@@ -231,7 +277,7 @@ const Asignaturas: React.FC = () => {
                       <i className="bi bi-journals text-primary"></i>
                       <span className="fw-bold asignaturas-panel-title">Asignaturas {periodo ? `(${periodo})` : ''}</span>
                       {asignaturas.length > 0 && (
-                        <span className="badge bg-primary rounded-pill ms-auto">{asignaturas.length}</span>
+                        <span className="badge bg-primary rounded-pill ms-auto">{asignaturasTotal}</span>
                       )}
                     </div>
                     <div className="list-group asignaturas-scroll">
@@ -257,6 +303,18 @@ const Asignaturas: React.FC = () => {
                         </button>
                       ))}
                     </div>
+                    <PaginationControls
+                      page={asignaturasPage}
+                      totalPages={asignaturasMaxPage}
+                      totalItems={asignaturasTotal}
+                      pageSize={asignaturasPageSize}
+                      onPageChange={setAsignaturasPage}
+                      onPageSizeChange={(size) => {
+                        setAsignaturasPage(1)
+                        setAsignaturasPageSize(size)
+                      }}
+                      label="asignaturas"
+                    />
                   </div>
                 </div>
               </div>

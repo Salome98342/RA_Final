@@ -1,16 +1,23 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
+import PaginationControls from '@/components/PaginationControls'
 import { useLocation, useNavigate } from 'react-router-dom'
 import DocentePerfilModal from '@/components/DocentePerfilModal'
 import Alert from '@/utils/alert'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
+import { getErrorMessage } from '@/utils/errors'
 import {
   fetchDocentes,
   createDocente,
+  fetchTiposDocumento,
   type CreateDocentePayload,
   type DocenteListItem,
+  type TipoDocumento,
 } from '@/services/coordinador'
+
+const DEFAULT_PAGE_SIZE = 10
 
 const Docentes: React.FC = () => {
   const [docentes, setDocentes] = useState<DocenteListItem[]>([])
@@ -19,6 +26,9 @@ const Docentes: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [showPerfilModal, setShowPerfilModal] = useState(false)
   const [selectedDocenteId, setSelectedDocenteId] = useState<number | null>(null)
+  const [tiposDocumento, setTiposDocumento] = useState<TipoDocumento[]>([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [formData, setFormData] = useState<CreateDocentePayload>({
     codigo_docente: '',
     nombre: '',
@@ -55,7 +65,7 @@ const Docentes: React.FC = () => {
 
   useEffect(() => {
     loadDocentes()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadTiposDocumento()
   }, [])
 
   useEffect(() => {
@@ -64,18 +74,36 @@ const Docentes: React.FC = () => {
     }, 350)
 
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchTerm])
+
+  const totalPages = Math.max(1, Math.ceil(docentes.length / pageSize))
+  const visibleDocentes = useMemo(
+    () => docentes.slice((page - 1) * pageSize, page * pageSize),
+    [docentes, page, pageSize]
+  )
 
   const loadDocentes = async (search?: string) => {
     setLoading(true)
     try {
       const data = await fetchDocentes(search || undefined)
       setDocentes(data)
-    } catch (e: any) {
-      console.error('Error cargando docentes:', e)
+    } catch (error: unknown) {
+      console.error('Error cargando docentes:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadTiposDocumento = async () => {
+    try {
+      const data = await fetchTiposDocumento()
+      setTiposDocumento(data)
+    } catch (error) {
+      console.error('Error cargando tipos de documento:', error)
     }
   }
 
@@ -104,9 +132,8 @@ const Docentes: React.FC = () => {
       })
       setShowForm(false)
       await loadDocentes(searchTerm)
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e.message || 'Error al crear docente'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'Error al crear docente'))
     } finally {
       setLoading(false)
     }
@@ -226,13 +253,19 @@ const Docentes: React.FC = () => {
                   <div className="row">
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Tipo de Documento</label>
-                      <input
-                        type="text"
-                        className="form-control"
+                      <select
+                        className="form-select"
                         value={formData.tipo_documento}
                         onChange={(e) => setFormData({ ...formData, tipo_documento: e.target.value })}
-                        placeholder="Cedula de Ciudadania"
-                      />
+                        aria-label="Seleccionar tipo de documento"
+                      >
+                        <option value="">Selecciona...</option>
+                        {tiposDocumento.map((td) => (
+                          <option key={td.id_tipo_documento} value={td.descripcion}>
+                            {formatTipoDocumentoAbbr(td.descripcion)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Numero de Documento</label>
@@ -309,45 +342,60 @@ const Docentes: React.FC = () => {
               )}
 
               {!loading && docentes.length > 0 && (
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Nombre Completo</th>
-                        <th>Correo</th>
-                        <th>Documento</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docentes.map((docente) => (
-                        <tr
-                          key={docente.id_docente}
-                          onClick={() => handleDocenteClick(docente.id_docente)}
-                          className="table-row-clickable"
-                          title="Clic para ver perfil completo"
-                        >
-                          <td>
-                            <span className="badge bg-secondary">{docente.codigo_docente}</span>
-                          </td>
-                          <td>
-                            <i className="bi bi-person me-2 text-muted"></i>
-                            {docente.nombre} {docente.apellido}
-                          </td>
-                          <td>
-                            <i className="bi bi-envelope me-2 text-muted"></i>
-                            {docente.correo}
-                          </td>
-                          <td>
-                            <span className="text-muted small">
-                              {docente.tipo_documento || 'Documento'}: {docente.num_documento}
-                            </span>
-                          </td>
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Código</th>
+                          <th>Nombre Completo</th>
+                          <th>Correo</th>
+                          <th>Documento</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {visibleDocentes.map((docente) => (
+                          <tr
+                            key={docente.id_docente}
+                            onClick={() => handleDocenteClick(docente.id_docente)}
+                            className="table-row-clickable"
+                            title="Clic para ver perfil completo"
+                          >
+                            <td>
+                              <span className="badge bg-secondary">{docente.codigo_docente}</span>
+                            </td>
+                            <td>
+                              <i className="bi bi-person me-2 text-muted"></i>
+                              {docente.nombre} {docente.apellido}
+                            </td>
+                            <td>
+                              <i className="bi bi-envelope me-2 text-muted"></i>
+                              {docente.correo}
+                            </td>
+                            <td>
+                              <span className="text-muted small">
+                                {formatTipoDocumentoAbbr(docente.tipo_documento)}: {docente.num_documento}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={docentes.length}
+                    pageSize={pageSize}
+                    onPageChange={setPage}
+                    onPageSizeChange={(size) => {
+                      setPage(1)
+                      setPageSize(size)
+                    }}
+                    label="docentes"
+                    className="px-3 pb-3"
+                  />
+                </>
               )}
             </div>
           </div>

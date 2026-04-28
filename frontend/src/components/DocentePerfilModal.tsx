@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchDocentePerfil, fetchPeriodosCoordinador, type DocentePerfilCompleto } from '@/services/coordinador'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
 import { sortPeriodosDesc } from '@/utils/periodos'
 
 interface DocentePerfilModalProps {
@@ -118,7 +119,7 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                       <div className="col-md-6">
                         <div className="mb-2">
                           <strong className="text-muted me-2">Documento:</strong>
-                          <span>{data.docente.tipo_documento} - {data.docente.num_documento}</span>
+                          <span>{formatTipoDocumentoAbbr(data.docente.tipo_documento)} - {data.docente.num_documento}</span>
                         </div>
                         <div className="mb-2">
                           <strong className="text-muted me-2">Teléfono:</strong>

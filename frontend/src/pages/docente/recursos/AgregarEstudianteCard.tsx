@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Alert } from '@/utils/alert'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
 
 interface Props {
   curso: string
@@ -32,7 +33,7 @@ const AgregarEstudianteCard: React.FC<Props> = ({ curso, onSuccess }) => {
               ${result.estudiante.codigo_programa ? `<p class="mb-2"><strong>Programa:</strong> ${result.estudiante.codigo_programa}</p>` : ''}
               <p class="mb-2"><strong>Correo:</strong> ${result.estudiante.correo}</p>
               <p class="mb-2"><strong>Documento:</strong> ${result.estudiante.documento}</p>
-              <p class="mb-0"><strong>Tipo Documento:</strong> ${result.estudiante.tipo_documento}</p>
+              <p class="mb-0"><strong>Tipo Documento:</strong> ${formatTipoDocumentoAbbr(result.estudiante.tipo_documento, 'N/A')}</p>
             </div>
             <hr>
             <p class="mb-0">¿Deseas agregar este estudiante al curso?</p>

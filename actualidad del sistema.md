@@ -1,207 +1,163 @@
 # Actualidad del Sistema
 
-Fecha de corte: 2026-03-24
+Fecha de corte: 2026-04-23
 Proyecto: RA-Manager
 
 ## 1. Resumen Ejecutivo
 
-El sistema RA-Manager está actualmente operativo como una plataforma web de gestión académica con arquitectura separada:
+RA-Manager se mantiene operativo como plataforma web académica por roles, con arquitectura desacoplada:
 
-- Backend: Django + Django REST Framework (API REST bajo /api)
+- Backend: Django + Django REST Framework
 - Frontend: React + TypeScript + Vite
 - Base de datos: PostgreSQL
 - Roles funcionales: coordinador, docente, estudiante
 
-El alcance funcional principal sí está implementado: autenticación por rol, gestión académica (RAs, actividades, calificaciones), importaciones masivas y visualización analítica. Además, existen capacidades de seguridad (rate limiting, auditoría de login, OTP) y gestión de recursos/anuncios.
+El alcance funcional principal está implementado y en uso: autenticación, gestión de asignaturas/RAs/actividades, calificación, matrícula, importaciones y analítica. Durante el corte actual se consolidaron mejoras visibles en usabilidad de listados (paginación tipo DataTable), búsqueda de asignaturas y robustez de algunos flujos de perfil.
 
-## 2. Estructura Actual del Código
+## 2. Novedades Confirmadas en este Corte
 
-## 2.1 Estructura general
+Cambios relevantes detectados en código al 2026-04-23:
 
-- Raíz del repositorio: documentación técnica, scripts SQL, CSVs de carga y artefactos de arquitectura.
-- backend/: aplicación Django.
-- frontend/: SPA React con páginas por rol.
-- env/: entorno virtual local.
+- Se incorporó un componente reutilizable de paginación en frontend con:
+  - selector de tamaño de página (100, 50, 25, 10)
+  - resumen "Mostrando X a Y de Z entradas"
+  - soporte para leyenda de filtrado
+- Esta paginación ya se integra en múltiples vistas (coordinador y docente), incluyendo tablas y listas laterales.
+- Se agregó búsqueda por texto en backend para listado de asignaturas de coordinador (filtro por código o nombre).
+- Se ajustó el endpoint de perfil de estudiante del coordinador para manejar correctamente el caso de estudiante nuevo sin matrículas:
+  - retorna perfil básico y estadísticas vacías en lugar de cortar el flujo.
+- Se estandarizó manejo de errores en frontend con utilidad común (`getErrorMessage`) en varios módulos.
+- En navegación docente, el enfoque de sidebar se simplificó en vistas de inicio/cursos para guiar primero la selección de asignatura.
+- Se eliminó del repositorio un archivo de credenciales en texto plano (`CREDENCIALES.md`), reduciendo exposición de información sensible.
 
-## 2.2 Backend actual
+## 3. Estructura Actual del Código
 
-Organización principal:
+## 3.1 Estructura general
 
-- backend/backend/settings.py: configuración global (DB, CORS, logging, DRF, email).
-- backend/backend/urls.py: rutas raíz (admin, api, schema, docs, redoc).
-- backend/api/models/models.py: dominio de datos académico, seguridad y notificaciones.
-- backend/api/views/views.py: endpoints funcionales (archivo monolítico grande).
-- backend/api/urls/urls.py: mapeo de endpoints API.
-- backend/api/serializers/serializers.py: serialización y validación de datos.
-- backend/api/middleware/: manejo de errores, logging y rate-limit.
-- backend/api/utils/security.py: utilidades de seguridad (login, OTP, validaciones de contraseña, lockout).
+- Raíz: documentación, scripts SQL, plantillas y artefactos de soporte.
+- `backend/`: aplicación Django.
+- `frontend/`: SPA React por rol.
 
-Modelo de dominio implementado (alto nivel):
-
-- Usuarios: Coordinador, Docente, Estudiante
-- Académico: Programa, PeriodoAcademico, Asignatura, Matricula
-- Evaluación: ResultadoDeAprendizaje, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, RaActividadIndicador
-- Recursos/comunicación: Recurso, Anuncio, Notificacion
-- Seguridad/auditoría: PasswordResetOTP, LoginAttempt, AccountLockout, SecurityEvent, ImportAudit
-
-## 2.3 Frontend actual
+## 3.2 Backend actual
 
 Organización principal:
 
-- frontend/src/App.tsx: enrutamiento y protección por rol.
-- frontend/src/connections/http.ts: cliente Axios con interceptores, token y manejo de errores.
-- frontend/src/connections/endpoints.ts: catálogo centralizado de endpoints.
-- frontend/src/services/: lógica de consumo API (auth, api general, coordinador).
-- frontend/src/pages/: vistas por rol (coordinador, docente, estudiante), login, recuperación y perfil.
-- frontend/src/components/: componentes reutilizables (tablas, tarjetas, modales, etc.).
-- frontend/src/state/: sesión y estados globales.
+- `backend/backend/settings.py`: configuración global (DB, CORS, DRF, logging, email).
+- `backend/backend/urls.py`: enrutamiento raíz (admin, api, schema, docs, redoc).
+- `backend/api/models/models.py`: modelo de dominio académico y de seguridad.
+- `backend/api/views/views.py`: endpoints funcionales (archivo central monolítico).
+- `backend/api/urls/urls.py`: rutas API.
+- `backend/api/serializers/serializers.py`: serialización/validación.
+- `backend/api/middleware/`: manejo de errores, logging y rate-limit.
 
-## 3. Capacidades Actuales por Rol
+Modelo de dominio (alto nivel):
 
-Nota: esta sección refleja lo que el código implementa hoy (backend + UI), no una intención futura.
+- Usuarios: Coordinador, Docente, Estudiante.
+- Académico: Programa, PeriodoAcademico, Asignatura, Matricula.
+- Evaluación: ResultadoDeAprendizaje, IndicadoresDeLogro, Actividad, RaActividad, NotasActividad, RaActividadIndicador.
+- Recursos/comunicación: Recurso, Anuncio, Notificacion.
+- Seguridad/auditoría: PasswordResetOTP, LoginAttempt, AccountLockout, SecurityEvent, ImportAudit.
 
-## 3.1 Coordinador
+## 3.3 Frontend actual
 
-Puede:
+Organización principal:
 
-- Autenticarse y mantener sesión.
-- Ver perfil y cambiar contraseña/avatar.
-- Gestionar estudiantes:
-  - listar y buscar
-  - crear estudiante individual
-  - ver perfil académico completo de estudiante
-- Gestionar docentes:
-  - listar y buscar
-  - crear docente individual
-  - ver perfil completo de docente
-- Gestionar asignaturas y RAs:
-  - listar asignaturas con filtros/paginación
-  - consultar RAs por asignatura
-  - crear/actualizar asignatura y agregar RAs + indicadores en una operación
-  - validar porcentajes de RAs
-- Gestionar matrícula:
-  - listar estudiantes de asignatura por periodo
-  - sugerir estudiantes candidatos para matrícula
-  - matricular estudiantes (flujo individual desde UI o carga masiva)
-- Importaciones masivas (CSV/XLS/XLSX):
-  - estudiantes
-  - docentes
-  - matriculados
-  - asignaturas + RAs
-- Analítica:
-  - avance por asignatura y RA (promedios, cobertura, aprobación)
-  - analítica de asignatura con estadísticas de curso y listado de estudiantes
-- Vista observador de docente desde UI:
-  - puede navegar a rutas de docente (modo lectura planeado por frontend)
+- `frontend/src/App.tsx`: rutas y protección por rol.
+- `frontend/src/connections/http.ts`: cliente Axios con interceptores.
+- `frontend/src/services/`: consumo de API por dominio.
+- `frontend/src/pages/`: pantallas por rol.
+- `frontend/src/components/`: componentes reutilizables (incluida paginación común).
+- `frontend/src/utils/errors.ts`: utilitario para homogenizar mensajes de error.
 
-## 3.2 Docente
+## 4. Capacidades Actuales por Rol
+
+## 4.1 Coordinador
 
 Puede:
 
-- Autenticarse y mantener sesión.
-- Ver perfil y cambiar contraseña/avatar.
-- Ver cursos asignados (agrupados por periodo).
-- Gestionar RAs del curso (desde la vista de RA):
-  - consultar indicadores por RA
-  - consultar actividades por RA
-  - exportar CSV de calificaciones
-- Crear actividades:
-  - actividad individual por RA
-  - actividad multi-RA en una sola operación
-  - asignar indicadores por actividad
-  - establecer fecha de cierre
-- Editar/eliminar actividad RA (con verificación de contraseña en eliminación).
-- Eliminar indicadores de logro (con verificación de contraseña).
-- Calificar estudiantes:
-  - por actividad y por indicador
-  - con retroalimentación
-  - guardado individual y operaciones de apoyo desde UI
-- Gestionar recursos del curso:
-  - subir/listar recursos
-- Gestionar anuncios del curso:
-  - crear/listar/eliminar anuncios (según propiedad/permisos)
-- Gestionar estudiantes del curso:
-  - buscar estudiante por código
-  - agregar estudiante individual
-  - importar estudiantes CSV para sus cursos
+- autenticarse y mantener sesión.
+- gestionar docentes y estudiantes (listar, buscar, crear, ver perfil).
+- gestionar asignaturas y RAs.
+- gestionar matrícula (selección múltiple y desmatrícula).
+- realizar importaciones masivas (docentes, estudiantes, matriculados, asignaturas + RAs).
+- consultar analítica por asignatura/RA y listados de desempeño.
 
-## 3.3 Estudiante
+Estado actual de UX en listados de coordinador:
+
+- paginación unificada con resumen de registros.
+- selector de cantidad por página.
+- búsqueda en frontend y/o backend según módulo.
+
+## 4.2 Docente
 
 Puede:
 
-- Autenticarse y mantener sesión.
-- Ver perfil y cambiar contraseña/avatar.
-- Consultar cursos actuales e historial por periodo.
-- Ver detalle por asignatura:
-  - métricas personales
-  - progreso por RA
-  - cobertura de actividades
-- Ver consolidado de calificaciones (strict/progressive/cobertura).
-- Ver tareas pendientes y actividades agrupadas por asignatura.
-- Ver recursos y anuncios de sus cursos.
-- Recibir y consultar notificaciones persistentes.
-- Marcar notificaciones como leídas.
+- autenticarse y mantener sesión.
+- consultar cursos por periodo.
+- crear y gestionar actividades por RA.
+- calificar estudiantes por actividad/indicador con retroalimentación.
+- gestionar recursos y anuncios.
+- realizar operaciones de matrícula puntual según permisos del módulo.
 
-## 4. Capacidades Técnicas Transversales
+Estado actual de UX docente:
 
-- Login con token firmado y rol embebido.
-- Endpoint /auth/me para sesión actual.
-- Recuperación de contraseña con OTP:
-  - solicitud
-  - verificación
-  - reset con validación de fortaleza
-- Rate limiting para login y flujo OTP.
-- Bloqueo temporal de cuenta por intentos fallidos consecutivos.
-- Registro de eventos de seguridad.
-- Logging centralizado y middleware de manejo de errores.
-- Documentación OpenAPI/Swagger/ReDoc disponible.
+- listas de indicadores/actividades y de estudiantes con paginación configurable.
+- navegación más guiada desde Cursos hacia módulos académicos.
 
-## 5. Estado de Autorización y Control de Acceso
+## 4.3 Estudiante
 
-Estado actual observado:
+Puede:
 
-- La mayoría de endpoints usa token Bearer manual (lectura del token dentro de la vista).
-- Muchas vistas están decoradas con AllowAny y validan rol internamente.
-- El frontend sí restringe rutas por rol, pero la seguridad real depende de validaciones backend por endpoint.
+- autenticarse y mantener sesión.
+- consultar cursos actuales e históricos.
+- revisar progreso por RA, actividades y métricas personales.
+- consultar recursos, anuncios y notificaciones.
 
-Conclusión operativa:
+## 5. Capacidades Técnicas Transversales
 
-- Hay control por rol implementado, pero no está centralizado de forma uniforme en clases de permisos DRF.
+- autenticación con token y endpoint de sesión actual.
+- recuperación de contraseña con OTP y validación de fortaleza.
+- rate limiting en login/OTP.
+- bloqueo temporal por intentos fallidos.
+- registro de eventos de seguridad.
+- documentación OpenAPI/Swagger/ReDoc.
 
-## 6. Hallazgos Relevantes del Estado Actual
+## 6. Estado de Autorización y Acceso
 
-Hallazgos funcionales/deuda técnica identificados en código:
+Estado observado al corte:
 
-- backend/api/views/views.py es un archivo monolítico muy grande (miles de líneas), con mezcla de dominios (auth, coordinador, docente, estudiante, analítica, importación).
-- Existen comentarios de deprecación indicando intención de modularizar vistas, pero hoy la lógica principal sigue centralizada.
-- Se detectan inconsistencias puntuales de nombres de campos en algunas consultas de periodo que pueden causar fallos en ejecución según ruta.
-- Hay referencias a atributos de estudiante no homogéneos en algunas secciones (nombre vs primer_nombre), lo cual puede romper funcionalidades accesorias como mensajes/notificaciones si no están protegidas.
-- Algunos ViewSets exponen permisos amplios (AllowAny) y contienen TODOs de endurecimiento.
+- persiste un patrón mixto de control de acceso:
+  - validaciones manuales por rol dentro de vistas.
+  - uso no homogéneo de `permission_classes` por endpoint.
+- el frontend restringe rutas por rol, pero la protección final depende del backend.
 
-Esto no invalida el funcionamiento general, pero sí marca riesgos de mantenimiento y seguridad para la siguiente etapa de evolución.
+Conclusión:
 
-## 7. Qué Sí Está Consolidado Hoy
+- el control por rol existe y funciona, pero aún requiere consolidación técnica en DRF para uniformidad y mantenibilidad.
 
-- Flujo completo por roles en frontend.
-- API funcional para gestión académica principal.
-- Cálculo de desempeño por RA/curso con variantes de nota.
-- Importaciones masivas y creación individual de entidades académicas.
-- Gestión de recursos, anuncios y notificaciones.
-- Seguridad básica robusta en autenticación (rate limit + lockout + OTP + hashing).
+## 7. Hallazgos Vigentes
 
-## 8. Recomendaciones Inmediatas (a partir del estado actual)
+- `backend/api/views/views.py` continúa siendo un archivo grande y centralizado (deuda de modularización).
+- existen avances puntuales de robustez en endpoints críticos, pero la estandarización global aún no está completa.
+- hay mejoras de experiencia de usuario claras en tablas/listados, especialmente en paginación y filtrado.
 
-- Modularizar backend/api/views/views.py por dominio:
-  - auth
-  - coordinador
-  - docente
-  - estudiante
-  - analytics
-- Estandarizar autorización en DRF con permission_classes dedicadas por rol.
-- Auditar y corregir inconsistencias de nombres de campos/modelos en endpoints de periodo y notificaciones.
-- Endurecer ViewSets sensibles que hoy están en AllowAny.
-- Mantener pruebas de integración por rol para validar que cada endpoint crítico siga protegido y funcional.
+## 8. Qué Está Consolidado Hoy
+
+- flujo funcional por roles en frontend.
+- API operativa para gestión académica principal.
+- importaciones masivas y operaciones individuales.
+- analítica por curso y por RA disponible en interfaz.
+- seguridad base de autenticación operativa (rate limit + lockout + OTP).
+- paginación homogénea en los listados principales con selector de tamaño.
+
+## 9. Recomendaciones Inmediatas
+
+- modularizar `backend/api/views/views.py` por dominio (auth, coordinador, docente, estudiante, analytics).
+- centralizar permisos por rol con clases DRF dedicadas.
+- mantener pruebas de integración por rol enfocadas en endpoints críticos.
+- completar auditoría de endpoints sensibles para eliminar `AllowAny` donde no corresponda.
+- consolidar un estándar único de errores API/UI (estructura de `detail`/`message`) para simplificar consumo frontend.
 
 ---
 
-Documento generado con base en lectura de código actual del repositorio (backend + frontend + configuración), no sólo en documentación histórica.
+Documento actualizado con base en el estado del código del repositorio al 2026-04-23.

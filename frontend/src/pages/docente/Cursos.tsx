@@ -107,9 +107,6 @@ const DocenteCursos: React.FC = () => {
           items={[
             {key:'inicio',icon:'bi-house-door',title:'Inicio'},
             {key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},
-            {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
-            {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
-            {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
             ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
           ]}
         />
@@ -159,7 +156,7 @@ const DocenteCursos: React.FC = () => {
               <SearchPill icon="bi-search" placeholder="Filtrar" value={filter} onChange={setFilter} />
               <div className="alert alert-info shadow-sm d-flex align-items-center mt-3" role="note">
                 <i className="bi bi-info-circle-fill me-2"></i>
-                Debes seleccionar una asignatura para acceder a las opciones de la misma.
+                Debes seleccionar una asignatura para acceder a los modulos RA/Actividades, Calificar y Recursos.
               </div>
               {err && <div className="alert alert-danger shadow-sm d-flex align-items-center"><i className="bi bi-exclamation-triangle-fill me-2 fs-5"></i>{err}</div>}
               {loading ? (

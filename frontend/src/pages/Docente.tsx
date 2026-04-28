@@ -6,12 +6,15 @@ import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
 import StudentList from '@/components/StudentList'
+import PaginationControls from '@/components/PaginationControls'
 import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, getActivitiesByRA, createActivityForRA, upsertGrade, getIndicatorChart, getRAValidation } from '@/services/api'
 import type { Course, RA, Indicator, Activity, Student } from '@/types'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
 import Chart from 'chart.js/auto'
+
+const DEFAULT_PAGE_SIZE = 10
 
 type View = 'cursos' | 'ra' | 'estudiantes'
 
@@ -28,6 +31,10 @@ const Docente: React.FC = () => {
   const [activities, setActivities] = useState<Activity[]>([])
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<string>('')
+  const [indicatorPage, setIndicatorPage] = useState(1)
+  const [activityPage, setActivityPage] = useState(1)
+  const [indicatorPageSize, setIndicatorPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [activityPageSize, setActivityPageSize] = useState(DEFAULT_PAGE_SIZE)
   // Crear actividad
   const [newAct, setNewAct] = useState({ nombre: '', tipo: '1', pctRA: '' })
   const [newActError, setNewActError] = useState<string | null>(null)
@@ -65,6 +72,8 @@ const Docente: React.FC = () => {
       setIndicators([])
       setActivities([])
       setSelectedStudent(null)
+      setIndicatorPage(1)
+      setActivityPage(1)
       getRAsByCourse(selectedCurso).then(setRas)
     }
   }, [selectedCurso])
@@ -100,6 +109,8 @@ const Docente: React.FC = () => {
       setIndicators(inds)
       setActivities(acts)
       setRaVal(val)
+      setIndicatorPage(1)
+      setActivityPage(1)
     } catch (e) {
       if (import.meta.env.DEV) console.warn('No se pudo cargar detalle de RA', e)
       setIndicators([])
@@ -553,18 +564,32 @@ const Docente: React.FC = () => {
                           <small>No hay indicadores definidos</small>
                         </div>
                       ) : (
-                        <div className="ra-scroll-260">
-                          <ul className="list-group ra-list-group">
-                            {indicators.map((ind, idx) => (
+                            <>
+                              <div className="ra-scroll-260">
+                                <ul className="list-group ra-list-group">
+                                  {indicators.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize).map((ind, idx) => (
                               <li key={ind.id} className="list-group-item d-flex justify-content-between align-items-start shadow-sm">
                                 <div>
                                   <div className="badge bg-info text-white mb-2">Indicador {idx + 1}</div>
                                   <div>{ind.descripcion}</div>
                                 </div>
                               </li>
-                            ))}
-                          </ul>
-                        </div>
+                                  ))}
+                                </ul>
+                              </div>
+                              <PaginationControls
+                                page={indicatorPage}
+                                totalPages={Math.max(1, Math.ceil(indicators.length / indicatorPageSize))}
+                                totalItems={indicators.length}
+                                pageSize={indicatorPageSize}
+                                onPageChange={setIndicatorPage}
+                                onPageSizeChange={(size) => {
+                                  setIndicatorPage(1)
+                                  setIndicatorPageSize(size)
+                                }}
+                                label="indicadores"
+                              />
+                            </>
                       )}
                     </div>
                   </div>
@@ -582,9 +607,10 @@ const Docente: React.FC = () => {
                           <small>No hay actividades creadas</small>
                         </div>
                       ) : (
-                        <div className="ra-scroll-260">
-                          <ul className="list-group ra-list-group">
-                            {activities.map((act, idx) => (
+                        <>
+                          <div className="ra-scroll-260">
+                            <ul className="list-group ra-list-group">
+                              {activities.slice((activityPage - 1) * activityPageSize, activityPage * activityPageSize).map((act, idx) => (
                               <li key={act.id} className="list-group-item d-flex justify-content-between align-items-start shadow-sm">
                                 <div className="flex-grow-1">
                                   <div className="badge bg-success text-white mb-2">Actividad {idx + 1}</div>
@@ -594,9 +620,22 @@ const Docente: React.FC = () => {
                                   <span className="badge bg-danger rounded-pill fs-6">{act.porcentajeRA}%</span>
                                 )}
                               </li>
-                            ))}
-                          </ul>
-                        </div>
+                              ))}
+                            </ul>
+                          </div>
+                          <PaginationControls
+                            page={activityPage}
+                            totalPages={Math.max(1, Math.ceil(activities.length / activityPageSize))}
+                            totalItems={activities.length}
+                            pageSize={activityPageSize}
+                            onPageChange={setActivityPage}
+                            onPageSizeChange={(size) => {
+                              setActivityPage(1)
+                              setActivityPageSize(size)
+                            }}
+                            label="actividades"
+                          />
+                        </>
                       )}
                     </div>
                   </div>

@@ -4,6 +4,8 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
+import { getErrorMessage } from '@/utils/errors'
 import {
   desmatricularEstudiante,
   fetchAsignaturaEstudiantes,
@@ -15,6 +17,9 @@ import {
   type EstudianteRow,
   type EstudianteListItem,
 } from '@/services/coordinador'
+import PaginationControls from '@/components/PaginationControls'
+
+const DEFAULT_PAGE_SIZE = 10
 
 const toCsvSafe = (value: string) => {
   const normalized = String(value ?? '').replace(/"/g, '""')
@@ -58,6 +63,8 @@ const Matriculados: React.FC = () => {
   const [enrolledRowsByCode, setEnrolledRowsByCode] = useState<Record<string, EstudianteRow>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [unenrollingCode, setUnenrollingCode] = useState<string | null>(null)
+  const [studentPage, setStudentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const [formData, setFormData] = useState({
     id_asignatura: '',
@@ -96,10 +103,20 @@ const Matriculados: React.FC = () => {
     })
   }, [students, searchTerm])
 
+  const studentMaxPage = Math.max(1, Math.ceil(availableStudents.length / pageSize))
+  const visibleStudents = useMemo(
+    () => availableStudents.slice((studentPage - 1) * pageSize, studentPage * pageSize),
+    [availableStudents, studentPage, pageSize]
+  )
+
   const selectedStudentRows = useMemo(
     () => students.filter((s) => selectedStudents[s.codigo_estudiante]),
     [students, selectedStudents]
   )
+
+  useEffect(() => {
+    setStudentPage(1)
+  }, [searchTerm, formData.id_asignatura, formData.periodo, students.length])
 
   const loadAsignaturas = useCallback(async () => {
     setLoadingOptions(true)
@@ -109,8 +126,8 @@ const Matriculados: React.FC = () => {
       if (!formData.id_asignatura && data.results?.length) {
         setFormData((prev) => ({ ...prev, id_asignatura: String(data.results[0].id_asignatura) }))
       }
-    } catch (e: any) {
-      Alert.error(e?.response?.data?.detail || e.message || 'No se pudieron cargar las asignaturas registradas.')
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudieron cargar las asignaturas registradas.'))
     } finally {
       setLoadingOptions(false)
     }
@@ -123,7 +140,7 @@ const Matriculados: React.FC = () => {
 
       setFormData((prev) => {
         if (prev.periodo) {
-          const exists = list.some((p: any) => p.descripcion === prev.periodo)
+          const exists = list.some((p: { descripcion: string }) => p.descripcion === prev.periodo)
           if (exists) return prev
         }
         return {
@@ -183,12 +200,12 @@ const Matriculados: React.FC = () => {
         }
         return next
       })
-    } catch (e: any) {
+    } catch (error: unknown) {
       setStudents([])
       setSelectedStudents({})
       setAlreadyEnrolledCodes(new Set())
       setEnrolledRowsByCode({})
-      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo cargar el listado de estudiantes.')
+      Alert.error(getErrorMessage(error, 'No se pudo cargar el listado de estudiantes.'))
     } finally {
       setLoadingStudents(false)
     }
@@ -259,8 +276,8 @@ const Matriculados: React.FC = () => {
       })
       Alert.success('Estudiante desmatriculado correctamente.')
       await loadStudents(selectedAsignatura, formData.periodo)
-    } catch (e: any) {
-      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo desmatricular al estudiante.')
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudo desmatricular al estudiante.'))
     } finally {
       setUnenrollingCode(null)
     }
@@ -341,9 +358,8 @@ const Matriculados: React.FC = () => {
 
       clearSelection()
       await loadStudents(selectedAsignatura, formData.periodo)
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e.message || 'Error al registrar matrícula'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'Error al registrar matrícula'))
     } finally {
       setLoading(false)
     }
@@ -484,65 +500,80 @@ const Matriculados: React.FC = () => {
                     ) : availableStudents.length === 0 ? (
                       <div className="text-center text-muted py-3">No hay estudiantes para este filtro.</div>
                     ) : (
-                      <div className="table-responsive">
-                        <table className="table table-sm align-middle mb-0">
-                          <thead className="table-light">
-                            <tr>
-                              <th className="matriculados-col-select">Acción</th>
-                              <th>Código</th>
-                              <th>Nombre</th>
-                              <th>Correo</th>
-                              <th>Documento</th>
-                              <th>Estado</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {availableStudents.map((s) => {
-                              const already = alreadyEnrolledCodes.has(s.codigo_estudiante)
-                              const checked = !!selectedStudents[s.codigo_estudiante]
-                              const isUnenrolling = unenrollingCode === s.codigo_estudiante
-                              return (
-                                <tr key={s.codigo_estudiante}>
-                                  <td>
-                                    {already ? (
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-outline-danger"
-                                        disabled={loading || isUnenrolling || !enrolledRowsByCode[s.codigo_estudiante]}
-                                        onClick={() => handleUnenroll(s.codigo_estudiante)}
-                                        aria-label={`Desmatricular ${s.codigo_estudiante}`}
-                                      >
-                                        {isUnenrolling ? 'Desmatriculando...' : 'Desmatricular'}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
-                                        disabled={loading}
-                                        onClick={() => toggleStudent(s.codigo_estudiante, !checked)}
-                                        aria-label={`${checked ? 'Quitar' : 'Añadir'} ${s.codigo_estudiante}`}
-                                      >
-                                        {checked ? 'Quitar' : 'Añadir'}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td><span className="badge bg-secondary">{s.codigo_estudiante}</span></td>
-                                  <td>{s.nombre} {s.apellido}</td>
-                                  <td>{s.correo}</td>
-                                  <td>{s.tipo_documento || 'Doc'}: {s.num_documento}</td>
-                                  <td>
-                                    {already ? (
-                                      <span className="badge bg-warning text-dark">Ya matriculado</span>
-                                    ) : (
-                                      <span className="badge bg-success">Disponible</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <>
+                        <div className="table-responsive">
+                          <table className="table table-sm align-middle mb-0">
+                            <thead className="table-light">
+                              <tr>
+                                <th className="matriculados-col-select">Acción</th>
+                                <th>Código</th>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Documento</th>
+                                <th>Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleStudents.map((s) => {
+                                const already = alreadyEnrolledCodes.has(s.codigo_estudiante)
+                                const checked = !!selectedStudents[s.codigo_estudiante]
+                                const isUnenrolling = unenrollingCode === s.codigo_estudiante
+                                return (
+                                  <tr key={s.codigo_estudiante}>
+                                    <td>
+                                      {already ? (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline-danger"
+                                          disabled={loading || isUnenrolling || !enrolledRowsByCode[s.codigo_estudiante]}
+                                          onClick={() => handleUnenroll(s.codigo_estudiante)}
+                                          aria-label={`Desmatricular ${s.codigo_estudiante}`}
+                                        >
+                                          {isUnenrolling ? 'Desmatriculando...' : 'Desmatricular'}
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className={`btn btn-sm ${checked ? 'btn-danger' : 'btn-outline-success'}`}
+                                          disabled={loading}
+                                          onClick={() => toggleStudent(s.codigo_estudiante, !checked)}
+                                          aria-label={`${checked ? 'Quitar' : 'Añadir'} ${s.codigo_estudiante}`}
+                                        >
+                                          {checked ? 'Quitar' : 'Añadir'}
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td><span className="badge bg-secondary">{s.codigo_estudiante}</span></td>
+                                    <td>{s.nombre} {s.apellido}</td>
+                                    <td>{s.correo}</td>
+                                    <td>{formatTipoDocumentoAbbr(s.tipo_documento)}: {s.num_documento}</td>
+                                    <td>
+                                      {already ? (
+                                        <span className="badge bg-warning text-dark">Ya matriculado</span>
+                                      ) : (
+                                        <span className="badge bg-success">Disponible</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <PaginationControls
+                          page={studentPage}
+                          totalPages={studentMaxPage}
+                          totalItems={availableStudents.length}
+                          pageSize={pageSize}
+                          onPageChange={setStudentPage}
+                          onPageSizeChange={(size) => {
+                            setStudentPage(1)
+                            setPageSize(size)
+                          }}
+                          label="estudiantes disponibles"
+                          className="px-3 pb-3"
+                        />
+                      </>
                     )}
                   </div>
                 </div>
