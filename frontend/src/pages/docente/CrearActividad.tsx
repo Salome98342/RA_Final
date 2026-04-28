@@ -24,12 +24,13 @@ const DocenteCrearActividad: React.FC = () => {
   const [tipos, setTipos] = useState<{id:string; descripcion:string}[]>([])
   const [allIndicators, setAllIndicators] = useState<{ id: string; descripcion: string; porcentaje: number }[]>([])
   const [selIndicators, setSelIndicators] = useState<string[]>([])
-  const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
+  const [raVal, setRaVal] = useState<{ actividades: { suma: number; count: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
   // Multi-RA support
   const [ras, setRas] = useState<{ id: string; titulo: string }[]>([])
   const [selectedRAs, setSelectedRAs] = useState<string[]>([])
   const [raPct, setRaPct] = useState<Record<string, string>>({})
-  const [raTotals, setRaTotals] = useState<Record<string, number>>({})
+  const [raTotals, setRaTotals] = useState<Record<string, number>>({}) // Almacena el conteo de actividades
+  const [raActPercentages, setRaActPercentages] = useState<Record<string, number>>({}) // Almacena el porcentaje sumado
   const [guideFile, setGuideFile] = useState<File | null>(null)
 
   const pctRANum = Number(form.pctRA)
@@ -90,12 +91,13 @@ const DocenteCrearActividad: React.FC = () => {
       const entries = await Promise.all(selectedRAs.map(async (rid) => {
         try {
           const v = await getRAValidation(rid)
-          return [rid, Number(v?.actividades?.suma ?? 0)] as const
+          return [rid, Number(v?.actividades?.count ?? 0), Number(v?.actividades?.suma ?? 0)] as const
         } catch {
-          return [rid, 0] as const
+          return [rid, 0, 0] as const
         }
       }))
-      setRaTotals(Object.fromEntries(entries))
+      setRaTotals(Object.fromEntries(entries.map(([rid, count]) => [rid, count])))
+      setRaActPercentages(Object.fromEntries(entries.map(([rid, , suma]) => [rid, suma])))
     }
     if (selectedRAs.length) run()
   }, [selectedRAs])
@@ -249,7 +251,7 @@ const DocenteCrearActividad: React.FC = () => {
                 <div className={`alert shadow-sm ${raVal.actividades.ok ? 'alert-success' : 'alert-warning'} d-flex align-items-center`}>
                   <i className={`bi ${raVal.actividades.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'} me-2 fs-5`}></i>
                   <div className="flex-grow-1">
-                    <div>Actividades actuales: <strong>{raVal.actividades.suma.toFixed(2)}%</strong> · {raVal.actividades.ok ? '¡Listo 100%!' : `Faltan ${raVal.actividades.faltante.toFixed(2)}%`}</div>
+                    <div>Actividades actuales: <strong>{raVal.actividades.count} actividades</strong> ({raVal.actividades.suma.toFixed(2)}%) · {raVal.actividades.ok ? '¡Listo 100%!' : `Faltan ${raVal.actividades.faltante.toFixed(2)}%`}</div>
                     {(() => {
                       const suma = raVal.actividades.suma
                       const variant = suma > 100 ? 'prog-danger' : (raVal.actividades.ok ? 'prog-success' : 'prog-warning')
@@ -361,12 +363,14 @@ const DocenteCrearActividad: React.FC = () => {
                             className={`btn btn-sm ${selected ? 'btn-danger' : 'btn-outline-success'}`}
                             onClick={async () => {
                               if (!selected) {
-                                let suma = Number(raTotals[r.id] ?? NaN)
+                                let suma = Number(raActPercentages[r.id] ?? NaN)
                                 if (!Number.isFinite(suma)) {
                                   try {
                                     const v = await getRAValidation(r.id)
                                     suma = Number(v?.actividades?.suma ?? 0)
-                                    setRaTotals((m) => ({ ...m, [r.id]: suma }))
+                                    const count = Number(v?.actividades?.count ?? 0)
+                                    setRaTotals((m) => ({ ...m, [r.id]: count }))
+                                    setRaActPercentages((m) => ({ ...m, [r.id]: suma }))
                                   } catch {
                                     suma = 0
                                   }
@@ -412,7 +416,7 @@ const DocenteCrearActividad: React.FC = () => {
                     <thead className="table-light">
                       <tr>
                         <th className="fw-bold"><i className="bi bi-bullseye me-1"></i>RA</th>
-                        <th className="w-220px fw-bold"><i className="bi bi-graph-up me-1"></i>Total actual</th>
+                        <th className="w-220px fw-bold"><i className="bi bi-graph-up me-1"></i>Total actividades actual</th>
                         <th className="w-160px fw-bold"><i className="bi bi-percent me-1"></i>Aporte (%)</th>
                         <th className="w-220px fw-bold"><i className="bi bi-calculator me-1"></i>Quedaría en</th>
                       </tr>
@@ -420,7 +424,8 @@ const DocenteCrearActividad: React.FC = () => {
                     <tbody>
                       {selectedRAs.map((rid) => {
                         const ra = ras.find(x => x.id === rid)
-                        const suma = Number(raTotals[rid] ?? 0)
+                        const actCount = Number(raTotals[rid] ?? 0)
+                        const suma = Number(raActPercentages[rid] ?? 0)
                         const aporte = Number(raPct[rid] ?? form.pctRA) || 0
                         const quedariaRaw = suma + (isNaN(aporte) ? 0 : aporte)
                         const quedaria = Math.max(0, Math.min(100, quedariaRaw))
@@ -429,14 +434,7 @@ const DocenteCrearActividad: React.FC = () => {
                           <tr key={rid} className={excede ? 'table-danger' : ''}>
                             <td>{ra?.titulo ?? `RA ${rid}`}</td>
                             <td>
-                              <progress
-                                className="uv-progress"
-                                value={Math.min(100, Math.max(0, suma))}
-                                max={100}
-                                aria-label="Progreso actividades RA"
-                                title={`Progreso: ${fmtPct(suma)}%`}
-                              />
-                              <div className="ra-small text-muted text-end">{fmtPct(suma)}%</div>
+                              <div className="ra-small text-dark fw-bold">{actCount} actividades</div>
                             </td>
                             <td>
                               <div className="ra-small">{fmtPct(aporte)}%</div>

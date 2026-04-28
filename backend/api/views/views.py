@@ -721,15 +721,37 @@ def _detect_and_transform_academic_registro(df):
         
         # Buscar columnas
         codigo_col = find_col_original(cols_original, cols_normalized, 'codigo')
+        full_name_col = find_col_original(
+            cols_original,
+            cols_normalized,
+            'apellidos y nombres',
+            'apellido y nombre',
+            'apellidos y nombre',
+            'apellidos nombres',
+        )
         nombres_col = find_col_original(cols_original, cols_normalized, 'nombres', 'nombre')
         apellidos_col = find_col_original(cols_original, cols_normalized, 'apellidos', 'apellido')
         email_col = find_col_original(cols_original, cols_normalized, 'email', 'correo')
         docidentidad_col = find_col_original(cols_original, cols_normalized, 'documento identidad', 'documento')
         programa_col = find_col_original(cols_original, cols_normalized, 'programa academico', 'programa')
         jornada_col = find_col_original(cols_original, cols_normalized, 'jornada', 'turno', 'shift')
+
+        # Si existe columna combinada de nombres, priorizarla SIEMPRE.
+        if full_name_col:
+            nombres_col = full_name_col
+            apellidos_col = full_name_col
+
+        # Evitar columnas de programa como fuente de nombre/apellido de estudiante.
+        if nombres_col and 'programa' in _normalize_text(nombres_col):
+            fallback_nombres = find_col_original(cols_original, cols_normalized, 'nombres')
+            nombres_col = full_name_col or fallback_nombres or nombres_col
+        if apellidos_col and 'programa' in _normalize_text(apellidos_col):
+            fallback_apellidos = find_col_original(cols_original, cols_normalized, 'apellidos')
+            apellidos_col = full_name_col or fallback_apellidos or apellidos_col
         
         logger.info(f"[TRANSFORM] Columnas mapeadas:")
         logger.info(f"  - codigo_col: {codigo_col}")
+        logger.info(f"  - full_name_col: {full_name_col}")
         logger.info(f"  - nombres_col: {nombres_col}")
         logger.info(f"  - apellidos_col: {apellidos_col}")
         logger.info(f"  - email_col: {email_col}")
@@ -753,6 +775,25 @@ def _detect_and_transform_academic_registro(df):
         
         # Crear copia para no modificar el original
         transformed = pd.DataFrame()
+
+        def _split_apellidos_nombres_cell(value):
+            raw = str(value or "").strip()
+            if not raw or raw.lower() in {"nan", "none"}:
+                return "", ""
+
+            cleaned = re.sub(r"\s+", " ", raw)
+            if "," in cleaned:
+                left, right = cleaned.split(",", 1)
+                return left.strip(), right.strip()
+
+            parts = cleaned.split(" ")
+            if len(parts) >= 4:
+                return " ".join(parts[:2]), " ".join(parts[2:])
+            if len(parts) == 3:
+                return " ".join(parts[:2]), parts[2]
+            if len(parts) == 2:
+                return parts[0], parts[1]
+            return "", parts[0]
         
         logger.info(f"[TRANSFORM] Iniciando transformación de {len(df)} registros...")
         
@@ -761,11 +802,21 @@ def _detect_and_transform_academic_registro(df):
             transformed['codigo_estudiante'] = df[codigo_col].astype(str).str.strip()
             logger.debug(f"[TRANSFORM] OK codigo_estudiante creado")
             
-            transformed['nombre'] = df[nombres_col].astype(str).str.strip()
-            logger.debug(f"[TRANSFORM] OK nombre creado")
-            
-            transformed['apellido'] = df[apellidos_col].astype(str).str.strip()
-            logger.debug(f"[TRANSFORM] OK apellido creado")
+            # Caso común en Registro Académico: una sola columna "Apellidos y Nombres".
+            if nombres_col == apellidos_col:
+                split_series = df[nombres_col].apply(_split_apellidos_nombres_cell)
+                split_df = pd.DataFrame(
+                    split_series.tolist(),
+                    columns=['_apellido', '_nombre'],
+                    index=df.index,
+                )
+                transformed['apellido'] = split_df['_apellido'].astype(str).str.strip()
+                transformed['nombre'] = split_df['_nombre'].astype(str).str.strip()
+                logger.info(f"[TRANSFORM] Columna combinada detectada ('{nombres_col}'): se separó en apellido/nombre")
+            else:
+                transformed['nombre'] = df[nombres_col].astype(str).str.strip()
+                transformed['apellido'] = df[apellidos_col].astype(str).str.strip()
+            logger.debug(f"[TRANSFORM] OK nombre y apellido creados")
             
             transformed['correo'] = df[email_col].astype(str).str.strip().str.lower()
             logger.debug(f"[TRANSFORM] OK correo creado")
@@ -1655,6 +1706,12 @@ def coordinador_docentes_view(request):
         "pas": "pasaporte",
         "pasaporte": "pasaporte",
         "rc": "registro civil",
+        "cr": "registro civil",
+        "c.r": "registro civil",
+        "c.r.": "registro civil",
+        "ppt": "permiso por proteccion temporal",
+        "p.p.t": "permiso por proteccion temporal",
+        "p.p.t.": "permiso por proteccion temporal",
         "nuip": "nuip",
     }
 
@@ -1864,6 +1921,65 @@ def coordinador_import_estudiantes_view(request):
         .str.encode("ascii", errors="ignore")
         .str.decode("ascii")
     )
+
+    # Si existe una columna combinada "Apellidos y Nombres", priorizarla
+    # para construir nombre/apellido y evitar tomar datos de columnas no personales.
+    def _split_apellidos_nombres(value):
+        raw = str(value or "").strip()
+        if not raw or raw.lower() in {"nan", "none"}:
+            return "", ""
+
+        cleaned = re.sub(r"\s+", " ", raw)
+
+        # Formato frecuente: "APELLIDOS, NOMBRES"
+        if "," in cleaned:
+            left, right = cleaned.split(",", 1)
+            return left.strip(), right.strip()
+
+        # Formato frecuente: "APELLIDOS NOMBRES"
+        parts = cleaned.split(" ")
+        if len(parts) >= 4:
+            return " ".join(parts[:2]), " ".join(parts[2:])
+        if len(parts) == 3:
+            return " ".join(parts[:2]), parts[2]
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        return "", parts[0]
+
+    full_name_col = next(
+        (
+            c for c in (
+                "apellidos_y_nombres",
+                "apellido_y_nombre",
+                "apellidos_nombres",
+                "apellidos_y_nombre",
+            )
+            if c in df.columns
+        ),
+        None,
+    )
+
+    if full_name_col:
+        split_series = df[full_name_col].apply(_split_apellidos_nombres)
+        split_df = pd.DataFrame(
+            split_series.tolist(),
+            columns=["_apellido_from_fullname", "_nombre_from_fullname"],
+            index=df.index,
+        )
+
+        existing_apellido = df["apellido"] if "apellido" in df.columns else pd.Series("", index=df.index)
+        existing_nombre = df["nombre"] if "nombre" in df.columns else pd.Series("", index=df.index)
+
+        df["apellido"] = split_df["_apellido_from_fullname"].where(
+            split_df["_apellido_from_fullname"].fillna("").astype(str).str.strip() != "",
+            existing_apellido,
+        )
+        df["nombre"] = split_df["_nombre_from_fullname"].where(
+            split_df["_nombre_from_fullname"].fillna("").astype(str).str.strip() != "",
+            existing_nombre,
+        )
+
+        logger.info(f"[IMPORT_TRANSFORM] Se priorizo columna '{full_name_col}' para nombre/apellido")
     
     # Validar que tienen las columnas mínimas requeridas
     required_cols = ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento']
@@ -1890,35 +2006,61 @@ def coordinador_import_estudiantes_view(request):
         # También guardar tal cual minúsculas por si acaso
         tipos_documento_map_desc_norm[td.descripcion.lower().strip()] = td
 
-    # Alias comunes para mapear abreviaturas a descripciones normalizadas
-    # Ajustar según los valores reales en la BD (inserts.sql)
-    aliases_norm = {
+    # REGLA NEGOCIO: para importación masiva de estudiantes solo se aceptan
+    # C.C., C.R., T.I. y PPT (con o sin puntos/espacios).
+    allowed_tipo_doc_aliases = {
         "cc": "cedula de ciudadania",
         "c.c": "cedula de ciudadania",
         "c.c.": "cedula de ciudadania",
-        "ce": "cedula de extranjeria",
-        "c.e": "cedula de extranjeria",
-        "c.e.": "cedula de extranjeria",
+        "cr": "registro civil",
+        "c.r": "registro civil",
+        "c.r.": "registro civil",
         "ti": "tarjeta de identidad",
         "t.i": "tarjeta de identidad",
         "t.i.": "tarjeta de identidad",
-        "pas": "pasaporte",
-        "pasaporte": "pasaporte",
-        "rc": "registro civil",
-        "nuip": "nuip"
+        "ppt": "permiso por proteccion temporal",
+        "p.p.t": "permiso por proteccion temporal",
+        "p.p.t.": "permiso por proteccion temporal",
+    }
+    # Garantizar que exista el tipo de documento para PPT.
+    ppt_norm = _normalize_text("permiso por proteccion temporal")
+    if ppt_norm not in tipos_documento_map_desc_norm:
+        tipo_ppt = TipoDocumento.objects.create(descripcion="Permiso por Protección Temporal")
+        tipos_documento_map_id[tipo_ppt.id_tipo_documento] = tipo_ppt
+        tipos_documento_map_desc_norm[_normalize_text(tipo_ppt.descripcion)] = tipo_ppt
+        tipos_documento_map_desc_norm[tipo_ppt.descripcion.lower().strip()] = tipo_ppt
+
+    allowed_tipo_doc_norm_values = {
+        _normalize_text("cedula de ciudadania"),
+        _normalize_text("registro civil"),
+        _normalize_text("tarjeta de identidad"),
+        _normalize_text("permiso por proteccion temporal"),
     }
 
     logger.info(f"[DEBUG] Tipos de documento disponibles (normalizados): {list(tipos_documento_map_desc_norm.keys())}")
-    existing_estudiantes_codigos = set(Estudiante.objects.values_list('codigo_estudiante', flat=True))
-    existing_estudiantes_correos = set(Estudiante.objects.values_list('correo', flat=True))
-    existing_estudiantes_docs = set(Estudiante.objects.values_list('num_documento', flat=True))
+    existing_students = list(Estudiante.objects.all())
+    existing_students_by_code = {s.codigo_estudiante: s for s in existing_students}
+    existing_estudiantes_codigos = set(existing_students_by_code.keys())
+    correo_owner_by_code = {
+        s.correo: s.codigo_estudiante
+        for s in existing_students
+        if getattr(s, 'correo', None)
+    }
+    doc_owner_by_code = {
+        s.num_documento: s.codigo_estudiante
+        for s in existing_students
+        if getattr(s, 'num_documento', None)
+    }
     
     created = 0
+    updated = 0
     existing = 0
     errors = []
     imported_students = []
     max_rows = 5000
     to_create = []
+    to_update = []
+    seen_codes_in_file = set()
     bulk_password = _get_bulk_student_password()
     passwords_for_emails = []  # Lista paralela: (correo, nombre, apellido, codigo, password)
     
@@ -2007,42 +2149,49 @@ def coordinador_import_estudiantes_view(request):
             errors.append({"row": row_num, "error": error_msg})
             continue
 
+        if codigo in seen_codes_in_file:
+            errors.append({"row": row_num, "error": f"codigo_estudiante duplicado en archivo: {codigo}"})
+            continue
+        seen_codes_in_file.add(codigo)
+
         if jornada_error:
             error_msg = f"Jornada invalida: {jornada}"
             logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
             errors.append({"row": row_num, "error": error_msg})
             continue
         
-        # Tipo documento - intentar por ID primero, luego por descripción
+        # Tipo documento: por política de importación solo C.C., C.R., T.I. y PPT.
         tipo_doc = None
         if tipo_doc_id:
             try:
                 tipo_doc = tipos_documento_map_id.get(int(tipo_doc_id))
+                if tipo_doc:
+                    td_norm = _normalize_text(getattr(tipo_doc, "descripcion", ""))
+                    if td_norm not in allowed_tipo_doc_norm_values:
+                        tipo_doc = None
             except (ValueError, TypeError):
                 pass
         
         if not tipo_doc and tipo_doc_desc:
             desc_str = str(tipo_doc_desc).strip()
-            # 1. Búsqueda exacta normalizada (sin tildes, minúsculas)
+            # 1. Validar código permitido de entrada (C.C., C.R., T.I., PPT)
             norm_input = _normalize_text(desc_str)
-            tipo_doc = tipos_documento_map_desc_norm.get(norm_input)
-            
-            # 2. Si no encuentra, buscar en alias (CC -> cedula de ciudadania)
+            mapped_full = allowed_tipo_doc_aliases.get(norm_input)
+            if not mapped_full:
+                errors.append({
+                    "row": row_num,
+                    "error": "tipo_documento invalido. Solo se acepta: C.C., C.R., T.I., PPT."
+                })
+                continue
+
+            # 2. Resolver abreviatura a tipo_documento existente en BD
+            mapped_norm = _normalize_text(mapped_full)
+            tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
             if not tipo_doc:
-                # "cc" -> "cedula de ciudadania"
-                mapped_full = aliases_norm.get(norm_input)
-                if mapped_full:
-                    # Aplicar normalización al texto mapeado por si acaso
-                    mapped_norm = _normalize_text(mapped_full)
-                    # "cedula de ciudadania" -> Object
-                    tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
-                    # Si falla, intentar buscar substring
-                    if not tipo_doc:
-                        # Buscar si alguna descripción contiene 'cedula de ciudadania'
-                        for k, v in tipos_documento_map_desc_norm.items():
-                            if mapped_norm in k:
-                                tipo_doc = v
-                                break
+                for k, v in tipos_documento_map_desc_norm.items():
+                    if mapped_norm in k:
+                        tipo_doc = v
+                        break
 
             if idx == 0:
                 logger.info(f"[DEBUG] Tipo documento:")
@@ -2054,19 +2203,81 @@ def coordinador_import_estudiantes_view(request):
 
         
         if not tipo_doc:
-            error_msg = f"TipoDocumento no encontrado para '{tipo_doc_id or tipo_doc_desc}'. Tipos disponibles: {list(tipos_documento_map_desc_norm.keys())}"
+            error_msg = (
+                f"TipoDocumento no encontrado para '{tipo_doc_id or tipo_doc_desc}'. "
+                "Solo se admite C.C., C.R., T.I. o PPT."
+            )
             logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
-            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: '{tipo_doc_desc}'"}); continue
+            errors.append({
+                "row": row_num,
+                "error": f"TipoDocumento no encontrado o no permitido: '{tipo_doc_desc}'"
+            }); continue
         
-        # Verificar si ya existe
-        if codigo in existing_estudiantes_codigos:
-            existing += 1
+        # UPSERT: si el estudiante ya existe por código, actualizar su información.
+        existing_student = existing_students_by_code.get(codigo)
+        if existing_student:
+            correo_owner = correo_owner_by_code.get(correo)
+            if correo_owner and correo_owner != codigo:
+                errors.append({"row": row_num, "error": f"Correo ya existe en otro estudiante: {correo}"})
+                continue
+
+            doc_owner = doc_owner_by_code.get(num_documento)
+            if doc_owner and doc_owner != codigo:
+                errors.append({"row": row_num, "error": f"Documento ya existe en otro estudiante: {num_documento}"})
+                continue
+
+            old_correo = existing_student.correo
+            old_doc = existing_student.num_documento
+
+            changed = False
+            if existing_student.nombre != nombre:
+                existing_student.nombre = nombre
+                changed = True
+            if existing_student.apellido != apellido:
+                existing_student.apellido = apellido
+                changed = True
+            if existing_student.correo != correo:
+                existing_student.correo = correo
+                changed = True
+            if existing_student.num_documento != num_documento:
+                existing_student.num_documento = num_documento
+                changed = True
+            if getattr(existing_student, 'tipo_documento_id', None) != getattr(tipo_doc, 'id_tipo_documento', None):
+                existing_student.tipo_documento = tipo_doc
+                changed = True
+
+            jornada_value = jornada or None
+            if existing_student.jornada != jornada_value:
+                existing_student.jornada = jornada_value
+                changed = True
+
+            if changed:
+                to_update.append(existing_student)
+                updated += 1
+                imported_students.append({
+                    "nombre": nombre,
+                    "apellido": apellido,
+                    "codigo_estudiante": codigo,
+                    "num_documento": num_documento,
+                    "correo": correo,
+                })
+            else:
+                existing += 1
+
+            if old_correo and old_correo in correo_owner_by_code:
+                correo_owner_by_code.pop(old_correo, None)
+            correo_owner_by_code[correo] = codigo
+
+            if old_doc and old_doc in doc_owner_by_code:
+                doc_owner_by_code.pop(old_doc, None)
+            doc_owner_by_code[num_documento] = codigo
+
             continue
-        
-        # Validar unicidad de correo y documento
-        if correo in existing_estudiantes_correos:
+
+        # Crear nuevo estudiante si no existe por código.
+        if correo in correo_owner_by_code:
             errors.append({"row": row_num, "error": f"Correo ya existe: {correo}"}); continue
-        if num_documento in existing_estudiantes_docs:
+        if num_documento in doc_owner_by_code:
             errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
         
         # Import masivo: usar contraseña genérica única para todos los estudiantes.
@@ -2103,8 +2314,9 @@ def coordinador_import_estudiantes_view(request):
         
         # Marcar como existente para evitar duplicados en el mismo archivo
         existing_estudiantes_codigos.add(codigo)
-        existing_estudiantes_correos.add(correo)
-        existing_estudiantes_docs.add(num_documento)
+        correo_owner_by_code[correo] = codigo
+        doc_owner_by_code[num_documento] = codigo
+        existing_students_by_code[codigo] = to_create[-1]
         created += 1
     
     logger.info(f"[DEBUG] Preparando bulk_create de {len(to_create)} estudiantes...")
@@ -2122,11 +2334,25 @@ def coordinador_import_estudiantes_view(request):
             errors.append({"error": f"Error en inserción masiva: {str(e)}"})
             created = 0
             imported_students = []
+
+    # BULK UPDATE de estudiantes existentes (reimportación)
+    if to_update:
+        try:
+            with transaction.atomic():
+                Estudiante.objects.bulk_update(
+                    to_update,
+                    ['nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento', 'jornada'],
+                    batch_size=500,
+                )
+        except Exception as e:
+            errors.append({"error": f"Error en actualización masiva: {str(e)}"})
+            updated = 0
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
     payload = {
         "created": created,
+        "updated": updated,
         "existing": existing,
         "errors": errors,
         "imported_students": imported_students,
@@ -2173,6 +2399,12 @@ def coordinador_asignaturas_view(request):
         qs = qs.filter(docente__codigo_docente=docente_code)
     if periodo_desc:
         qs = qs.filter(Q(periodo__descripcion=periodo_desc) | Q(matricula__periodo__descripcion=periodo_desc)).distinct()
+    search = (request.query_params.get("search") or "").strip()
+    if search:
+        qs = qs.filter(
+            Q(codigo_asignatura__icontains=search) |
+            Q(nombre__icontains=search)
+        )
     from django.db.models import Count
     page_size = int(request.query_params.get("page_size") or 20)
     page = int(request.query_params.get("page") or 1)
@@ -3330,7 +3562,37 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
     ).order_by('-periodo__fecha_inicio')
 
     if not matriculas.exists():
-        return Response({"detail": "Estudiante fuera del alcance de tu programa"}, status=status.HTTP_404_NOT_FOUND)
+        # Si el estudiante tiene matrículas, pero no en el programa del coordinador, se mantiene restricción.
+        if Matricula.objects.filter(estudiante=estudiante).exists():
+            return Response({"detail": "Estudiante fuera del alcance de tu programa"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Caso estudiante nuevo sin matrículas: devolver perfil básico sin historial académico.
+        inferred_program = _student_program_from_code(estudiante.codigo_estudiante)
+        programa_nombre = inferred_program.nombre if inferred_program else detected_program.nombre
+
+        info_personal = {
+            "id_estudiante": estudiante.id_estudiante,
+            "codigo_estudiante": estudiante.codigo_estudiante,
+            "nombre": estudiante.nombre,
+            "apellido": estudiante.apellido,
+            "nombre_completo": f"{estudiante.nombre} {estudiante.apellido}",
+            "correo": estudiante.correo,
+            "tipo_documento": estudiante.tipo_documento.descripcion if estudiante.tipo_documento else None,
+            "num_documento": estudiante.num_documento,
+            "programa": programa_nombre,
+            "jornada": estudiante.jornada,
+        }
+
+        return Response({
+            "estudiante": info_personal,
+            "periodos": [],
+            "estadisticas": {
+                "total_asignaturas": 0,
+                "promedio_general": None,
+                "asignaturas_aprobadas": 0,
+                "asignaturas_reprobadas": 0,
+            },
+        }, status=status.HTTP_200_OK)
     
     # Obtener programa del estudiante (de su primera matrícula)
     programa_nombre = None
@@ -3501,14 +3763,13 @@ def coordinador_import_matriculados_view(request):
     Columnas mínimas requeridas: codigo_estudiante
     Si no se envían asignaturas seleccionadas en el formulario, también requiere codigo_asignatura.
     Si no se envía periodo en el archivo, usa por defecto el último período académico disponible.
-    Recomendado: incluir grupo y sede para desambiguar asignaturas con mismo código.
+    Recomendado: incluir grupo para desambiguar asignaturas con mismo código.
     Soporta: .csv, .xlsx, .xls
     Campos aceptados (sinónimos):
       - codigo_estudiante | estudiante | code
       - codigo_asignatura | asignatura | curso
                         (si no viene en columna, se intenta inferir del nombre del archivo: ..._801126C)
             - grupo
-            - sede
             - semestre (si existe, tiene prioridad para decidir el periodo)
             - periodo | periodo_academico (opcional)
     """
@@ -3543,7 +3804,6 @@ def coordinador_import_matriculados_view(request):
     
     # OPTIMIZACIÓN: Pre-cargar todos los datos en memoria
     estudiantes_map = {e.codigo_estudiante: e for e in Estudiante.objects.all()}
-    asignaturas_map = {(a.codigo_asignatura, a.grupo, a.sede): a for a in Asignatura.objects.all()}
     asignaturas_por_codigo = {}
     for a in Asignatura.objects.all():
         asignaturas_por_codigo.setdefault(a.codigo_asignatura, []).append(a)
@@ -3602,7 +3862,6 @@ def coordinador_import_matriculados_view(request):
         cod_est = get_col(row, "codigo_estudiante", "codigo", "cod_estudiante", "estudiante", "code", "matricula")
         cod_asig = get_col(row, "codigo_asignatura", "asignatura", "curso")
         grupo = get_col(row, "grupo")
-        sede = get_col(row, "sede")
         semestre_desc = get_col(row, "semestre")
         periodo_desc = get_col(row, "periodo", "periodo_academico", "periodo academico", "periodo académico")
         
@@ -3610,7 +3869,6 @@ def coordinador_import_matriculados_view(request):
         if cod_est: cod_est = str(cod_est).strip()[:50]
         if cod_asig: cod_asig = str(cod_asig).strip()[:50]
         if grupo: grupo = str(grupo).strip()[:20]
-        if sede: sede = str(sede).strip()[:80]
         if semestre_desc: semestre_desc = str(semestre_desc).strip()[:100]
         if periodo_desc: periodo_desc = str(periodo_desc).strip()[:100]
 
@@ -3638,17 +3896,20 @@ def coordinador_import_matriculados_view(request):
             row_asignaturas = selected_asignaturas
         else:
             asig = None
-            if grupo and sede:
-                asig = asignaturas_map.get((cod_asig, grupo, sede))
-            else:
-                candidatos = asignaturas_por_codigo.get(cod_asig, [])
-                if len(candidatos) == 1:
-                    asig = candidatos[0]
-                elif len(candidatos) > 1:
-                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo y sede."})
-                    continue
+            candidatos = asignaturas_por_codigo.get(cod_asig, [])
+            if grupo:
+                candidatos = [a for a in candidatos if str(getattr(a, "grupo", "") or "").strip() == grupo]
+
+            if len(candidatos) == 1:
+                asig = candidatos[0]
+            elif len(candidatos) > 1:
+                if grupo:
+                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}, grupo {grupo}). Selecciona una asignatura específica en el formulario de matriculados."})
+                else:
+                    errors.append({"row": row_num, "error": f"Asignatura ambigua ({cod_asig}). Debes indicar grupo."})
+                continue
             if not asig:
-                detalle = f"{cod_asig} grupo {grupo} sede {sede}" if (grupo or sede) else cod_asig
+                detalle = f"{cod_asig} grupo {grupo}" if grupo else cod_asig
                 errors.append({"row": row_num, "error": f"Asignatura no encontrada: {detalle}"})
                 continue
             row_asignaturas = [asig]
@@ -4156,7 +4417,37 @@ def coordinador_import_docentes_view(request):
     df.columns = df.columns.str.strip().str.lower()
     
     # OPTIMIZACIÓN: Pre-cargar datos existentes
-    tipos_documento_map = {td.descripcion.lower(): td for td in TipoDocumento.objects.all()}
+    tipos_documento_map_desc_norm = {}
+    for td in TipoDocumento.objects.all():
+        tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
+
+    # Mantener compatibilidad con abreviaturas usadas en estudiantes (C.C., C.R., T.I., PPT)
+    allowed_tipo_doc_aliases = {
+        "cc": "cedula de ciudadania",
+        "c.c": "cedula de ciudadania",
+        "c.c.": "cedula de ciudadania",
+        "ce": "cedula de extranjeria",
+        "c.e": "cedula de extranjeria",
+        "c.e.": "cedula de extranjeria",
+        "ti": "tarjeta de identidad",
+        "t.i": "tarjeta de identidad",
+        "t.i.": "tarjeta de identidad",
+        "pas": "pasaporte",
+        "pasaporte": "pasaporte",
+        "rc": "registro civil",
+        "cr": "registro civil",
+        "c.r": "registro civil",
+        "c.r.": "registro civil",
+        "ppt": "permiso por proteccion temporal",
+        "p.p.t": "permiso por proteccion temporal",
+        "p.p.t.": "permiso por proteccion temporal",
+        "nuip": "nuip",
+    }
+
+    ppt_norm = _normalize_text("permiso por proteccion temporal")
+    if ppt_norm not in tipos_documento_map_desc_norm:
+        tipo_ppt = TipoDocumento.objects.create(descripcion="Permiso por Protección Temporal")
+        tipos_documento_map_desc_norm[_normalize_text(tipo_ppt.descripcion)] = tipo_ppt
     existing_docentes_codigos = set(Docente.objects.values_list('codigo_docente', flat=True))
     existing_docentes_correos = set(Docente.objects.values_list('correo', flat=True))
     existing_docentes_docs = set(Docente.objects.values_list('num_documento', flat=True))
@@ -4207,10 +4498,20 @@ def coordinador_import_docentes_view(request):
         if not (codigo and nombre and apellido and correo and tipo_doc_desc and num_documento):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
         
-        # Tipo documento
-        tipo_doc = tipos_documento_map.get(tipo_doc_desc.lower())
+        # Tipo documento (tolerante a alias como CC, C.C., CR, T.I., PPT)
+        tipo_doc = None
+        input_norm = _normalize_text(tipo_doc_desc)
+        mapped_norm = allowed_tipo_doc_aliases.get(input_norm, input_norm)
+        tipo_doc = tipos_documento_map_desc_norm.get(mapped_norm)
+
         if not tipo_doc:
-            errors.append({"row": row_num, "error": f"TipoDocumento no encontrado: {tipo_doc_desc}"}); continue
+            for key_norm, td in tipos_documento_map_desc_norm.items():
+                if mapped_norm in key_norm or key_norm in mapped_norm:
+                    tipo_doc = td
+                    break
+
+        if not tipo_doc:
+            errors.append({"row": row_num, "error": f"Tipo de documento no válido: {tipo_doc_desc}"}); continue
         
         # Verificar si ya existe
         if codigo in existing_docentes_codigos:
@@ -6519,10 +6820,11 @@ def ra_validation_view(request, ra_id: int):
     if not ra:
         return Response({"detail": "RA no existe"}, status=status.HTTP_404_NOT_FOUND)
     act_sum = RaActividad.objects.filter(ra_id=ra_id).aggregate(v=Sum("porcentaje_ra_actividad"))["v"] or 0
+    act_count = RaActividad.objects.filter(ra_id=ra_id).count()
     ind_sum = IndicadoresDeLogro.objects.filter(ra_id=ra_id).aggregate(v=Sum("porcentaje_ind"))["v"] or 0
     return Response({
         "ra_id": ra_id,
-        "actividades": {"suma": float(act_sum), "ok": float(act_sum) == 100.0, "faltante": max(0.0, 100.0 - float(act_sum))},
+        "actividades": {"suma": float(act_sum), "count": act_count, "ok": float(act_sum) == 100.0, "faltante": max(0.0, 100.0 - float(act_sum))},
         "indicadores": {"suma": float(ind_sum), "ok": float(ind_sum) == 100.0, "faltante": max(0.0, 100.0 - float(ind_sum))},
     })
 

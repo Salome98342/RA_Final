@@ -3,8 +3,18 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
+import PaginationControls from '@/components/PaginationControls'
 import { getCourseAnalytics } from '@/services/api'
 import type { CourseAnalyticsResponse } from '@/types'
+
+type RouteState = {
+  returnTo?: string
+  id_asignatura?: number
+  grupo?: string
+  sede?: string
+}
+
+const DEFAULT_PAGE_SIZE = 10
 
 const AsignaturaAnalisis = () => {
   const { codigo } = useParams<{ codigo: string }>()
@@ -13,11 +23,16 @@ const AsignaturaAnalisis = () => {
   const [data, setData] = useState<CourseAnalyticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [raPage, setRaPage] = useState(1)
+  const [studentPage, setStudentPage] = useState(1)
+  const [raPageSize, setRaPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [studentPageSize, setStudentPageSize] = useState(DEFAULT_PAGE_SIZE)
 
-  const returnTo = (location.state as any)?.returnTo || '/coordinador/asignaturas'
-  const idAsignatura = (location.state as any)?.id_asignatura as number | undefined
-  const grupo = (location.state as any)?.grupo as string | undefined
-  const sede = (location.state as any)?.sede as string | undefined
+  const routeState = (location.state as RouteState | null) || {}
+  const returnTo = routeState.returnTo || '/coordinador/asignaturas'
+  const idAsignatura = routeState.id_asignatura
+  const grupo = routeState.grupo
+  const sede = routeState.sede
 
   useEffect(() => {
     if (!codigo) return
@@ -35,13 +50,18 @@ const AsignaturaAnalisis = () => {
         } else {
           setError('No se pudo cargar la información de la asignatura')
         }
-      } catch (e) {
+      } catch {
         setError('Error al cargar datos')
       } finally {
         setLoading(false)
       }
     }
     loadData()
+  }, [codigo, idAsignatura, grupo, sede])
+
+  useEffect(() => {
+    setRaPage(1)
+    setStudentPage(1)
   }, [codigo, idAsignatura, grupo, sede])
 
   const active = location.pathname.includes('/docentes') ? 'docentes' : location.pathname.includes('/estudiantes') ? 'estudiantes' : location.pathname.includes('/matriculados') ? 'matriculados' : location.pathname.includes('/asignaturas-ra') ? 'asignaturas-ra' : location.pathname.includes('/imports') ? 'imports' : 'asignaturas'
@@ -124,6 +144,11 @@ const AsignaturaAnalisis = () => {
   }
 
   const { asignatura, docente, estudiantes_matriculados, estadistica_curso, resultados_aprendizaje, estudiantes } = data
+  const resultadosAprendizajePage = resultados_aprendizaje.slice((raPage - 1) * raPageSize, raPage * raPageSize)
+  const estudiantesOrdenados = [...estudiantes].sort((a, b) => b.nota - a.nota)
+  const estudiantesPageData = estudiantesOrdenados.slice((studentPage - 1) * studentPageSize, studentPage * studentPageSize)
+  const raMaxPage = Math.max(1, Math.ceil(resultados_aprendizaje.length / raPageSize))
+  const studentMaxPage = Math.max(1, Math.ceil(estudiantesOrdenados.length / studentPageSize))
 
   return (
     <div className="dashboard-body min-vh-100">
@@ -299,7 +324,7 @@ const AsignaturaAnalisis = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {resultados_aprendizaje.map((ra) => (
+                      {resultadosAprendizajePage.map((ra) => (
                         <tr key={ra.id_ra}>
                           <td><span className="badge bg-secondary">RA {ra.id_ra}</span></td>
                           <td><small>{ra.descripcion}</small></td>
@@ -325,6 +350,18 @@ const AsignaturaAnalisis = () => {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={raPage}
+                  totalPages={raMaxPage}
+                  totalItems={resultados_aprendizaje.length}
+                  pageSize={raPageSize}
+                  onPageChange={setRaPage}
+                  onPageSizeChange={(size) => {
+                    setRaPage(1)
+                    setRaPageSize(size)
+                  }}
+                  label="RAs"
+                />
               </div>
             </div>
 
@@ -347,9 +384,7 @@ const AsignaturaAnalisis = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {estudiantes
-                        .sort((a, b) => b.nota - a.nota)
-                        .map((est) => (
+                      {estudiantesPageData.map((est) => (
                           <tr key={est.id}>
                             <td><small className="font-monospace">{est.id}</small></td>
                             <td><small>{est.nombre}</small></td>
@@ -379,6 +414,18 @@ const AsignaturaAnalisis = () => {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={studentPage}
+                  totalPages={studentMaxPage}
+                  totalItems={estudiantesOrdenados.length}
+                  pageSize={studentPageSize}
+                  onPageChange={setStudentPage}
+                  onPageSizeChange={(size) => {
+                    setStudentPage(1)
+                    setStudentPageSize(size)
+                  }}
+                  label="estudiantes"
+                />
               </div>
             </div>
           </section>

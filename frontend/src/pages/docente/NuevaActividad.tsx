@@ -26,7 +26,8 @@ const NuevaActividadCurso: React.FC = () => {
   const [ras, setRas] = useState<{ id: string; titulo: string }[]>([])
   const [sel, setSel] = useState<Record<string, boolean>>({})
   const [aporteRA, setAporteRA] = useState<Record<string, string>>({})
-  const [totals, setTotals] = useState<Record<string, number>>({})
+  const [totals, setTotals] = useState<Record<string, number>>({}) // Almacena el conteo de actividades
+  const [actPercentages, setActPercentages] = useState<Record<string, number>>({}) // Almacena el porcentaje sumado
   const [saving, setSaving] = useState(false)
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [raIndMap, setRaIndMap] = useState<Record<string, Indicator[]>>({})
@@ -76,12 +77,13 @@ const NuevaActividadCurso: React.FC = () => {
       const entries = await Promise.all(ras.map(async (r) => {
         try {
           const v = await getRAValidation(r.id)
-          return [r.id, Number(v?.actividades?.suma ?? 0)] as const
+          return [r.id, Number(v?.actividades?.count ?? 0), Number(v?.actividades?.suma ?? 0)] as const
         } catch {
-          return [r.id, 0] as const
+          return [r.id, 0, 0] as const
         }
       }))
-      setTotals(Object.fromEntries(entries))
+      setTotals(Object.fromEntries(entries.map(([rid, count]) => [rid, count])))
+      setActPercentages(Object.fromEntries(entries.map(([rid, , suma]) => [rid, suma])))
     }
     if (ras.length) run()
   }, [ras])
@@ -117,9 +119,9 @@ const NuevaActividadCurso: React.FC = () => {
 
     // Precheck: cada RA no puede pasar de 100% en el aporte total al RA
     try {
-      const failing = selectedIds.find((rid) => (Number(totals[rid] ?? 0) + Number(aporteRA[rid] || 0)) > 100 + 1e-6)
+      const failing = selectedIds.find((rid) => (Number(actPercentages[rid] ?? 0) + Number(aporteRA[rid] || 0)) > 100 + 1e-6)
       if (failing) {
-        const nuevo = Number(totals[failing] ?? 0) + Number(aporteRA[failing] || 0)
+        const nuevo = Number(actPercentages[failing] ?? 0) + Number(aporteRA[failing] || 0)
         Alert.toast.error(`El RA ${failing} quedaría en ${nuevo.toFixed(2)}%. No puede exceder 100%. Ajusta el "Aporte al RA (%)".`)
         return
       }
@@ -354,7 +356,8 @@ const NuevaActividadCurso: React.FC = () => {
                     <tbody>
                       {ras.map(r => {
                         const checked = !!sel[r.id]
-                        const suma = Number(totals[r.id] ?? 0)
+                        const actCount = Number(totals[r.id] ?? 0)
+                        const suma = Number(actPercentages[r.id] ?? 0)
                         const aporte = Number(aporteRA[r.id] || 0)
                         const availableIndicators = raIndMap[r.id] || []
                         const allowedIndicators = new Set(availableIndicators.map((ind) => String(ind.id)))
@@ -408,14 +411,7 @@ const NuevaActividadCurso: React.FC = () => {
                                 />
                               </td>
                               <td>
-                                <progress
-                                  className="uv-progress"
-                                  value={Math.min(100, Math.max(0, suma))}
-                                  max={100}
-                                  aria-label="Progreso actividades RA"
-                                  title={`Progreso: ${fmtPct(suma)}%`}
-                                />
-                                <div className="ra-small text-muted text-end">{fmtPct(suma)}%</div>
+                                <div className="ra-small text-dark fw-bold">{actCount} actividades</div>
                               </td>
                               <td>
                                 {(() => {

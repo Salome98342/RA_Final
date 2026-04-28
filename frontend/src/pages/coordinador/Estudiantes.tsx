@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { 
   fetchEstudiantes, 
   createEstudiante, 
@@ -13,8 +13,13 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import EstudiantePerfilModal from '@/components/EstudiantePerfilModal'
+import PaginationControls from '@/components/PaginationControls'
 import Alert from '@/utils/alert'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
+import { getErrorMessage } from '@/utils/errors'
 import { useLocation, useNavigate } from 'react-router-dom'
+
+const DEFAULT_PAGE_SIZE = 10
 
 const Estudiantes: React.FC = () => {
   const jornadaOptions = ['', 'Diurna', 'Nocturna']
@@ -37,6 +42,9 @@ const Estudiantes: React.FC = () => {
   const [deactivatingId, setDeactivatingId] = useState<number | null>(null)
   const [activatingId, setActivatingId] = useState<number | null>(null)
   const [updatingJornadaId, setUpdatingJornadaId] = useState<number | null>(null)
+  const [activePage, setActivePage] = useState(1)
+  const [inactivePage, setInactivePage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -52,38 +60,43 @@ const Estudiantes: React.FC = () => {
     { key: 'imports', icon: 'bi-upload', title: 'Imports' },
   ]
 
+  const loadEstudiantes = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchEstudiantes(searchTerm || undefined, true)
+      setEstudiantes(data)
+    } catch (error: unknown) {
+      console.error('Error cargando estudiantes:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [searchTerm])
+
+  const loadTiposDocumento = useCallback(async () => {
+    try {
+      const data = await fetchTiposDocumento()
+      setTiposDocumento(data)
+    } catch (error: unknown) {
+      console.error('Error cargando tipos de documento:', error)
+    }
+  }, [])
+
   useEffect(() => {
     loadEstudiantes()
     loadTiposDocumento()
-  }, [])
+  }, [loadEstudiantes, loadTiposDocumento])
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadEstudiantes()
     }, 500)
     return () => clearTimeout(timer)
-  }, [searchTerm])
+  }, [loadEstudiantes])
 
-  const loadEstudiantes = async () => {
-    setLoading(true)
-    try {
-      const data = await fetchEstudiantes(searchTerm || undefined, true)
-      setEstudiantes(data)
-    } catch (e: any) {
-      console.error('Error cargando estudiantes:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadTiposDocumento = async () => {
-    try {
-      const data = await fetchTiposDocumento()
-      setTiposDocumento(data)
-    } catch (e: any) {
-      console.error('Error cargando tipos de documento:', e)
-    }
-  }
+  useEffect(() => {
+    setActivePage(1)
+    setInactivePage(1)
+  }, [searchTerm, estudiantes.length])
 
   const normalizeJornada = (value?: string | null) => {
     if (!value) return ''
@@ -138,9 +151,8 @@ const Estudiantes: React.FC = () => {
       setShowForm(false)
       // Recargar lista
       setTimeout(() => loadEstudiantes(), 1000)
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e.message || 'Error al crear estudiante'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'Error al crear estudiante'))
     } finally {
       setLoading(false)
     }
@@ -153,6 +165,16 @@ const Estudiantes: React.FC = () => {
 
   const estudiantesActivos = estudiantes.filter(est => est.activo !== false)
   const estudiantesDesactivados = estudiantes.filter(est => est.activo === false)
+  const activeMaxPage = Math.max(1, Math.ceil(estudiantesActivos.length / pageSize))
+  const inactiveMaxPage = Math.max(1, Math.ceil(estudiantesDesactivados.length / pageSize))
+  const visibleActivos = useMemo(
+    () => estudiantesActivos.slice((activePage - 1) * pageSize, activePage * pageSize),
+    [estudiantesActivos, activePage, pageSize]
+  )
+  const visibleInactivos = useMemo(
+    () => estudiantesDesactivados.slice((inactivePage - 1) * pageSize, inactivePage * pageSize),
+    [estudiantesDesactivados, inactivePage, pageSize]
+  )
 
   const handleDesactivarPerfil = async (estudiante: EstudianteListItem) => {
     const confirmed = await Alert.confirm({
@@ -169,9 +191,8 @@ const Estudiantes: React.FC = () => {
       const result = await deactivateEstudiante(estudiante.id_estudiante)
       Alert.success(result.detail)
       await loadEstudiantes()
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'No se pudo desactivar el perfil del estudiante'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudo desactivar el perfil del estudiante'))
     } finally {
       setDeactivatingId(null)
     }
@@ -192,9 +213,8 @@ const Estudiantes: React.FC = () => {
       const result = await activateEstudiante(estudiante.id_estudiante)
       Alert.success(result.detail)
       await loadEstudiantes()
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'No se pudo reactivar el perfil del estudiante'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudo reactivar el perfil del estudiante'))
     } finally {
       setActivatingId(null)
     }
@@ -214,9 +234,8 @@ const Estudiantes: React.FC = () => {
           : `Jornada de ${estudiante.nombre} ${estudiante.apellido} eliminada`
       )
       await loadEstudiantes()
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'No se pudo actualizar la jornada'
-      Alert.error(msg)
+    } catch (error: unknown) {
+      Alert.error(getErrorMessage(error, 'No se pudo actualizar la jornada'))
     } finally {
       setUpdatingJornadaId(null)
     }
@@ -363,7 +382,7 @@ const Estudiantes: React.FC = () => {
                         <option value="">Seleccione...</option>
                         {tiposDocumento.map(td => (
                           <option key={td.id_tipo_documento} value={td.descripcion}>
-                            {td.descripcion}
+                            {formatTipoDocumentoAbbr(td.descripcion)}
                           </option>
                         ))}
                       </select>
@@ -483,21 +502,22 @@ const Estudiantes: React.FC = () => {
               )}
 
               {!loading && estudiantesActivos.length > 0 && (
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Nombre Completo</th>
-                        <th>Correo</th>
-                        <th>Documento</th>
-                        <th>Jornada</th>
-                        <th>Estado</th>
-                        <th className="text-end">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {estudiantesActivos.map(est => (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Código</th>
+                          <th>Nombre Completo</th>
+                          <th>Correo</th>
+                          <th>Documento</th>
+                          <th>Jornada</th>
+                          <th>Estado</th>
+                          <th className="text-end">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                      {visibleActivos.map(est => (
                         <tr 
                           key={est.id_estudiante}
                           onDoubleClick={() => handleEstudianteDoubleClick(est.id_estudiante)}
@@ -517,7 +537,7 @@ const Estudiantes: React.FC = () => {
                           </td>
                           <td>
                             <span className="text-muted small">
-                              {est.tipo_documento}: {est.num_documento}
+                              {formatTipoDocumentoAbbr(est.tipo_documento)}: {est.num_documento}
                             </span>
                           </td>
                           <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
@@ -568,9 +588,24 @@ const Estudiantes: React.FC = () => {
                           </td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    page={activePage}
+                    totalPages={activeMaxPage}
+                    totalItems={estudiantesActivos.length}
+                    pageSize={pageSize}
+                    onPageChange={setActivePage}
+                    onPageSizeChange={(size) => {
+                      setActivePage(1)
+                      setInactivePage(1)
+                      setPageSize(size)
+                    }}
+                    label="estudiantes activos"
+                    className="px-3 pb-3"
+                  />
+                </>
               )}
             </div>
           </div>
@@ -600,21 +635,22 @@ const Estudiantes: React.FC = () => {
               )}
 
               {!loading && estudiantesDesactivados.length > 0 && (
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Código</th>
-                        <th>Nombre Completo</th>
-                        <th>Correo</th>
-                        <th>Documento</th>
-                        <th>Jornada</th>
-                        <th>Estado</th>
-                        <th className="text-end">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {estudiantesDesactivados.map(est => (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Código</th>
+                          <th>Nombre Completo</th>
+                          <th>Correo</th>
+                          <th>Documento</th>
+                          <th>Jornada</th>
+                          <th>Estado</th>
+                          <th className="text-end">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                      {visibleInactivos.map(est => (
                         <tr 
                           key={est.id_estudiante}
                           onDoubleClick={() => handleEstudianteDoubleClick(est.id_estudiante)}
@@ -634,7 +670,7 @@ const Estudiantes: React.FC = () => {
                           </td>
                           <td>
                             <span className="text-muted small">
-                              {est.tipo_documento}: {est.num_documento}
+                              {formatTipoDocumentoAbbr(est.tipo_documento)}: {est.num_documento}
                             </span>
                           </td>
                           <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
@@ -681,9 +717,24 @@ const Estudiantes: React.FC = () => {
                           </td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    page={inactivePage}
+                    totalPages={inactiveMaxPage}
+                    totalItems={estudiantesDesactivados.length}
+                    pageSize={pageSize}
+                    onPageChange={setInactivePage}
+                    onPageSizeChange={(size) => {
+                      setActivePage(1)
+                      setInactivePage(1)
+                      setPageSize(size)
+                    }}
+                    label="estudiantes inactivos"
+                    className="px-3 pb-3"
+                  />
+                </>
               )}
             </div>
           </div>

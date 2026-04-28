@@ -212,6 +212,24 @@ class CoordinadorEndpointsTests(TestCase):
 		# Nuestra validación exige extensión .csv o content-type que contenga 'csv'
 		self.assertEqual(res.status_code, 400)
 
+	def test_import_docentes_accepts_document_type_aliases(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		from .models.models import TipoDocumento, Docente
+
+		# Simula catálogo descriptivo; el archivo puede traer abreviaturas.
+		TipoDocumento.objects.get_or_create(descripcion="Cedula de Ciudadania")
+		csv_content = (
+			b"codigo_docente,nombre,apellido,correo,tipo_documento,num_documento\n"
+			b"D200,Ana,Ruiz,ana.ruiz@example.com,C.C.,9200"
+		)
+		f = SimpleUploadedFile("docentes_alias.csv", csv_content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/docentes", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		payload = res.json()
+		self.assertEqual(payload.get("created"), 1)
+		doc = Docente.objects.get(codigo_docente="D200")
+		self.assertIsNotNone(doc.tipo_documento)
+
 	def test_import_matriculados_invalid_mime(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
 		f = SimpleUploadedFile("matriculados.txt", b"codigo_estudiante,codigo_asignatura,periodo\nX,E1,2025-1", content_type="text/plain")
@@ -228,6 +246,33 @@ class CoordinadorEndpointsTests(TestCase):
 		data = res.json()
 		self.assertGreaterEqual(data.get("created_asignaturas", 0), 1)
 		self.assertGreaterEqual(data.get("created_ras", 0), 1)
+
+	def test_import_asignaturas_template_headers_include_periodo_and_creditos(self):
+		from openpyxl import load_workbook
+		from pathlib import Path
+
+		base = Path(settings.BASE_DIR) / "plantillas"
+		expected_csv = [
+			"codigo_asignatura",
+			"nombre_asignatura",
+			"codigo_docente",
+			"codigo_programa",
+			"periodo",
+			"grupo",
+			"sede",
+			"creditos",
+			"ra_descripcion",
+			"ra_porcentaje",
+		]
+		expected_il = expected_csv + ["indicador_descripcion", "indicador_porcentaje"]
+
+		for filename, expected in (
+			("plantilla_asignaturas_ras.xlsx", expected_csv),
+			("plantilla_asignaturas_ras_il.xlsx", expected_il),
+		):
+			ws = load_workbook(base / filename).active
+			headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+			self.assertEqual(headers, expected)
 
 	def test_import_matriculados_audit_created(self):
 		# Crear período y estudiante para que import cree la matrícula
@@ -469,6 +514,21 @@ class CoordinadorEndpointsTests(TestCase):
 		est = Estudiante.objects.get(codigo_estudiante="E2001")
 		self.assertTrue(check_password(settings.DEFAULT_BULK_STUDENT_PASSWORD, est.contrasena_estudiante))
 		self.assertTrue(ImportAudit.objects.filter(kind="estudiantes", filename="estudiantes.csv", created_count=1).exists())
+
+	def test_import_estudiantes_preserves_enie_in_text_fields(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		content = (
+			"codigo_estudiante,nombre,apellido,correo,tipo_documento,num_documento,jornada\n"
+			"E2002,Peña,Muñoz,pena.munoz@example.com,CC,2002,Diurna\n"
+		).encode("utf-8")
+		f = SimpleUploadedFile("estudiantes_enie.csv", content, content_type="text/csv")
+		res = self.client.post("/api/coordinador/import/estudiantes", {"file": f}, **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		data = res.json()
+		self.assertEqual(data.get("created"), 1)
+		est = Estudiante.objects.get(codigo_estudiante="E2002")
+		self.assertEqual(est.nombre, "Peña")
+		self.assertEqual(est.apellido, "Muñoz")
 
 	def _build_estudiantes_xlsx(self, rows, filename="datos_contacto_matriculados.xlsx"):
 		from django.core.files.uploadedfile import SimpleUploadedFile

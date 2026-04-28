@@ -322,7 +322,7 @@ export async function deleteIndicador(raId: string, indicadorId: string, passwor
 
 // Validaciones y progreso
 export async function getRAValidation(raId: string): Promise<{
-  actividades: { suma: number; ok: boolean; faltante: number }
+  actividades: { suma: number; count: number; ok: boolean; faltante: number }
   indicadores: { suma: number; ok: boolean; faltante: number }
 }> {
   const { data } = await api.get(endpoints.validacion.ra(raId))

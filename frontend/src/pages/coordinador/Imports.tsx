@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import {
-  fetchAsignaturas,
   importAsignaturasRAs,
   importDocentes,
   importEstudiantes,
   importMatriculados,
-  type EstudianteListItem,
 } from '@/services/coordinador'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
@@ -34,6 +32,7 @@ type ImportErrorItem = {
 
 type ImportApiResponse = {
   created?: number
+  updated?: number
   existing?: number
   created_asignaturas?: number
   existing_asignaturas?: number
@@ -51,6 +50,7 @@ type ImportApiResponse = {
 
 type ImportResult = {
   inserted: number
+  updated: number
   existing: number
   failed: number
   processed: number
@@ -123,7 +123,7 @@ const cardConfigs: ImportCardConfig[] = [
     title: 'Estudiantes',
     iconClass: 'bi bi-people-fill',
     accentClass: 'text-danger',
-    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico.',
+    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico. En tipo_documento solo se acepta: C.C., C.R., T.I., PPT.',
     acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada',
     templateCandidates: [
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },
@@ -164,7 +164,7 @@ const cardConfigs: ImportCardConfig[] = [
     iconClass: 'bi bi-clipboard-check-fill',
     accentClass: 'text-danger',
     description: 'Relaciona estudiantes con asignaturas y periodo académico de matrícula.',
-    acceptedColumns: 'codigo_estudiante o codigo, codigo_asignatura (opcional por nombre de archivo), grupo, sede, semestre (opcional), periodo (opcional)',
+    acceptedColumns: 'codigo_estudiante o codigo, codigo_asignatura (opcional por nombre de archivo), grupo, semestre (opcional), periodo (opcional)',
     templateCandidates: [
       { fileName: 'plantilla_matriculados.xlsx', downloadName: 'plantilla_matriculados.xlsx' },
     ],
@@ -398,6 +398,7 @@ const buildResult = (kind: ImportKind, response: ImportApiResponse, durationMs: 
 
     return {
       inserted,
+      updated: 0,
       existing,
       failed,
       processed,
@@ -409,16 +410,18 @@ const buildResult = (kind: ImportKind, response: ImportApiResponse, durationMs: 
   }
 
   const inserted = Number(response.created || 0)
+  const updated = Number(response.updated || 0)
   const existing = Number(response.existing || 0)
   const failed = errors.length
 
   return {
     inserted,
+    updated,
     existing,
     failed,
-    processed: inserted + existing + failed,
+    processed: inserted + updated + existing + failed,
     durationMs,
-    details: `Insertados: ${inserted}, existentes: ${existing}`,
+    details: `Insertados: ${inserted}, actualizados: ${updated}, existentes sin cambios: ${existing}`,
     errors,
     importedStudents,
   }
@@ -735,7 +738,7 @@ const Imports: React.FC<ImportsProps> = ({
         Alert.toast.success('Importación exitosa.')
       }
 
-      Alert.toast.info(`Registros procesados: ${result.processed}. Insertados: ${result.inserted}.`)
+      Alert.toast.info(`Registros procesados: ${result.processed}. Insertados: ${result.inserted}. Actualizados: ${result.updated}.`)
 
       if (kind === 'est') {
         await showImportStudentsSummaryAlert(result)

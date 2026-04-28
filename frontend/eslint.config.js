@@ -23,7 +23,6 @@ export default defineConfig([
       // Desactivar validación de ARIA para expresiones dinámicas de JSX
       // que el linter no puede evaluar correctamente
       'axe/aria': 'off',
-      'no-inline-styles': 'warn', // Cambiar a warning en lugar de error
     },
   },
 ])

@@ -10,9 +10,6 @@ const DocenteHome: React.FC = () => {
   const sidebarItems = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
-    { key: 'crear', icon: 'bi-pencil-square', title: 'RA/Actividades' },
-    { key: 'calificar', icon: 'bi-check2-square', title: 'Calificar' },
-    { key: 'recursos', icon: 'bi-paperclip', title: 'Recursos' },
     ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
   ]
 

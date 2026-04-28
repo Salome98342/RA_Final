@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { fetchEstudiantePerfil, type EstudiantePerfilCompleto } from '@/services/coordinador'
+import { formatTipoDocumentoAbbr } from '@/utils/documento'
 import { isPeriodoAtLeast2024I, sortPeriodosDesc } from '@/utils/periodos'
+import { getErrorMessage } from '@/utils/errors'
 
 interface EstudiantePerfilModalProps {
   id_estudiante: number
@@ -30,8 +32,8 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
         setData(normalizedResult)
         // Seleccionar automáticamente el período más reciente disponible.
         setPeriodoSeleccionado(filteredPeriodos.length ? String(filteredPeriodos[0].id_periodo) : ALL_PERIODS_VALUE)
-      } catch (err: any) {
-        setError(err?.response?.data?.detail || 'Error al cargar el perfil del estudiante')
+      } catch (error: unknown) {
+        setError(getErrorMessage(error, 'Error al cargar el perfil del estudiante'))
       } finally {
         setLoading(false)
       }
@@ -140,7 +142,7 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                       <div className="col-md-6">
                         <div className="mb-2">
                           <strong className="text-muted me-2">Documento:</strong>
-                          <span>{data.estudiante.tipo_documento} - {data.estudiante.num_documento}</span>
+                          <span>{formatTipoDocumentoAbbr(data.estudiante.tipo_documento)} - {data.estudiante.num_documento}</span>
                         </div>
                         <div className="mb-2">
                           <strong className="text-muted me-2">Programa:</strong>
