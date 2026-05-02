@@ -20,6 +20,11 @@ export type Activity = {
     retroalimentacion: string | null
     id_ind: string | null
   }>
+  // 🆕 Estado y metadatos para UI
+  estado?: 'pendiente' | 'calificado'  // pendiente = hay notas que completar, calificado = todas las notas del RA asignadas
+  esCalificada?: boolean  // true si todas las notas de RAs están completas
+  notaFinal?: number | null  // Nota ponderada final (solo lectura)
+  porcentajesTotales?: number  // Suma de porcentajes de RAs en esta actividad
 }
 export type Grade = { estudiante: string; actividad: string; nota: number | null }
 

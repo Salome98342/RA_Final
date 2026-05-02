@@ -9,6 +9,7 @@ import type { Student, Activity, RA } from '@/types'
 import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade, getIndicatorChart } from '@/services/api'
 import Chart from 'chart.js/auto'
 import StudentList from '@/components/StudentList'
+import '@/styles/calificar.css'
 
 const DocenteCalificar: React.FC = () => {
   const { curso, raId } = useParams<{curso: string; raId?: string}>()
@@ -27,8 +28,8 @@ const DocenteCalificar: React.FC = () => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [bulkSaving, setBulkSaving] = useState(false)
   const [exportingCourseCsv, setExportingCourseCsv] = useState(false)
+  const [editingGraded, setEditingGraded] = useState<Set<string>>(new Set())
 
-  // Exportar calificaciones a CSV (para el estudiante seleccionado)
   const exportCsv = () => {
     const student = selectedStudent
     if (!student) {
@@ -68,7 +69,6 @@ const DocenteCalificar: React.FC = () => {
     Alert.toast.success('CSV generado.')
   }
 
-  // Exportar calificaciones de todos los estudiantes del curso para este RA
   const exportCsvCurso = async () => {
     if (!curso || !raId) {
       Alert.toast.error('Falta información del curso o RA.')
@@ -83,7 +83,6 @@ const DocenteCalificar: React.FC = () => {
       const headers = ['Curso', 'RA', 'Estudiante', 'Actividad', 'Indicador', 'Nota', 'Retroalimentacion']
       const allRows: string[][] = []
       for (const s of students) {
-        // Cargar actividades con notas específicas para el estudiante
         const acts = await getActivitiesByRA(raId, { matriculaId: s.matriculaId })
         for (const a of acts) {
           const indicadorDesc = Array.isArray(a.indicadores)
@@ -122,7 +121,6 @@ const DocenteCalificar: React.FC = () => {
     }
   }
 
-  // Cargar estudiantes y actividades (todas las de todos los RAs si no hay raId)
   useEffect(() => {
     if (!curso) return
     getStudentsByCourse(curso).then(setStudents)
@@ -147,14 +145,13 @@ const DocenteCalificar: React.FC = () => {
     loadActs()
   }, [curso, raId])
 
-  // Limpiar estado de ediciones cuando cambia el estudiante seleccionado
   useEffect(() => {
     if (selectedStudent) {
-      setEdits({}) // Limpiar todas las ediciones pendientes
+      setEdits({})
+      setEditingGraded(new Set())
     }
   }, [selectedStudent])
 
-  // Re-cargar actividades del estudiante (todas las de sus RAs) cuando se selecciona estudiante
   useEffect(() => {
     if (!selectedStudent || !curso) return
     const loadForStudent = async () => {
@@ -164,7 +161,6 @@ const DocenteCalificar: React.FC = () => {
           const acts = await getActivitiesByRA(raId, { matriculaId: selectedStudent.matriculaId })
           setActivities(acts.map(a => ({ ...a, _raId: raId })) as Activity[])
         } else {
-          // Multi-RA
           const raList = ras.length ? ras : await getRAsByCourse(curso)
           if (!ras.length) setRAs(raList)
           const all: Activity[] = []
@@ -182,7 +178,6 @@ const DocenteCalificar: React.FC = () => {
   const renderChart = useCallback(async (student: Student) => {
     if (!curso) return
     const data = await getIndicatorChart(curso, student.id)
-    // Multi-RA: usamos todos los indicadores, RA específico: filtramos
     const filtered = raId ? data.filter(d => String(d.ra_id) === String(raId)) : data
     const noData = filtered.length === 0 || filtered.every(d => d.avg_pct == null)
     setChartEmpty(noData)
@@ -202,42 +197,19 @@ const DocenteCalificar: React.FC = () => {
     })
   }, [curso, raId])
 
-  // Asegurar que el gráfico se renderice cuando se abre el panel o cambia el estudiante
   useEffect(() => {
     if (showChart && selectedStudent) {
-      // Esperar a que el canvas esté montado
       const id = window.setTimeout(() => { renderChart(selectedStudent) }, 0)
       return () => window.clearTimeout(id)
     }
   }, [showChart, selectedStudent, renderChart])
 
-  // Helpers por fila
   const getEff = (a: Activity) => {
     const e = edits[a.raActividadId || ''] || {}
-    
-    // 🆕 Determinar el indicador efectivo (seleccionado en el dropdown o el del backend)
     const effectiveIndicadorId = e.indicadorId ?? (a.indicadorId ?? '')
-    
-    // 🆕 Si hay notas por indicador, buscar la nota correspondiente al indicador seleccionado
-    let backendNota: number | null = null
-    let backendRetro: string | null = null
-    
-    if (a.notasPorIndicador && a.notasPorIndicador.length > 0) {
-      // Buscar la nota del indicador seleccionado
-      const notaParaIndicador = a.notasPorIndicador.find(
-        n => String(n.id_ind ?? '') === String(effectiveIndicadorId)
-      )
-      
-      if (notaParaIndicador) {
-        backendNota = notaParaIndicador.nota
-        backendRetro = notaParaIndicador.retroalimentacion
-      }
-    } else {
-      // Fallback: usar los campos legacy si no hay notas por indicador
-      backendNota = a.nota ?? null
-      backendRetro = a.retroalimentacion ?? null
-    }
-    
+    const firstNoteByRA = (a.notasPorIndicador || []).find(n => n.nota != null)
+    const backendNota = a.nota ?? firstNoteByRA?.nota ?? null
+    const backendRetro = a.retroalimentacion ?? firstNoteByRA?.retroalimentacion ?? null
     return {
       indicadorId: effectiveIndicadorId,
       nota: e.nota ?? (backendNota != null ? String(backendNota) : ''),
@@ -248,90 +220,66 @@ const DocenteCalificar: React.FC = () => {
     }
   }
 
-  // Eliminado bloque de cálculo combinado por RA (el usuario indicó que no tiene sentido para calificar).
+  const isActivityGraded = (a: Activity): boolean => {
+    const legacy = a.nota != null && a.nota >= 0 && a.nota <= 5
+    const byIndicator = Array.isArray(a.notasPorIndicador)
+      ? a.notasPorIndicador.some(n => n.nota != null && n.nota >= 0 && n.nota <= 5)
+      : false
+    return legacy || byIndicator
+  }
 
-  const isIndicatorRequired = (a: Activity) => Array.isArray(a.indicadores) && a.indicadores.length > 0
+  const getActivityFinal = (rows: Activity[]): number | null => {
+    let weighted = 0
+    let totalWeight = 0
+    for (const row of rows) {
+      const eff = getEff(row)
+      const nota = Number(eff.nota)
+      if (Number.isNaN(nota) || nota < 0 || nota > 5) continue
+      const weight = typeof row.porcentajeRA === 'number' && row.porcentajeRA > 0 ? row.porcentajeRA : 1
+      weighted += nota * weight
+      totalWeight += weight
+    }
+    if (totalWeight <= 0) return null
+    return weighted / totalWeight
+  }
+
+  const groupedByActivityAndState = useMemo(() => {
+    const grouped: Record<string, {
+      actividad: Activity
+      ras: {
+        pendientes: Activity[]
+        calificadas: Activity[]
+      }
+    }> = {}
+
+    activities.forEach(act => {
+      const actId = act.id || ''
+      if (!grouped[actId]) {
+        grouped[actId] = {
+          actividad: act,
+          ras: { pendientes: [], calificadas: [] }
+        }
+      }
+      
+      if (isActivityGraded(act)) {
+        grouped[actId].ras.calificadas.push(act)
+      } else {
+        grouped[actId].ras.pendientes.push(act)
+      }
+    })
+
+    return grouped
+  }, [activities])
 
   const setEdit = (id: string, patch: Partial<{ nota: string; indicadorId: string; retro: string }>) => {
     setEdits(prev => {
       const current = prev[id] || {}
-      
-      // 🆕 Si se está cambiando el indicador, cargar la nota correspondiente del backend
-      if (patch.indicadorId !== undefined && patch.indicadorId !== current.indicadorId) {
-        const activity = activities.find(a => a.raActividadId === id)
-        if (activity?.notasPorIndicador) {
-          const notaParaIndicador = activity.notasPorIndicador.find(
-            n => String(n.id_ind ?? '') === String(patch.indicadorId)
-          )
-          
-          if (notaParaIndicador) {
-            // Cargar nota y retroalimentación del backend, sin marcar como dirty
-            return {
-              ...prev,
-              [id]: {
-                indicadorId: patch.indicadorId,
-                nota: notaParaIndicador.nota != null ? String(notaParaIndicador.nota) : '',
-                retro: notaParaIndicador.retroalimentacion ?? '',
-                dirty: false, // No está modificado, solo se cambió de indicador
-              },
-            }
-          } else {
-            // No hay nota para este indicador, limpiar campos
-            return {
-              ...prev,
-              [id]: {
-                indicadorId: patch.indicadorId,
-                nota: '',
-                retro: '',
-                dirty: false,
-              },
-            }
-          }
-        }
-      }
-      
-      // Comportamiento normal para otros cambios
       return {
         ...prev,
         [id]: { ...current, ...patch, dirty: true },
       }
     })
   }
-
-  // Auto-seleccionar indicador si la actividad tiene exactamente uno y no hay uno escogido aún
-  useEffect(() => {
-    setEdits(prev => {
-      const next = { ...prev }
-      for (const a of activities) {
-        const key = a.raActividadId || ''
-        if (!key) continue
-        const e = next[key]
-        const effIndic = (e?.indicadorId ?? a.indicadorId ?? '').toString()
-        if ((!effIndic || effIndic === 'null' || effIndic === 'undefined') && Array.isArray(a.indicadores) && a.indicadores.length === 1) {
-          const indicadorId = String(a.indicadores[0].id)
-          
-          // 🆕 Buscar la nota correspondiente al indicador auto-seleccionado
-          let nota = ''
-          let retro = ''
-          if (a.notasPorIndicador) {
-            const notaParaIndicador = a.notasPorIndicador.find(n => String(n.id_ind ?? '') === indicadorId)
-            if (notaParaIndicador) {
-              nota = notaParaIndicador.nota != null ? String(notaParaIndicador.nota) : ''
-              retro = notaParaIndicador.retroalimentacion ?? ''
-            }
-          }
-          
-          next[key] = { 
-            indicadorId, 
-            nota, 
-            retro, 
-            dirty: false // No marcar como dirty porque viene del backend
-          }
-        }
-      }
-      return next
-    })
-  }, [activities])
 
   const saveRow = async (a: Activity) => {
     if (!selectedStudent) {
@@ -350,39 +298,20 @@ const DocenteCalificar: React.FC = () => {
       Alert.toast.error('La nota debe estar entre 0 y 5.')
       return
     }
-    if (isIndicatorRequired(a) && !eff.indicadorId) {
-      Alert.toast.error('Selecciona un indicador para esta actividad.')
-      return
-    }
 
-    // 🔴 MULTI-RA: Detectar si esta actividad está en múltiples RAs
-    // Buscar todas las actividades con el mismo id_actividad (diferentes ra_actividad_id)
-    const relatedActivities = activities.filter(act => act.id === a.id && act.raActividadId)
-    const keysToUpdate = relatedActivities.map(act => act.raActividadId!)
-    
-    // Validación adicional: verificar que hay relaciones válidas
-    if (keysToUpdate.length === 0) {
-      Alert.toast.error('Error: No se encontraron relaciones RA-Actividad válidas.')
-      return
-    }
-    
-    // Validación: verificar que la matrícula existe
     if (!selectedStudent.matriculaId) {
       Alert.toast.error('Error: Estudiante sin matrícula válida.')
       return
     }
     
-    // Marcar todas como "guardando"
     setEdits(prev => {
-      const updated = { ...prev }
-      keysToUpdate.forEach(k => {
-        updated[k] = { ...(prev[k] || {}), saving: true }
-      })
-      return updated
+      return {
+        ...prev,
+        [key]: { ...(prev[key] || {}), saving: true },
+      }
     })
 
     try {
-      // Normalizar indicadorId: solo enviar si es válido
       const normalizedIndicadorId = eff.indicadorId && 
         eff.indicadorId !== '' && 
         eff.indicadorId !== 'null' && 
@@ -390,65 +319,24 @@ const DocenteCalificar: React.FC = () => {
         ? eff.indicadorId 
         : undefined
       
-      // Guardar la nota en TODAS las relaciones ra_actividad de esta actividad
-      const savePromises = keysToUpdate.map(async (raActId) => {
-        try {
-          return await upsertGrade({
-            matriculaId: selectedStudent.matriculaId,
-            raActividadId: raActId,
-            nota: notaNum,
-            retroalimentacion: eff.retro || undefined,
-            indicadorId: normalizedIndicadorId,
-          })
-        } catch (error) {
-          // Capturar error específico de esta relación
-          throw { raActId, error }
+      await upsertGrade({
+        matriculaId: selectedStudent.matriculaId,
+        raActividadId: key,
+        nota: notaNum,
+        retroalimentacion: eff.retro || undefined,
+        indicadorId: normalizedIndicadorId,
+      })
+
+      setEdits(prev => {
+        return {
+          ...prev,
+          [key]: { ...(prev[key] || {}), saving: false, dirty: false, savedAt: Date.now() },
         }
       })
       
-      const results = await Promise.allSettled(savePromises)
-      
-      // Verificar si alguna falló
-      const failed = results.filter(r => r.status === 'rejected')
-      
-      if (failed.length > 0) {
-        // Al menos una operación falló
-        const firstError = (failed[0] as PromiseRejectedResult).reason
-        const errorMsg = firstError?.error?.response?.data?.detail 
-          || firstError?.error?.response?.data?.message
-          || firstError?.error?.message
-          || 'Error desconocido'
-        
-        setEdits(prev => {
-          const updated = { ...prev }
-          keysToUpdate.forEach(k => {
-            updated[k] = { ...(prev[k] || {}), saving: false }
-          })
-          return updated
-        })
-        
-        Alert.toast.error(`Error al guardar: ${errorMsg}. ${failed.length > 1 ? `Fallaron ${failed.length} de ${keysToUpdate.length} operaciones.` : ''}`)
-        return
-      }
-      
-      if (import.meta.env.DEV) {
-        console.debug(`Nota replicada en ${keysToUpdate.length} relación(es) ra_actividad para actividad "${a.nombre}"`)
-      }
-      
-      // Marcar todas como guardadas
-      setEdits(prev => {
-        const updated = { ...prev }
-        keysToUpdate.forEach(k => {
-          updated[k] = { ...(prev[k] || {}), saving: false, dirty: false, savedAt: Date.now() }
-        })
-        return updated
-      })
-      
-      // Actualizar TODAS las actividades relacionadas con la nueva nota
       setActivities(prev => prev.map(x => {
-        if (!keysToUpdate.includes(x.raActividadId || '')) return x
+        if ((x.raActividadId || '') !== key) return x
         
-        // Actualizar campos legacy
         const updated = { 
           ...x, 
           nota: notaNum, 
@@ -456,15 +344,12 @@ const DocenteCalificar: React.FC = () => {
           indicadorId: normalizedIndicadorId || null 
         }
         
-        // 🆕 Actualizar también notasPorIndicador
         if (updated.notasPorIndicador) {
-          // Buscar si ya existe una nota para este indicador
           const existingIdx = updated.notasPorIndicador.findIndex(
             n => String(n.id_ind ?? '') === String(normalizedIndicadorId ?? '')
           )
           
           if (existingIdx >= 0) {
-            // Actualizar nota existente
             updated.notasPorIndicador = [...updated.notasPorIndicador]
             updated.notasPorIndicador[existingIdx] = {
               nota: notaNum,
@@ -472,7 +357,6 @@ const DocenteCalificar: React.FC = () => {
               id_ind: normalizedIndicadorId || null,
             }
           } else {
-            // Agregar nueva nota
             updated.notasPorIndicador = [
               ...updated.notasPorIndicador,
               {
@@ -483,7 +367,6 @@ const DocenteCalificar: React.FC = () => {
             ]
           }
         } else {
-          // Crear array de notas por indicador
           updated.notasPorIndicador = [{
             nota: notaNum,
             retroalimentacion: eff.retro || null,
@@ -494,45 +377,42 @@ const DocenteCalificar: React.FC = () => {
         return updated
       }))
       
-      const multiMsg = keysToUpdate.length > 1 ? ` (replicada en ${keysToUpdate.length} RAs)` : ''
-      Alert.toast.success(`Guardado correctamente${multiMsg}.`)
+      Alert.toast.success('Guardado correctamente.')
       
-      // Revalidar desde backend solo ese RA para sincronizar (por si backend ajusta indicador/nota)
+      setEditingGraded(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+      
       const raForAct = (a as unknown as { _raId?: string })._raId
       if (selectedStudent && raForAct) {
         try {
           const freshActs = await getActivitiesByRA(raForAct, { matriculaId: selectedStudent.matriculaId })
-          // Actualizar todas las relaciones con datos frescos del backend
-          keysToUpdate.forEach(k => {
-            const updated = freshActs.find(f => String(f.raActividadId) === String(k))
-            if (updated) {
-              setActivities(prev => prev.map(x => 
-                x.raActividadId === k 
-                  ? { 
-                      ...x, 
-                      nota: updated.nota ?? notaNum, 
-                      retroalimentacion: updated.retroalimentacion ?? (eff.retro || null), 
-                      indicadorId: updated.indicadorId ?? (normalizedIndicadorId || null),
-                      // 🆕 Sincronizar notas por indicador desde el backend
-                      notasPorIndicador: updated.notasPorIndicador ?? x.notasPorIndicador
-                    } 
-                  : x
-              ))
-            }
-          })
+          const refreshed = freshActs.find(f => String(f.raActividadId) === String(key))
+          if (refreshed) {
+            setActivities(prev => prev.map(x =>
+              (x.raActividadId || '') === key
+                ? {
+                    ...x,
+                    nota: refreshed.nota ?? notaNum,
+                    retroalimentacion: refreshed.retroalimentacion ?? (eff.retro || null),
+                    indicadorId: refreshed.indicadorId ?? (normalizedIndicadorId || null),
+                    notasPorIndicador: refreshed.notasPorIndicador ?? x.notasPorIndicador,
+                  }
+                : x
+            ))
+          }
         } catch {/* ignore */}
       }
       if (showChart && selectedStudent) await renderChart(selectedStudent)
     } catch (err: unknown) {
-      // Marcar todas como error
       setEdits(prev => {
-        const updated = { ...prev }
-        keysToUpdate.forEach(k => {
-          updated[k] = { ...(prev[k] || {}), saving: false }
-        })
-        return updated
+        return {
+          ...prev,
+          [key]: { ...(prev[key] || {}), saving: false },
+        }
       })
-      // Extraer mensaje de error de manera segura
       const resData = (err as { response?: { data?: unknown } })?.response?.data
       let msg = 'No se pudo guardar la nota.'
       let reason = ''
@@ -544,7 +424,6 @@ const DocenteCalificar: React.FC = () => {
         if (typeof rec.message === 'string') msg = rec.message
         else if (typeof rec.detail === 'string') msg = rec.detail
         
-        // Razones comunes
         if (msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('no autorizado')) {
           reason = ' (Sesión expirada o sin permisos)'
         } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no existe')) {
@@ -585,6 +464,15 @@ const DocenteCalificar: React.FC = () => {
     setBulkSaving(false)
   }
 
+  const autoSaveRow = async (a: Activity) => {
+    const key = a.raActividadId || ''
+    if (!selectedStudent || !key) return
+    const eff = getEff(a)
+    if (eff.saving || !eff.dirty) return
+    if (eff.nota === '' || isNotaInvalid(eff.nota)) return
+    await saveRow(a)
+  }
+
   const saveAllAndNext = async () => {
     if (!selectedStudent) return
     setBulkSaving(true)
@@ -606,9 +494,6 @@ const DocenteCalificar: React.FC = () => {
     return Number.isNaN(n) || n < 0 || n > 5
   }
 
-  // Se eliminan helpers de aplicación masiva basados en nota RA.
-
-  // Sidebar con lista de estudiantes incluida directamente
   const sidebarItems = useMemo(() => ([
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
     { key: 'cursos', icon: 'bi-grid-3x3-gap', title: 'Cursos' },
@@ -625,7 +510,6 @@ const DocenteCalificar: React.FC = () => {
     if (key === 'crear') { if (curso) navigate(`/docente/${curso}/actividades/nueva`); return }
     if (key === 'recursos') { if (curso) navigate(`/docente/${curso}/recursos`); return }
     if (key === 'calificar') {
-      // Foco a lista estudiantes
       const el = document.getElementById('student-list-panel') as HTMLDivElement | null
       el?.focus()
     }
@@ -635,7 +519,6 @@ const DocenteCalificar: React.FC = () => {
 
   const onSelectStudent = useCallback(async (stu: Student) => {
     setSelectedStudent(stu)
-    // actividades recargan por efecto secundario (useEffect)
     if (showChart) await renderChart(stu)
   }, [showChart, renderChart])
 
@@ -653,217 +536,431 @@ const DocenteCalificar: React.FC = () => {
             ]}
             onNavigate={navigate}
           />
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          
+          <div className="d-flex align-items-center justify-content-between mb-4">
             <div className="content-title">
-              <i className="bi bi-check2-square text-success me-2"></i>
-              Calificar · Curso {curso} {raId ? `· RA ${raId}` : '· Todos los RAs'}
+              <i className="bi bi-pencil-square text-primary me-2"></i>
+              Calificar actividades
             </div>
             {state.role === 'coordinador' && (
               <button 
-                className="btn btn-outline-primary"
+                className="btn btn-outline-primary btn-sm"
                 onClick={() => navigate('/coordinador/asignaturas')}
                 title="Volver a la vista del coordinador"
               >
-                <i className="bi bi-arrow-left me-2"></i>
-                Regresar a Coordinador
+                <i className="bi bi-arrow-left me-1"></i>
+                Coordinador
               </button>
             )}
           </div>
-          <div className="row g-3">
-            <div id="student-list-panel" className="col-md-3" tabIndex={-1}>
-              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
-                <div className="fw-bold mb-3 d-flex align-items-center">
-                  <i className="bi bi-people-fill text-primary me-2 fs-5"></i>
-                  Estudiantes
-                </div>
-                {students.length === 0 ? <div className="text-muted ra-small">Sin estudiantes.</div> : (
-                  <StudentList students={students} onSelect={onSelectStudent} selectedId={selectedStudent?.id} />
-                )}
-              </div></div>
-            </div>
-            <div className={showChart ? 'col-md-5' : 'col-md-9'}>
-              <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
-                <div className="d-flex align-items-center justify-content-between mb-3">
-                  <div className="fw-bold d-flex align-items-center">
-                    <i className="bi bi-clipboard-check-fill text-success me-2 fs-5"></i>
-                    Actividades {selectedStudent ? `— ${selectedStudent.name}` : '(selecciona un estudiante)'} 
-                    {loadingActs && <span className="spinner-border spinner-border-sm ms-2" aria-hidden="true"></span>}
-                  </div>
-                  <div className="d-flex gap-2">
-                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsvCurso} disabled={students.length===0 || activities.length===0 || exportingCourseCsv} title="Exportar CSV del curso">
-                      {exportingCourseCsv ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>) : (<><i className="bi bi-download me-1" aria-hidden /> CSV (curso)</>)}
-                    </button>
-                    <button className="btn btn-sm btn-outline-secondary shadow-sm" onClick={exportCsv} disabled={!selectedStudent || activities.length===0} title="Exportar CSV del estudiante">
-                      <i className="bi bi-download me-1" aria-hidden /> CSV (est.)
-                    </button>
-                    <button className="btn btn-sm btn-outline-danger shadow-sm" disabled={!selectedStudent} onClick={()=> setShowChart(v=>!v)}>
-                      <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
-                      {showChart ? 'Ocultar' : 'Progreso'}
-                    </button>
-                    <button className="btn btn-sm btn-outline-danger shadow-sm" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAll}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-save me-1"></i>Guardar todo</>)}
-                    </button>
-                    <button className="btn btn-sm btn-danger shadow" disabled={!selectedStudent || !anyDirty || bulkSaving} onClick={saveAllAndNext}>
-                      {bulkSaving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-arrow-right-circle me-1"></i>Guardar y siguiente</>)}
-                    </button>
-                  </div>
-                </div>
-                <div className="table-responsive">
-                  <table className="table align-middle">
-                    <thead>
-                      <tr>
-                        <th className="table-col-40">Actividad</th>
-                        <th className="table-col-25">Indicador</th>
-                        <th className="table-col-20">Nota (0-5)</th>
-                        <th className="table-col-15 text-end">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activities.length === 0 && (
-                        <tr><td colSpan={4} className="text-muted">Sin actividades en este RA</td></tr>
-                      )}
-                      {activities.map(a => {
-                        const eff = getEff(a)
-                        const req = isIndicatorRequired(a)
-                        const options = Array.isArray(a.indicadores) ? a.indicadores : []
-                        const key = a.raActividadId || ''
-                        return (
-                          <React.Fragment key={a.raActividadId || a.id}>
-                            <tr className={eff.dirty ? 'table-warning' : ''}>
-                              <td>
-                                <div className="d-flex align-items-start gap-2">
-                                  <button
-                                    className="btn btn-sm btn-link p-0"
-                                    aria-label={expanded[a.raActividadId || ''] ? 'Ocultar detalles' : 'Ver detalles'}
-                                    title={expanded[a.raActividadId || ''] ? 'Ocultar detalles' : 'Ver detalles'}
-                                    onClick={() => setExpanded(prev => ({ ...prev, [a.raActividadId || '']: !prev[a.raActividadId || ''] }))}
-                                  >
-                                    <i className={`bi ${expanded[a.raActividadId || ''] ? 'bi-chevron-down' : 'bi-chevron-right'}`} />
-                                  </button>
-                                  <div>
-                                    <div className="fw-semibold" title={`RA-Act: ${key || '—'}${(a as unknown as { _raId?: string })._raId ? ` · RA: ${(a as unknown as { _raId?: string })._raId}` : ''}`}>{a.nombre}{!raId && (a as unknown as { _raTitulo?: string })._raTitulo ? <span className="ra-small text-muted"> · RA: {(a as unknown as { _raTitulo?: string })._raTitulo}</span> : null}{!key && <span className="badge bg-secondary ms-2" title="Esta actividad no tiene relación RA válida">Sin relación RA</span>}</div>
-                                    {a.fechaCierre && <div className="ra-small text-muted">Cierra: {new Date(a.fechaCierre).toLocaleDateString()}</div>}
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                {req ? (
-                                  <select
-                                    className={`form-select form-select-sm ${req && !eff.indicadorId ? 'is-invalid' : ''}`}
-                                    value={eff.indicadorId}
-                                    onChange={e=> setEdit(a.raActividadId || '', { indicadorId: e.target.value })}
-                                    disabled={!key}
-                                    aria-label="Seleccionar indicador"
-                                  >
-                                    <option value="">Seleccione…</option>
-                                    {options.map(ind => <option key={ind.id} value={ind.id}>{ind.descripcion}</option>)}
-                                  </select>
-                                ) : (
-                                  <div className="text-muted ra-small">—</div>
-                                )}
-                              </td>
-                              <td>
-                                <input
-                                  className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
-                                  type="number"
-                                  step="0.1"
-                                  min={0}
-                                  max={5}
-                                  value={eff.nota}
-                                  placeholder="0–5"
-                                  onChange={e=> setEdit(a.raActividadId || '', { nota: e.target.value })}
-                                  onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveRow(a) } }}
-                                  disabled={!key}
-                                />
-                              </td>
-                              <td className="text-end">
-                                <button className="btn btn-sm btn-outline-secondary" disabled={!key || !selectedStudent || eff.saving || !eff.dirty || (req && !eff.indicadorId) || !eff.nota || isNotaInvalid(eff.nota)} onClick={()=>saveRow(a)}>
-                                  {eff.saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar'}
-                                </button>
-                              </td>
-                            </tr>
-                            {expanded[a.raActividadId || ''] && (
-                              <tr className="bg-light">
-                                <td colSpan={4}>
-                                  <div className="p-3">
-                                    <div className="row g-3">
-                                      <div className="col-12 col-lg-6">
-                                        <div className="mb-2 fw-semibold">Descripción de la actividad</div>
-                                        <div className="text-muted">
-                                          {(() => {
-                                            const obj = a as unknown as Record<string, unknown>
-                                            const d1 = obj['descripcion']
-                                            const d2 = obj['desc']
-                                            if (typeof d1 === 'string') return d1
-                                            if (typeof d2 === 'string') return d2
-                                            return 'Sin descripción'
-                                          })()}
-                                        </div>
-                                        {options.length > 0 && (
-                                          <div className="mt-3">
-                                            <div className="fw-semibold">Indicadores</div>
-                                            <ul className="mb-0 ra-small text-muted">
-                                              {options.map(ind => (
-                                                <li key={ind.id}>{ind.descripcion}</li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="col-12 col-lg-6">
-                                        <label className="form-label fw-semibold">Retroalimentación</label>
-                                        <textarea
-                                          className="form-control"
-                                          rows={4}
-                                          placeholder="Escribe comentarios o explicación de la nota (opcional)"
-                                          value={eff.retro}
-                                          onChange={e=> setEdit(a.raActividadId || '', { retro: e.target.value })}
-                                          disabled={!key}
-                                        />
-                                        <div className="text-end mt-2">
-                                          <button className="btn btn-sm btn-danger" disabled={!key || !selectedStudent || eff.saving || !eff.dirty || (req && !eff.indicadorId) || !eff.nota || isNotaInvalid(eff.nota)} onClick={()=>saveRow(a)}>
-                                            {eff.saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : 'Guardar cambios'}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div></div>
-            </div>
-            {showChart && (
-              <div className="col-md-4">
-                <div className="ra-card shadow-sm border-0"><div className="ra-card-body">
-                  <div className="fw-bold mb-3 d-flex align-items-center">
-                    <i className="bi bi-bar-chart-fill text-info me-2 fs-5"></i>
-                    Indicadores (gráfico)
-                  </div>
-                  {chartEmpty ? (
+
+          <div className="alert alert-light border mb-4" style={{ borderColor: 'var(--uv-red)', borderLeft: '4px solid var(--uv-red)' }}>
+            <i className="bi bi-info-circle-fill text-primary me-2"></i>
+            <strong>Curso:</strong> {curso} 
+            {raId && <><strong className="ms-3">RA:</strong> {raId}</>}
+            <span className="float-end small text-muted">
+              {activities.length} actividades · {students.length} estudiantes
+            </span>
+          </div>
+
+          <div className="row g-4">
+            <div className="col-lg-3" id="student-list-panel" tabIndex={-1}>
+              <div className="card shadow-sm border-0" style={{ borderTop: '4px solid var(--uv-red)' }}>
+                <div className="card-body">
+                  <h6 className="card-title mb-3">
+                    <i className="bi bi-people-fill text-primary me-2"></i>
+                    Estudiantes
+                    <span className="float-end badge bg-primary">{students.length}</span>
+                  </h6>
+                  
+                  {students.length === 0 ? (
                     <div className="text-center py-4">
-                      <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
-                      <small className="text-muted">Sin datos para graficar</small>
+                      <i className="bi bi-inbox fs-1 text-muted d-block mb-2"></i>
+                      <small className="text-muted">Sin estudiantes registrados</small>
                     </div>
                   ) : (
-                    <div className="border rounded p-3 bg-white shadow-sm">
-                      <canvas ref={chartRef} height={220} />
+                    <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                      <StudentList 
+                        students={students} 
+                        onSelect={onSelectStudent} 
+                        selectedId={selectedStudent?.id}
+                      />
                     </div>
                   )}
-                </div></div>
+                </div>
+              </div>
+            </div>
+
+            <div className={showChart ? 'col-lg-5' : 'col-lg-9'}>
+              <div className="card shadow-sm border-0" style={{ borderTop: '4px solid var(--uv-red)' }}>
+                <div className="card-header border-bottom" style={{ backgroundColor: 'rgba(227, 6, 19, 0.05)' }}>
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <h6 className="mb-0">
+                        <i className="bi bi-clipboard-check text-primary me-2"></i>
+                        Calificación de Actividades
+                      </h6>
+                      <small className="text-muted mt-1 d-block">
+                        {selectedStudent ? (
+                          <><i className="bi bi-person-check me-1"></i>{selectedStudent.name}</>
+                        ) : (
+                          <span className="text-warning"><i className="bi bi-exclamation-circle me-1"></i>Selecciona un estudiante</span>
+                        )}
+                      </small>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card-body">
+                  <div className="d-flex flex-wrap gap-2 mb-4 p-3 rounded" style={{ backgroundColor: 'rgba(227, 6, 19, 0.02)' }}>
+                    <div className="d-flex gap-2 flex-wrap">
+                      <button 
+                        className="btn btn-sm btn-outline-secondary" 
+                        onClick={exportCsvCurso} 
+                        disabled={students.length===0 || activities.length===0 || exportingCourseCsv}
+                        title="Descargar calificaciones de todos los estudiantes"
+                      >
+                        {exportingCourseCsv ? (
+                          <><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>
+                        ) : (
+                          <><i className="bi bi-download me-1"></i>CSV Curso</>
+                        )}
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-outline-secondary" 
+                        onClick={exportCsv} 
+                        disabled={!selectedStudent || activities.length===0}
+                        title="Descargar calificaciones del estudiante"
+                      >
+                        <i className="bi bi-download me-1"></i>CSV Est.
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-outline-secondary" 
+                        disabled={!selectedStudent} 
+                        onClick={()=> setShowChart(v=>!v)}
+                        title={showChart ? 'Ocultar gráfico de indicadores' : 'Mostrar gráfico de indicadores'}
+                      >
+                        <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
+                        {showChart ? 'Ocultar' : 'Gráfico'}
+                      </button>
+                    </div>
+                    <div className="ms-auto d-flex gap-2 flex-wrap">
+                      <button 
+                        className="btn btn-sm btn-outline-primary" 
+                        disabled={!selectedStudent || !anyDirty || bulkSaving} 
+                        onClick={saveAll}
+                        title="Guardar todos los cambios"
+                      >
+                        {bulkSaving ? (
+                          <><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>
+                        ) : (
+                          <><i className="bi bi-save me-1"></i>Guardar todo</>
+                        )}
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-primary" 
+                        disabled={!selectedStudent || !anyDirty || bulkSaving} 
+                        onClick={saveAllAndNext}
+                        title="Guardar y pasar al siguiente estudiante"
+                      >
+                        {bulkSaving ? (
+                          <><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>
+                        ) : (
+                          <><i className="bi bi-arrow-right-circle me-1"></i>Siguiente</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingActs ? (
+                    <div className="text-center py-5">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Cargando...</span>
+                      </div>
+                      <p className="text-muted mt-2">Cargando actividades...</p>
+                    </div>
+                  ) : activities.length === 0 ? (
+                    <div className="alert alert-info">
+                      <i className="bi bi-info-circle me-2"></i>
+                      Sin actividades en este RA
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-sm table-hover align-middle mb-0">
+                        <thead className="table-light" style={{ borderBottom: '2px solid var(--uv-red)' }}>
+                          <tr>
+                            <th className="fw-600" style={{ color: 'var(--uv-red)' }}>
+                              <i className="bi bi-bookmark me-1"></i>Actividad
+                            </th>
+                            <th className="fw-600 text-center" style={{ color: 'var(--uv-red)' }}>
+                              <i className="bi bi-pencil me-1"></i>Nota
+                            </th>
+                            <th className="fw-600 text-end" style={{ color: 'var(--uv-red)' }}>
+                              <i className="bi bi-sliders me-1"></i>Acciones
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(groupedByActivityAndState).map(([actId, { actividad, ras }]) => {
+                            const expandKey = `act-${actId}`
+                            const isExpanded = expanded[expandKey]
+                            const raRows = [...ras.pendientes, ...ras.calificadas]
+                            const finalGrade = getActivityFinal(raRows)
+                            
+                            return (
+                              <React.Fragment key={actId}>
+                                <tr className="fw-semibold" style={{ backgroundColor: 'rgba(227, 6, 19, 0.04)', borderLeft: '3px solid var(--uv-red)' }}>
+                                  <td colSpan={3}>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <button
+                                        className="btn btn-sm btn-link p-0"
+                                        aria-label={isExpanded ? 'Ocultar RAs' : 'Ver RAs'}
+                                        onClick={() => setExpanded(prev => ({ ...prev, [expandKey]: !prev[expandKey] }))}
+                                      >
+                                        <i className={`bi ${isExpanded ? 'bi-chevron-down' : 'bi-chevron-right'}`} style={{ color: 'var(--uv-red)' }} />
+                                      </button>
+                                      <div>
+                                        <div className="fw-semibold">{actividad.nombre}</div>
+                                        {actividad.fechaCierre && <div className="small text-muted mt-1"><i className="bi bi-calendar-event me-1"></i>Cierra: {new Date(actividad.fechaCierre).toLocaleDateString()}</div>}
+                                      </div>
+                                      {(ras.pendientes.length > 0 || ras.calificadas.length > 0) && (
+                                        <div className="ms-auto d-flex gap-2 flex-wrap align-items-center">
+                                          {finalGrade != null && (
+                                            <span className={`badge px-3 py-2 ${finalGrade >= 3 ? 'bg-success' : 'bg-danger'}`}>
+                                              Nota final: {finalGrade.toFixed(2)}
+                                            </span>
+                                          )}
+                                          <span className="badge px-3 py-2" style={{ backgroundColor: '#FFF3F3', color: 'var(--uv-red)', border: '1px solid var(--uv-red-l)' }}><i className="bi bi-clock me-1"></i>{ras.pendientes.length} pendientes</span>
+                                          <span className="badge px-3 py-2 bg-success"><i className="bi bi-check-circle me-1"></i>{ras.calificadas.length} calificadas</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                                
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={3}>
+                                      <div className="p-3" style={{ backgroundColor: 'rgba(227, 6, 19, 0.02)' }}>
+                                        <table className="table table-sm mb-0">
+                                          <thead style={{ backgroundColor: 'rgba(227, 6, 19, 0.08)' }}>
+                                            <tr>
+                                              <th style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Resultado de Aprendizaje</th>
+                                              <th style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Nota (0-5)</th>
+                                              <th className="text-end" style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Acciones</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {ras.pendientes.map(ra => {
+                                              const eff = getEff(ra)
+                                              const key = ra.raActividadId || ''
+                                              
+                                              return (
+                                                <tr key={ra.raActividadId} style={{ backgroundColor: eff.dirty ? 'rgba(255, 193, 7, 0.1)' : 'transparent', borderLeft: eff.dirty ? '3px solid #FFC107' : 'none' }}>
+                                                  <td>
+                                                    <div>
+                                                      <div className="fw-semibold">{(ra as unknown as { _raTitulo?: string })._raTitulo || 'RA sin título'}</div>
+                                                      {typeof ra.porcentajeRA === 'number' && (
+                                                        <div className="small text-muted mt-1"><i className="bi bi-percent me-1"></i>Peso: {ra.porcentajeRA}%</div>
+                                                      )}
+                                                      {ra.descripcion && (
+                                                        <div className="small text-muted mt-2 ps-3 border-start">{ra.descripcion}</div>
+                                                      )}
+                                                    </div>
+                                                  </td>
+                                                  <td>
+                                                    <input
+                                                      className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
+                                                      type="number"
+                                                      step="0.1"
+                                                      min={0}
+                                                      max={5}
+                                                      value={eff.nota}
+                                                      placeholder="0–5"
+                                                      onChange={e=> setEdit(key, { nota: e.target.value })}
+                                                      onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveRow(ra) } }}
+                                                      onBlur={()=> { void autoSaveRow(ra) }}
+                                                      disabled={!key}
+                                                    />
+                                                    <textarea
+                                                      className="form-control form-control-sm mt-2"
+                                                      rows={2}
+                                                      placeholder="Retroalimentación"
+                                                      value={eff.retro || ''}
+                                                      onChange={e=> setEdit(key, { retro: e.target.value })}
+                                                      onBlur={()=> { void autoSaveRow(ra) }}
+                                                      disabled={!key}
+                                                    />
+                                                  </td>
+                                                  <td className="text-end">
+                                                    <button className="btn btn-sm btn-outline-secondary" disabled={!key || !selectedStudent || eff.saving || eff.nota === '' || isNotaInvalid(eff.nota)} onClick={()=>saveRow(ra)}>
+                                                      {eff.saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span></>) : (<><i className="bi bi-check-circle me-1"></i>Guardar</>)}
+                                                    </button>
+                                                  </td>
+                                                </tr>
+                                              )
+                                            })}
+                                            
+                                            {ras.calificadas.length > 0 && (
+                                              <>
+                                                {ras.pendientes.length > 0 && (
+                                                  <tr style={{ backgroundColor: 'rgba(227, 6, 19, 0.05)' }}>
+                                                    <td colSpan={3} className="text-center fw-semibold py-3" style={{ color: 'var(--uv-red)' }}>
+                                                      ✓ Calificadas
+                                                    </td>
+                                                  </tr>
+                                                )}
+                                                {ras.calificadas.map(ra => {
+                                                  const eff = getEff(ra)
+                                                  const key = ra.raActividadId || ''
+                                                  const isInEditMode = editingGraded.has(key)
+                                                  
+                                                  return (
+                                                    <tr key={ra.raActividadId} style={{ backgroundColor: isInEditMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(25, 154, 117, 0.05)', borderLeft: isInEditMode ? '3px solid #FFC107' : '3px solid #199A75' }}>
+                                                      <td>
+                                                        <div>
+                                                          <div className="fw-semibold">
+                                                            <i className="bi bi-check-circle-fill me-2" style={{ color: '#199A75' }}></i>
+                                                            {(ra as unknown as { _raTitulo?: string })._raTitulo || 'RA sin título'}
+                                                          </div>
+                                                          {typeof ra.porcentajeRA === 'number' && (
+                                                            <div className="small text-muted mt-1"><i className="bi bi-percent me-1"></i>Peso: {ra.porcentajeRA}%</div>
+                                                          )}
+                                                          {ra.descripcion && (
+                                                            <div className="small text-muted mt-2 ps-3 border-start">{ra.descripcion}</div>
+                                                          )}
+                                                        </div>
+                                                      </td>
+                                                      <td>
+                                                        {!isInEditMode ? (
+                                                          <>
+                                                            <span className="badge px-3 py-2 bg-success-subtle text-success border border-success">{eff.nota || '—'}</span>
+                                                            {eff.retro && <div className="small text-muted mt-2">{eff.retro}</div>}
+                                                          </>
+                                                        ) : (
+                                                          <>
+                                                            <input
+                                                              className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
+                                                              type="number"
+                                                              step="0.1"
+                                                              min={0}
+                                                              max={5}
+                                                              value={eff.nota}
+                                                              placeholder="0–5"
+                                                              onChange={e=> setEdit(key, { nota: e.target.value })}
+                                                              onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveRow(ra) } }}
+                                                              onBlur={()=> { void autoSaveRow(ra) }}
+                                                              disabled={!key}
+                                                            />
+                                                            <textarea
+                                                              className="form-control form-control-sm mt-2"
+                                                              rows={2}
+                                                              placeholder="Retroalimentación"
+                                                              value={eff.retro || ''}
+                                                              onChange={e=> setEdit(key, { retro: e.target.value })}
+                                                              onBlur={()=> { void autoSaveRow(ra) }}
+                                                              disabled={!key}
+                                                            />
+                                                          </>
+                                                        )}
+                                                      </td>
+                                                      <td className="text-end">
+                                                        {!isInEditMode ? (
+                                                          <button 
+                                                            className="btn btn-sm btn-outline-primary" 
+                                                            disabled={!key || !selectedStudent}
+                                                            onClick={() => setEditingGraded(prev => new Set(prev).add(key))}
+                                                            style={{ borderColor: 'var(--uv-red)', color: 'var(--uv-red)' }}
+                                                          >
+                                                            <i className="bi bi-pencil me-1"></i>Editar
+                                                          </button>
+                                                        ) : (
+                                                          <div className="btn-group btn-group-sm" role="group">
+                                                            <button 
+                                                              className="btn btn-sm btn-success"
+                                                              disabled={!key || !selectedStudent || eff.saving || eff.nota === '' || isNotaInvalid(eff.nota)} 
+                                                              onClick={()=>saveRow(ra)}
+                                                            >
+                                                              <i className="bi bi-check me-1"></i>Ok
+                                                            </button>
+                                                            <button 
+                                                              className="btn btn-sm btn-outline-secondary" 
+                                                              disabled={eff.saving}
+                                                              onClick={() => {
+                                                                setEditingGraded(prev => {
+                                                                  const next = new Set(prev)
+                                                                  next.delete(key)
+                                                                  return next
+                                                                })
+                                                                setEdits(prev => {
+                                                                  const next = { ...prev }
+                                                                  delete next[key]
+                                                                  return next
+                                                                })
+                                                              }}
+                                                            >
+                                                              <i className="bi bi-x-circle me-1"></i>Cancelar
+                                                            </button>
+                                                          </div>
+                                                        )}
+                                                      </td>
+                                                    </tr>
+                                                  )
+                                                })}
+                                              </>
+                                            )}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {showChart && (
+              <div className="col-lg-4">
+                <div className="card shadow-sm border-0" style={{ borderTop: '4px solid #199A75' }}>
+                  <div className="card-header border-bottom" style={{ backgroundColor: 'rgba(25, 154, 117, 0.05)' }}>
+                    <h6 className="mb-0">
+                      <i className="bi bi-bar-chart-fill text-success me-2"></i>
+                      Desempeño por Indicador
+                    </h6>
+                  </div>
+                  <div className="card-body">
+                    {chartEmpty ? (
+                      <div className="text-center py-5">
+                        <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
+                        <small className="text-muted">Sin datos para mostrar</small>
+                      </div>
+                    ) : (
+                      <div className="border rounded p-2" style={{ backgroundColor: '#fafafa' }}>
+                        <canvas ref={chartRef} height={220} />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
-          <button className="btn btn-outline-danger shadow-sm mt-4" onClick={()=>navigate(`/docente/${curso}/ras`)}>
-            <i className="bi bi-arrow-left me-2"></i>
-            Volver a RAs
-          </button>
+
+          <div className="mt-4 d-flex gap-2">
+            <button 
+              className="btn btn-outline-secondary" 
+              onClick={()=>navigate(`/docente/${curso}/ras`)}
+            >
+              <i className="bi bi-arrow-left me-2"></i>
+              Volver a RAs
+            </button>
+          </div>
         </main>
       </div>
     </div>

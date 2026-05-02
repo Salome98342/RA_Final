@@ -101,6 +101,7 @@ const MateriaDetalle = () => {
   }
 
   const { asignatura, docente, estudiantes_matriculados, mi_estadistica, resultados_aprendizaje } = data
+  const notaAsignada = mi_estadistica.coverage >= 50 ? mi_estadistica.nota_progressive : mi_estadistica.nota_strict
 
   return (
     <div className="dashboard-body min-vh-100">
@@ -272,6 +273,24 @@ const MateriaDetalle = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+
+            {/* Nota final visible al cierre de la vista */}
+            <div className="card mt-3 border-primary">
+              <div className="card-body text-center">
+                <h6 className="card-title mb-2">
+                  <i className="bi bi-award-fill text-primary me-2"></i>
+                  Nota Asignada al Estudiante
+                </h6>
+                <div className="display-5 fw-bold text-primary mb-1">
+                  {notaAsignada.toFixed(2)} / 5.00
+                </div>
+                <small className="text-muted">
+                  {mi_estadistica.coverage >= 50
+                    ? 'Esta nota corresponde a tu nota progresiva con cobertura suficiente.'
+                    : 'Esta nota corresponde al cálculo estricto mientras completas la cobertura mínima.'}
+                </small>
               </div>
             </div>
           </section>
