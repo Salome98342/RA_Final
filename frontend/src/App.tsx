@@ -7,6 +7,7 @@ import Reset from './pages/Reset'
 import DocenteHome from '@/pages/docente/Home'
 import DocenteCursos from '@/pages/docente/Cursos'
 import DocenteRAs from '@/pages/docente/RAs'
+import DocenteIndicadoresDeLogro from '@/pages/docente/IndicadoresDeLogro'
 import NuevaActividadCurso from '@/pages/docente/NuevaActividad'
 import DocenteCalificar from '@/pages/docente/Calificar'
 import DocenteRecursos from '@/pages/docente/Recursos'
@@ -94,6 +95,7 @@ const App: React.FC = () => {
       <Route path="/docente/inicio" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteHome /></ProtectedRoute>} />
       <Route path="/docente/cursos" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteCursos /></ProtectedRoute>} />
       <Route path="/docente/:curso/ras" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteRAs /></ProtectedRoute>} />
+      <Route path="/docente/:curso/indicadores" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteIndicadoresDeLogro /></ProtectedRoute>} />
       <Route path="/docente/:curso/actividades/nueva" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><NuevaActividadCurso /></ProtectedRoute>} />
       <Route path="/docente/:curso/calificar" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteCalificar /></ProtectedRoute>} />
       <Route path="/docente/:curso/recursos" element={<ProtectedRoute allowedRoles={['docente', 'coordinador']}><DocenteRecursos /></ProtectedRoute>} />

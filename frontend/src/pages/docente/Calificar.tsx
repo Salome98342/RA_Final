@@ -20,106 +20,13 @@ const DocenteCalificar: React.FC = () => {
   const [ras, setRAs] = useState<RA[]>([])
   const [loadingActs, setLoadingActs] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+  const [studentQuery, setStudentQuery] = useState('')
   const [edits, setEdits] = useState<Record<string, { nota?: string; indicadorId?: string; retro?: string; dirty?: boolean; saving?: boolean; savedAt?: number }>>({})
-  const [showChart, setShowChart] = useState(false)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [bulkSaving, setBulkSaving] = useState(false)
   const chartRef = useRef<HTMLCanvasElement | null>(null)
   const chartInstance = useRef<Chart | null>(null)
   const [chartEmpty, setChartEmpty] = useState(false)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [bulkSaving, setBulkSaving] = useState(false)
-  const [exportingCourseCsv, setExportingCourseCsv] = useState(false)
-  const [editingGraded, setEditingGraded] = useState<Set<string>>(new Set())
-
-  const exportCsv = () => {
-    const student = selectedStudent
-    if (!student) {
-      Alert.toast.error('Selecciona un estudiante para exportar.')
-      return
-    }
-    const headers = ['Curso', 'RA', 'Estudiante', 'Actividad', 'Indicador', 'Nota', 'Retroalimentacion']
-    const rows = activities.map((a) => {
-      const eff = getEff(a)
-      const indicadorDesc = Array.isArray(a.indicadores)
-        ? (a.indicadores.find((x) => String(x.id) === String(eff.indicadorId))?.descripcion || '')
-        : ''
-      return [
-        String(curso ?? ''),
-        String(raId ?? ''),
-        student.name,
-        a.nombre,
-        indicadorDesc,
-        eff.nota ?? (a.nota != null ? String(a.nota) : ''),
-        eff.retro ?? (a.retroalimentacion ?? '')
-      ]
-    })
-    const csv = [headers, ...rows]
-      .map((r) => r.map((v) => {
-        const s = String(v ?? '')
-        return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-      }).join(';'))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    const safeName = `${curso ?? 'curso'}_${raId ?? 'ra'}_${student.name.replace(/\s+/g, '_')}`
-    a.href = url
-    a.download = `calificaciones_${safeName}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    Alert.toast.success('CSV generado.')
-  }
-
-  const exportCsvCurso = async () => {
-    if (!curso || !raId) {
-      Alert.toast.error('Falta información del curso o RA.')
-      return
-    }
-    if (students.length === 0) {
-      Alert.toast.error('No hay estudiantes para exportar.')
-      return
-    }
-    setExportingCourseCsv(true)
-    try {
-      const headers = ['Curso', 'RA', 'Estudiante', 'Actividad', 'Indicador', 'Nota', 'Retroalimentacion']
-      const allRows: string[][] = []
-      for (const s of students) {
-        const acts = await getActivitiesByRA(raId, { matriculaId: s.matriculaId })
-        for (const a of acts) {
-          const indicadorDesc = Array.isArray(a.indicadores)
-            ? (a.indicadores.find((x) => String(x.id) === String(a.indicadorId))?.descripcion || '')
-            : ''
-          allRows.push([
-            String(curso ?? ''),
-            String(raId ?? ''),
-            s.name,
-            a.nombre,
-            indicadorDesc,
-            a.nota != null ? String(a.nota) : '',
-            a.retroalimentacion ?? ''
-          ])
-        }
-      }
-      const csv = [headers, ...allRows]
-        .map((r) => r.map((v) => {
-          const s = String(v ?? '')
-          return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-        }).join(';'))
-        .join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      const safeName = `${curso ?? 'curso'}_${raId ?? 'ra'}_todos`
-      a.href = url
-      a.download = `calificaciones_${safeName}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-      Alert.toast.success('CSV del curso generado.')
-    } catch {
-      Alert.toast.error('No se pudo generar el CSV del curso.')
-    } finally {
-      setExportingCourseCsv(false)
-    }
-  }
 
   useEffect(() => {
     if (!curso) return
@@ -146,13 +53,6 @@ const DocenteCalificar: React.FC = () => {
   }, [curso, raId])
 
   useEffect(() => {
-    if (selectedStudent) {
-      setEdits({})
-      setEditingGraded(new Set())
-    }
-  }, [selectedStudent])
-
-  useEffect(() => {
     if (!selectedStudent || !curso) return
     const loadForStudent = async () => {
       setLoadingActs(true)
@@ -170,39 +70,18 @@ const DocenteCalificar: React.FC = () => {
           }
           setActivities(all)
         }
-      } finally { setLoadingActs(false) }
+      } finally {
+        setLoadingActs(false)
+      }
     }
     loadForStudent()
   }, [selectedStudent, curso, raId, ras])
 
-  const renderChart = useCallback(async (student: Student) => {
-    if (!curso) return
-    const data = await getIndicatorChart(curso, student.id)
-    const filtered = raId ? data.filter(d => String(d.ra_id) === String(raId)) : data
-    const noData = filtered.length === 0 || filtered.every(d => d.avg_pct == null)
-    setChartEmpty(noData)
-    if (noData) {
-      if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null }
-      return
-    }
-    const labels = filtered.map(d => d.descripcion)
-    const values = filtered.map(d => (d.avg_pct ?? 0))
-    const ctx = chartRef.current?.getContext('2d')
-    if (!ctx) return
-    if (chartInstance.current) chartInstance.current.destroy()
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Avance indicador (%)', data: values, backgroundColor: '#dc3545' }] },
-      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
-    })
-  }, [curso, raId])
-
   useEffect(() => {
-    if (showChart && selectedStudent) {
-      const id = window.setTimeout(() => { renderChart(selectedStudent) }, 0)
-      return () => window.clearTimeout(id)
+    if (selectedStudent) {
+      setEdits({})
     }
-  }, [showChart, selectedStudent, renderChart])
+  }, [selectedStudent])
 
   const getEff = (a: Activity) => {
     const e = edits[a.raActividadId || ''] || {}
@@ -242,6 +121,159 @@ const DocenteCalificar: React.FC = () => {
     if (totalWeight <= 0) return null
     return weighted / totalWeight
   }
+
+  const localIndicatorChart = useMemo(() => {
+    if (!selectedStudent) return [] as Array<{ id_ind: string; ra_id: string; descripcion: string; avg_nota: number | null; avg_pct: number | null }>
+
+    const acc = new Map<string, { ra_id: string; descripcion: string; values: number[] }>()
+    const indicadorDescriptions = new Map<string, string>()
+
+    // First pass: gather all indicator descriptions from activities
+    for (const activity of activities) {
+      const indicadores = Array.isArray(activity.indicadores) ? activity.indicadores : []
+      for (const ind of indicadores) {
+        const indId = String(ind.id)
+        if (!indicadorDescriptions.has(indId)) {
+          indicadorDescriptions.set(indId, ind.descripcion)
+        }
+      }
+    }
+
+    // Second pass: process activities and grades
+    for (const activity of activities) {
+      const notas = Array.isArray(activity.notasPorIndicador) ? activity.notasPorIndicador : []
+      const indicadores = Array.isArray(activity.indicadores) ? activity.indicadores : []
+      const generalNota = activity.nota
+      const raId = String((activity as unknown as { _raId?: string })._raId || '')
+      
+      // Filtrar notas que SÍ tienen indicador específico (no null, no 'null' string)
+      const notasConIndicador = notas.filter(n => n?.id_ind != null && String(n.id_ind) !== 'null')
+      
+      if (notasConIndicador.length > 0) {
+        // Tenemos notas específicas por indicador - usar estas
+        for (const nota of notasConIndicador) {
+          if (!nota || nota.nota == null) continue
+          const indicadorId = String(nota.id_ind)
+          const score = Number(nota.nota)
+          if (Number.isNaN(score) || score < 0 || score > 5) continue
+
+          const desc = indicadorDescriptions.get(indicadorId) || indicadores.find(ind => String(ind.id) === indicadorId)?.descripcion || ''
+          const current = acc.get(indicadorId) || {
+            ra_id: raId,
+            descripcion: desc,
+            values: []
+          }
+          current.values.push(score)
+          acc.set(indicadorId, current)
+        }
+      } else if (generalNota != null && indicadores.length > 0) {
+        // No hay notas específicas por indicador, pero hay nota general
+        // Distribuir entre todos los indicadores de esta actividad
+        const score = Number(generalNota)
+        if (!Number.isNaN(score) && score >= 0 && score <= 5) {
+          for (const indicador of indicadores) {
+            const indicadorId = String(indicador.id)
+            const current = acc.get(indicadorId) || {
+              ra_id: raId,
+              descripcion: indicador.descripcion,
+              values: []
+            }
+            current.values.push(score)
+            acc.set(indicadorId, current)
+          }
+        }
+      }
+    }
+
+    return Array.from(acc.entries()).map(([id_ind, row]) => {
+      const avg = row.values.length ? row.values.reduce((sum, value) => sum + value, 0) / row.values.length : null
+      return {
+        id_ind,
+        ra_id: row.ra_id,
+        descripcion: row.descripcion,
+        avg_nota: avg,
+        avg_pct: avg != null ? avg * 20 : null,
+      }
+    })
+  }, [activities, selectedStudent])
+
+  const renderChart = useCallback(async (student: Student) => {
+    if (!curso) return
+    const apiData = await getIndicatorChart(curso, student.id)
+    const baseData = apiData.length > 0 ? apiData : localIndicatorChart
+    const filtered = raId ? baseData.filter((d) => String(d.ra_id) === String(raId)) : baseData
+    const noData = filtered.length === 0 || filtered.every((d) => d.avg_pct == null)
+    setChartEmpty(noData)
+    if (noData) {
+      if (chartInstance.current) {
+        chartInstance.current.destroy()
+        chartInstance.current = null
+      }
+      return
+    }
+
+    const labels = filtered.map((d) => d.descripcion)
+    const values = filtered.map((d) => d.avg_pct ?? 0)
+    const ctx = chartRef.current?.getContext('2d')
+    if (!ctx) return
+
+    if (chartInstance.current) chartInstance.current.destroy()
+    chartInstance.current = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Avance indicador (%)',
+          data: values,
+          backgroundColor: '#c8102e',
+          borderRadius: 8,
+          maxBarThickness: 42,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}%` } },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            grid: { color: 'rgba(17, 24, 39, 0.08)' },
+          },
+          x: {
+            grid: { display: false },
+          },
+        },
+      },
+    })
+  }, [curso, raId, localIndicatorChart])
+
+  useEffect(() => {
+    // Renderiza el gráfico cuando:
+    // 1. Se selecciona un estudiante y sus actividades terminan de cargar
+    // 2. renderChart se recalcula (incluye cambios en activities vía localIndicatorChart)
+    if (!selectedStudent || loadingActs) return
+    void renderChart(selectedStudent)
+  }, [selectedStudent, renderChart, loadingActs])
+
+  useEffect(() => {
+    if (!selectedStudent) {
+      setChartEmpty(false)
+      if (chartInstance.current) {
+        chartInstance.current.destroy()
+        chartInstance.current = null
+      }
+    }
+  }, [selectedStudent])
+
+  useEffect(() => {
+    return () => {
+      if (chartInstance.current) chartInstance.current.destroy()
+    }
+  }, [])
 
   const groupedByActivityAndState = useMemo(() => {
     const grouped: Record<string, {
@@ -379,12 +411,6 @@ const DocenteCalificar: React.FC = () => {
       
       Alert.toast.success('Guardado correctamente.')
       
-      setEditingGraded(prev => {
-        const next = new Set(prev)
-        next.delete(key)
-        return next
-      })
-      
       const raForAct = (a as unknown as { _raId?: string })._raId
       if (selectedStudent && raForAct) {
         try {
@@ -405,7 +431,6 @@ const DocenteCalificar: React.FC = () => {
           }
         } catch {/* ignore */}
       }
-      if (showChart && selectedStudent) await renderChart(selectedStudent)
     } catch (err: unknown) {
       setEdits(prev => {
         return {
@@ -481,12 +506,20 @@ const DocenteCalificar: React.FC = () => {
     if (idx >= 0 && idx + 1 < students.length) {
       const next = students[idx + 1]
       setSelectedStudent(next)
-      if (showChart) await renderChart(next)
     }
     setBulkSaving(false)
   }
 
   const anyDirty = useMemo(() => activities.some(a => Boolean(edits[a.raActividadId || '']?.dirty)), [activities, edits])
+
+  const filteredStudents = useMemo(() => {
+    const query = studentQuery.trim().toLowerCase()
+    if (!query) return students
+    return students.filter((student) => {
+      const text = `${student.name} ${student.matriculaId}`.toLowerCase()
+      return text.includes(query)
+    })
+  }, [studentQuery, students])
 
   const isNotaInvalid = (v: string | undefined) => {
     if (v == null || v === '') return false
@@ -519,8 +552,7 @@ const DocenteCalificar: React.FC = () => {
 
   const onSelectStudent = useCallback(async (stu: Student) => {
     setSelectedStudent(stu)
-    if (showChart) await renderChart(stu)
-  }, [showChart, renderChart])
+  }, [])
 
   return (
     <div className="dashboard-body min-vh-100">
@@ -554,24 +586,26 @@ const DocenteCalificar: React.FC = () => {
             )}
           </div>
 
-          <div className="alert alert-light border mb-4" style={{ borderColor: 'var(--uv-red)', borderLeft: '4px solid var(--uv-red)' }}>
-            <i className="bi bi-info-circle-fill text-primary me-2"></i>
-            <strong>Curso:</strong> {curso} 
-            {raId && <><strong className="ms-3">RA:</strong> {raId}</>}
-            <span className="float-end small text-muted">
-              {activities.length} actividades · {students.length} estudiantes
-            </span>
-          </div>
-
           <div className="row g-4">
-            <div className="col-lg-3" id="student-list-panel" tabIndex={-1}>
-              <div className="card shadow-sm border-0" style={{ borderTop: '4px solid var(--uv-red)' }}>
+            <div className="col-lg-3 col-xl-3" id="student-list-panel" tabIndex={-1}>
+              <div className="card shadow-sm border-0 calificar-sidebar-card">
                 <div className="card-body">
-                  <h6 className="card-title mb-3">
-                    <i className="bi bi-people-fill text-primary me-2"></i>
-                    Estudiantes
-                    <span className="float-end badge bg-primary">{students.length}</span>
-                  </h6>
+                  <div className="d-flex align-items-center justify-content-between mb-3">
+                    <h6 className="card-title mb-0">
+                      <i className="bi bi-people-fill text-primary me-2"></i>
+                      Estudiantes
+                    </h6>
+                    <span className="badge text-bg-light border">{filteredStudents.length}/{students.length}</span>
+                  </div>
+                  <div className="mb-3">
+                    <input
+                      type="search"
+                      className="form-control form-control-sm calificar-search"
+                      placeholder="Buscar estudiante"
+                      value={studentQuery}
+                      onChange={(e) => setStudentQuery(e.target.value)}
+                    />
+                  </div>
                   
                   {students.length === 0 ? (
                     <div className="text-center py-4">
@@ -581,7 +615,7 @@ const DocenteCalificar: React.FC = () => {
                   ) : (
                     <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                       <StudentList 
-                        students={students} 
+                        students={filteredStudents} 
                         onSelect={onSelectStudent} 
                         selectedId={selectedStudent?.id}
                       />
@@ -591,63 +625,21 @@ const DocenteCalificar: React.FC = () => {
               </div>
             </div>
 
-            <div className={showChart ? 'col-lg-5' : 'col-lg-9'}>
-              <div className="card shadow-sm border-0" style={{ borderTop: '4px solid var(--uv-red)' }}>
-                <div className="card-header border-bottom" style={{ backgroundColor: 'rgba(227, 6, 19, 0.05)' }}>
-                  <div className="d-flex align-items-center justify-content-between">
+            <div className="col-lg-9 col-xl-9">
+              <div className="card shadow-sm border-0 calificar-workspace-card">
+                <div className="card-header border-bottom calificar-workspace-header">
+                  <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
                     <div>
+                      <div className="text-uppercase text-muted small fw-semibold mb-1">Área de calificación</div>
                       <h6 className="mb-0">
                         <i className="bi bi-clipboard-check text-primary me-2"></i>
-                        Calificación de Actividades
+                        {selectedStudent ? selectedStudent.name : 'Selecciona un estudiante'}
                       </h6>
-                      <small className="text-muted mt-1 d-block">
-                        {selectedStudent ? (
-                          <><i className="bi bi-person-check me-1"></i>{selectedStudent.name}</>
-                        ) : (
-                          <span className="text-warning"><i className="bi bi-exclamation-circle me-1"></i>Selecciona un estudiante</span>
-                        )}
-                      </small>
                     </div>
-                  </div>
-                </div>
-
-                <div className="card-body">
-                  <div className="d-flex flex-wrap gap-2 mb-4 p-3 rounded" style={{ backgroundColor: 'rgba(227, 6, 19, 0.02)' }}>
                     <div className="d-flex gap-2 flex-wrap">
-                      <button 
-                        className="btn btn-sm btn-outline-secondary" 
-                        onClick={exportCsvCurso} 
-                        disabled={students.length===0 || activities.length===0 || exportingCourseCsv}
-                        title="Descargar calificaciones de todos los estudiantes"
-                      >
-                        {exportingCourseCsv ? (
-                          <><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando…</>
-                        ) : (
-                          <><i className="bi bi-download me-1"></i>CSV Curso</>
-                        )}
-                      </button>
-                      <button 
-                        className="btn btn-sm btn-outline-secondary" 
-                        onClick={exportCsv} 
-                        disabled={!selectedStudent || activities.length===0}
-                        title="Descargar calificaciones del estudiante"
-                      >
-                        <i className="bi bi-download me-1"></i>CSV Est.
-                      </button>
-                      <button 
-                        className="btn btn-sm btn-outline-secondary" 
-                        disabled={!selectedStudent} 
-                        onClick={()=> setShowChart(v=>!v)}
-                        title={showChart ? 'Ocultar gráfico de indicadores' : 'Mostrar gráfico de indicadores'}
-                      >
-                        <i className={`bi ${showChart ? 'bi-eye-slash' : 'bi-bar-chart-fill'} me-1`}></i>
-                        {showChart ? 'Ocultar' : 'Gráfico'}
-                      </button>
-                    </div>
-                    <div className="ms-auto d-flex gap-2 flex-wrap">
-                      <button 
-                        className="btn btn-sm btn-outline-primary" 
-                        disabled={!selectedStudent || !anyDirty || bulkSaving} 
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        disabled={!selectedStudent || !anyDirty || bulkSaving}
                         onClick={saveAll}
                         title="Guardar todos los cambios"
                       >
@@ -657,9 +649,9 @@ const DocenteCalificar: React.FC = () => {
                           <><i className="bi bi-save me-1"></i>Guardar todo</>
                         )}
                       </button>
-                      <button 
-                        className="btn btn-sm btn-primary" 
-                        disabled={!selectedStudent || !anyDirty || bulkSaving} 
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={!selectedStudent || !anyDirty || bulkSaving}
                         onClick={saveAllAndNext}
                         title="Guardar y pasar al siguiente estudiante"
                       >
@@ -671,6 +663,39 @@ const DocenteCalificar: React.FC = () => {
                       </button>
                     </div>
                   </div>
+                </div>
+
+                <div className="card-body">
+                  <div className="calificar-chart-card mb-4">
+                    <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                      <div>
+                        <div className="text-uppercase text-muted small fw-semibold mb-1">Referencia rápida</div>
+                        <h6 className="mb-1">
+                          <i className="bi bi-bar-chart-line me-2 text-primary"></i>
+                          Avance por indicador de logro
+                        </h6>
+                        <div className="text-muted small">
+                          {selectedStudent ? 'Resumen contextual del estudiante seleccionado antes de registrar la nota.' : 'Selecciona un estudiante para ver su desempeño por indicador.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {!selectedStudent ? (
+                      <div className="calificar-chart-empty">
+                        <i className="bi bi-bar-chart-fill fs-1 text-muted d-block mb-2"></i>
+                        <div className="text-muted small">La gráfica aparece aquí cuando eliges un estudiante.</div>
+                      </div>
+                    ) : chartEmpty ? (
+                      <div className="calificar-chart-empty">
+                        <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
+                        <div className="text-muted small">No hay datos suficientes para construir la gráfica todavía.</div>
+                      </div>
+                    ) : (
+                      <div className="calificar-chart-wrap">
+                        <canvas ref={chartRef} />
+                      </div>
+                    )}
+                  </div>
 
                   {loadingActs ? (
                     <div className="text-center py-5">
@@ -680,276 +705,133 @@ const DocenteCalificar: React.FC = () => {
                       <p className="text-muted mt-2">Cargando actividades...</p>
                     </div>
                   ) : activities.length === 0 ? (
-                    <div className="alert alert-info">
+                    <div className="alert alert-info mb-0">
                       <i className="bi bi-info-circle me-2"></i>
                       Sin actividades en este RA
                     </div>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-sm table-hover align-middle mb-0">
-                        <thead className="table-light" style={{ borderBottom: '2px solid var(--uv-red)' }}>
-                          <tr>
-                            <th className="fw-600" style={{ color: 'var(--uv-red)' }}>
-                              <i className="bi bi-bookmark me-1"></i>Actividad
-                            </th>
-                            <th className="fw-600 text-center" style={{ color: 'var(--uv-red)' }}>
-                              <i className="bi bi-pencil me-1"></i>Nota
-                            </th>
-                            <th className="fw-600 text-end" style={{ color: 'var(--uv-red)' }}>
-                              <i className="bi bi-sliders me-1"></i>Acciones
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(groupedByActivityAndState).map(([actId, { actividad, ras }]) => {
-                            const expandKey = `act-${actId}`
-                            const isExpanded = expanded[expandKey]
-                            const raRows = [...ras.pendientes, ...ras.calificadas]
-                            const finalGrade = getActivityFinal(raRows)
-                            
-                            return (
-                              <React.Fragment key={actId}>
-                                <tr className="fw-semibold" style={{ backgroundColor: 'rgba(227, 6, 19, 0.04)', borderLeft: '3px solid var(--uv-red)' }}>
-                                  <td colSpan={3}>
-                                    <div className="d-flex align-items-center gap-2">
-                                      <button
-                                        className="btn btn-sm btn-link p-0"
-                                        aria-label={isExpanded ? 'Ocultar RAs' : 'Ver RAs'}
-                                        onClick={() => setExpanded(prev => ({ ...prev, [expandKey]: !prev[expandKey] }))}
-                                      >
-                                        <i className={`bi ${isExpanded ? 'bi-chevron-down' : 'bi-chevron-right'}`} style={{ color: 'var(--uv-red)' }} />
-                                      </button>
-                                      <div>
-                                        <div className="fw-semibold">{actividad.nombre}</div>
-                                        {actividad.fechaCierre && <div className="small text-muted mt-1"><i className="bi bi-calendar-event me-1"></i>Cierra: {new Date(actividad.fechaCierre).toLocaleDateString()}</div>}
-                                      </div>
-                                      {(ras.pendientes.length > 0 || ras.calificadas.length > 0) && (
-                                        <div className="ms-auto d-flex gap-2 flex-wrap align-items-center">
-                                          {finalGrade != null && (
-                                            <span className={`badge px-3 py-2 ${finalGrade >= 3 ? 'bg-success' : 'bg-danger'}`}>
-                                              Nota final: {finalGrade.toFixed(2)}
-                                            </span>
-                                          )}
-                                          <span className="badge px-3 py-2" style={{ backgroundColor: '#FFF3F3', color: 'var(--uv-red)', border: '1px solid var(--uv-red-l)' }}><i className="bi bi-clock me-1"></i>{ras.pendientes.length} pendientes</span>
-                                          <span className="badge px-3 py-2 bg-success"><i className="bi bi-check-circle me-1"></i>{ras.calificadas.length} calificadas</span>
+                    <div className="calificar-activity-list">
+                      {Object.entries(groupedByActivityAndState).map(([actId, { actividad, ras }]) => {
+                        const expandKey = `act-${actId}`
+                        const isExpanded = expanded[expandKey] ?? true
+                        const raRows = [...ras.pendientes, ...ras.calificadas]
+                        const finalGrade = getActivityFinal(raRows)
+                        const indicatorCount = new Set(
+                          raRows.flatMap((row) => Array.isArray(row.indicadores) ? row.indicadores.map((ind) => String(ind.id)) : [])
+                        ).size
+
+                        return (
+                          <div key={actId} className="calificar-activity-card">
+                            <button
+                              type="button"
+                              className="calificar-activity-summary-toggle"
+                              onClick={() => setExpanded((prev) => ({ ...prev, [expandKey]: !isExpanded }))}
+                            >
+                              <div className="d-flex align-items-start gap-3 w-100">
+                                <div className="calificar-activity-bullet">
+                                  <i className={`bi ${isExpanded ? 'bi-dash-lg' : 'bi-plus-lg'}`}></i>
+                                </div>
+                                <div className="flex-grow-1 text-start">
+                                  <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                    <h6 className="mb-0">{actividad.nombre}</h6>
+                                    <span className={`badge ${raRows.some(isActivityGraded) ? 'bg-success' : 'bg-warning text-dark'}`}>
+                                      {raRows.some(isActivityGraded) ? 'Con calificación' : 'Pendiente'}
+                                    </span>
+                                  </div>
+                                  <div className="d-flex flex-wrap gap-2 align-items-center text-muted small">
+                                    {actividad.fechaCierre && <span><i className="bi bi-calendar-event me-1"></i>{new Date(actividad.fechaCierre).toLocaleDateString()}</span>}
+                                    <span><i className="bi bi-diagram-3 me-1"></i>{raRows.length} RAs</span>
+                                    <span><i className="bi bi-tags me-1"></i>{indicatorCount} indicadores</span>
+                                  </div>
+                                </div>
+                                <div className="ms-auto text-end">
+                                  {finalGrade != null && <div className={`badge px-3 py-2 ${finalGrade >= 3 ? 'bg-success' : 'bg-danger'}`}>Nota final {finalGrade.toFixed(2)}</div>}
+                                </div>
+                              </div>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="calificar-activity-body">
+                                <div className="d-grid gap-3">
+                                  {raRows.map((ra) => {
+                                    const eff = getEff(ra)
+                                    const key = ra.raActividadId || ''
+                                    const statusLabel = isActivityGraded(ra) ? 'Calificada' : 'Pendiente'
+
+                                    return (
+                                      <article key={ra.raActividadId} className={`calificar-ra-card ${isActivityGraded(ra) ? 'calificar-ra-card--graded' : 'calificar-ra-card--pending'}`}>
+                                        <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                                          <div>
+                                            <div className="d-flex align-items-center gap-2 mb-1">
+                                              <span className={`badge ${isActivityGraded(ra) ? 'bg-success' : 'bg-warning text-dark'}`}>{statusLabel}</span>
+                                              <strong>{(ra as unknown as { _raTitulo?: string })._raTitulo || 'RA sin título'}</strong>
+                                            </div>
+                                            {typeof ra.porcentajeRA === 'number' && <div className="small text-muted"><i className="bi bi-percent me-1"></i>Peso: {ra.porcentajeRA}%</div>}
+                                            {ra.descripcion && <div className="small text-muted mt-2 calificar-ra-description">{ra.descripcion}</div>}
+                                          </div>
                                         </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                                
-                                {isExpanded && (
-                                  <tr>
-                                    <td colSpan={3}>
-                                      <div className="p-3" style={{ backgroundColor: 'rgba(227, 6, 19, 0.02)' }}>
-                                        <table className="table table-sm mb-0">
-                                          <thead style={{ backgroundColor: 'rgba(227, 6, 19, 0.08)' }}>
-                                            <tr>
-                                              <th style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Resultado de Aprendizaje</th>
-                                              <th style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Nota (0-5)</th>
-                                              <th className="text-end" style={{ color: 'var(--uv-red)', fontWeight: '600' }}>Acciones</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {ras.pendientes.map(ra => {
-                                              const eff = getEff(ra)
-                                              const key = ra.raActividadId || ''
-                                              
-                                              return (
-                                                <tr key={ra.raActividadId} style={{ backgroundColor: eff.dirty ? 'rgba(255, 193, 7, 0.1)' : 'transparent', borderLeft: eff.dirty ? '3px solid #FFC107' : 'none' }}>
-                                                  <td>
-                                                    <div>
-                                                      <div className="fw-semibold">{(ra as unknown as { _raTitulo?: string })._raTitulo || 'RA sin título'}</div>
-                                                      {typeof ra.porcentajeRA === 'number' && (
-                                                        <div className="small text-muted mt-1"><i className="bi bi-percent me-1"></i>Peso: {ra.porcentajeRA}%</div>
-                                                      )}
-                                                      {ra.descripcion && (
-                                                        <div className="small text-muted mt-2 ps-3 border-start">{ra.descripcion}</div>
-                                                      )}
-                                                    </div>
-                                                  </td>
-                                                  <td>
-                                                    <input
-                                                      className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
-                                                      type="number"
-                                                      step="0.1"
-                                                      min={0}
-                                                      max={5}
-                                                      value={eff.nota}
-                                                      placeholder="0–5"
-                                                      onChange={e=> setEdit(key, { nota: e.target.value })}
-                                                      onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveRow(ra) } }}
-                                                      onBlur={()=> { void autoSaveRow(ra) }}
-                                                      disabled={!key}
-                                                    />
-                                                    <textarea
-                                                      className="form-control form-control-sm mt-2"
-                                                      rows={2}
-                                                      placeholder="Retroalimentación"
-                                                      value={eff.retro || ''}
-                                                      onChange={e=> setEdit(key, { retro: e.target.value })}
-                                                      onBlur={()=> { void autoSaveRow(ra) }}
-                                                      disabled={!key}
-                                                    />
-                                                  </td>
-                                                  <td className="text-end">
-                                                    <button className="btn btn-sm btn-outline-secondary" disabled={!key || !selectedStudent || eff.saving || eff.nota === '' || isNotaInvalid(eff.nota)} onClick={()=>saveRow(ra)}>
-                                                      {eff.saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span></>) : (<><i className="bi bi-check-circle me-1"></i>Guardar</>)}
-                                                    </button>
-                                                  </td>
-                                                </tr>
-                                              )
-                                            })}
-                                            
-                                            {ras.calificadas.length > 0 && (
-                                              <>
-                                                {ras.pendientes.length > 0 && (
-                                                  <tr style={{ backgroundColor: 'rgba(227, 6, 19, 0.05)' }}>
-                                                    <td colSpan={3} className="text-center fw-semibold py-3" style={{ color: 'var(--uv-red)' }}>
-                                                      ✓ Calificadas
-                                                    </td>
-                                                  </tr>
-                                                )}
-                                                {ras.calificadas.map(ra => {
-                                                  const eff = getEff(ra)
-                                                  const key = ra.raActividadId || ''
-                                                  const isInEditMode = editingGraded.has(key)
-                                                  
-                                                  return (
-                                                    <tr key={ra.raActividadId} style={{ backgroundColor: isInEditMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(25, 154, 117, 0.05)', borderLeft: isInEditMode ? '3px solid #FFC107' : '3px solid #199A75' }}>
-                                                      <td>
-                                                        <div>
-                                                          <div className="fw-semibold">
-                                                            <i className="bi bi-check-circle-fill me-2" style={{ color: '#199A75' }}></i>
-                                                            {(ra as unknown as { _raTitulo?: string })._raTitulo || 'RA sin título'}
-                                                          </div>
-                                                          {typeof ra.porcentajeRA === 'number' && (
-                                                            <div className="small text-muted mt-1"><i className="bi bi-percent me-1"></i>Peso: {ra.porcentajeRA}%</div>
-                                                          )}
-                                                          {ra.descripcion && (
-                                                            <div className="small text-muted mt-2 ps-3 border-start">{ra.descripcion}</div>
-                                                          )}
-                                                        </div>
-                                                      </td>
-                                                      <td>
-                                                        {!isInEditMode ? (
-                                                          <>
-                                                            <span className="badge px-3 py-2 bg-success-subtle text-success border border-success">{eff.nota || '—'}</span>
-                                                            {eff.retro && <div className="small text-muted mt-2">{eff.retro}</div>}
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <input
-                                                              className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
-                                                              type="number"
-                                                              step="0.1"
-                                                              min={0}
-                                                              max={5}
-                                                              value={eff.nota}
-                                                              placeholder="0–5"
-                                                              onChange={e=> setEdit(key, { nota: e.target.value })}
-                                                              onKeyDown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveRow(ra) } }}
-                                                              onBlur={()=> { void autoSaveRow(ra) }}
-                                                              disabled={!key}
-                                                            />
-                                                            <textarea
-                                                              className="form-control form-control-sm mt-2"
-                                                              rows={2}
-                                                              placeholder="Retroalimentación"
-                                                              value={eff.retro || ''}
-                                                              onChange={e=> setEdit(key, { retro: e.target.value })}
-                                                              onBlur={()=> { void autoSaveRow(ra) }}
-                                                              disabled={!key}
-                                                            />
-                                                          </>
-                                                        )}
-                                                      </td>
-                                                      <td className="text-end">
-                                                        {!isInEditMode ? (
-                                                          <button 
-                                                            className="btn btn-sm btn-outline-primary" 
-                                                            disabled={!key || !selectedStudent}
-                                                            onClick={() => setEditingGraded(prev => new Set(prev).add(key))}
-                                                            style={{ borderColor: 'var(--uv-red)', color: 'var(--uv-red)' }}
-                                                          >
-                                                            <i className="bi bi-pencil me-1"></i>Editar
-                                                          </button>
-                                                        ) : (
-                                                          <div className="btn-group btn-group-sm" role="group">
-                                                            <button 
-                                                              className="btn btn-sm btn-success"
-                                                              disabled={!key || !selectedStudent || eff.saving || eff.nota === '' || isNotaInvalid(eff.nota)} 
-                                                              onClick={()=>saveRow(ra)}
-                                                            >
-                                                              <i className="bi bi-check me-1"></i>Ok
-                                                            </button>
-                                                            <button 
-                                                              className="btn btn-sm btn-outline-secondary" 
-                                                              disabled={eff.saving}
-                                                              onClick={() => {
-                                                                setEditingGraded(prev => {
-                                                                  const next = new Set(prev)
-                                                                  next.delete(key)
-                                                                  return next
-                                                                })
-                                                                setEdits(prev => {
-                                                                  const next = { ...prev }
-                                                                  delete next[key]
-                                                                  return next
-                                                                })
-                                                              }}
-                                                            >
-                                                              <i className="bi bi-x-circle me-1"></i>Cancelar
-                                                            </button>
-                                                          </div>
-                                                        )}
-                                                      </td>
-                                                    </tr>
-                                                  )
-                                                })}
-                                              </>
-                                            )}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                              </React.Fragment>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+
+                                        <div className="d-flex flex-wrap gap-1 mb-3">
+                                          {Array.isArray(ra.indicadores) && ra.indicadores.length > 0 ? (
+                                            ra.indicadores.map((ind) => (
+                                              <span key={ind.id} className="calificar-indicator-chip calificar-indicator-chip--compact">
+                                                {ind.descripcion}
+                                              </span>
+                                            ))
+                                          ) : (
+                                            <span className="text-muted small">Sin indicadores asociados</span>
+                                          )}
+                                        </div>
+
+                                        <div className="row g-3 align-items-end">
+                                          <div className="col-lg-2 col-md-3">
+                                            <label className="form-label small fw-semibold mb-1">Nota</label>
+                                            <input
+                                              className={`form-control form-control-sm ${isNotaInvalid(eff.nota) ? 'is-invalid' : ''}`}
+                                              type="number"
+                                              step="0.1"
+                                              min={0}
+                                              max={5}
+                                              value={eff.nota}
+                                              placeholder="0–5"
+                                              onChange={e => setEdit(key, { nota: e.target.value })}
+                                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveRow(ra) } }}
+                                              onBlur={() => { void autoSaveRow(ra) }}
+                                              disabled={!key}
+                                            />
+                                          </div>
+                                          <div className="col-lg-8 col-md-9">
+                                            <label className="form-label small fw-semibold mb-1">Retroalimentación</label>
+                                            <textarea
+                                              className="form-control form-control-sm"
+                                              rows={3}
+                                              placeholder="Comentarios para el estudiante"
+                                              value={eff.retro || ''}
+                                              onChange={e => setEdit(key, { retro: e.target.value })}
+                                              onBlur={() => { void autoSaveRow(ra) }}
+                                              disabled={!key}
+                                            />
+                                          </div>
+                                          <div className="col-lg-2 d-flex justify-content-end">
+                                            <button className="btn btn-sm btn-primary w-100" disabled={!key || !selectedStudent || eff.saving || eff.nota === '' || isNotaInvalid(eff.nota)} onClick={() => saveRow(ra)}>
+                                              {eff.saving ? (<><span className="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Guardando…</>) : (<><i className="bi bi-check-circle me-1"></i>Guardar</>)}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </article>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
               </div>
             </div>
-
-            {showChart && (
-              <div className="col-lg-4">
-                <div className="card shadow-sm border-0" style={{ borderTop: '4px solid #199A75' }}>
-                  <div className="card-header border-bottom" style={{ backgroundColor: 'rgba(25, 154, 117, 0.05)' }}>
-                    <h6 className="mb-0">
-                      <i className="bi bi-bar-chart-fill text-success me-2"></i>
-                      Desempeño por Indicador
-                    </h6>
-                  </div>
-                  <div className="card-body">
-                    {chartEmpty ? (
-                      <div className="text-center py-5">
-                        <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
-                        <small className="text-muted">Sin datos para mostrar</small>
-                      </div>
-                    ) : (
-                      <div className="border rounded p-2" style={{ backgroundColor: '#fafafa' }}>
-                        <canvas ref={chartRef} height={220} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="mt-4 d-flex gap-2">

@@ -37,15 +37,6 @@ const GradingForm: React.FC<GradingFormProps> = ({ activity, student, edits, onE
 
   const eff = getEff(activity.raActividadId || '')
 
-  if (!student) {
-    return (
-      <div className="alert alert-info">
-        <i className="bi bi-info-circle me-2"></i>
-        Selecciona un estudiante para calificar
-      </div>
-    )
-  }
-
   // Nota final calculada: Σ(Nota_RA * Porcentaje_RA) / Σ(Porcentaje_RA)
   const notaFinal = useMemo(() => {
     if (!activity.indicadores || !eff.nota) return null
@@ -54,6 +45,15 @@ const GradingForm: React.FC<GradingFormProps> = ({ activity, student, edits, onE
     // Para una actividad con una nota única, el cálculo es simple
     return nota
   }, [eff.nota, activity.indicadores])
+
+  if (!student) {
+    return (
+      <div className="alert alert-info">
+        <i className="bi bi-info-circle me-2"></i>
+        Selecciona un estudiante para calificar
+      </div>
+    )
+  }
 
   return (
     <div className="ra-card mb-3">

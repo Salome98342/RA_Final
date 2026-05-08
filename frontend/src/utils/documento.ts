@@ -15,7 +15,7 @@ export const formatTipoDocumentoAbbr = (
   if (!raw) return fallback
 
   const normalized = normalizeDocumentType(raw)
-  const compact = normalized.replace(/[\.\s]/g, '')
+  const compact = normalized.replace(/[.\s]/g, '')
 
   if (compact === 'cc' || normalized.includes('cedula de ciudadania')) return 'C.C.'
   if (compact === 'cr' || normalized.includes('registro civil')) return 'C.R.'

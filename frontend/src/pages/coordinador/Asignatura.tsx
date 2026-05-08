@@ -4,6 +4,7 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
+import { getApiErrorMessage } from '@/utils/alertMessages'
 import { getPeriodosByCourse } from '@/services/api'
 import {
   fetchAsignaturas,
@@ -123,8 +124,8 @@ const AsignaturaDetalle: React.FC = () => {
       })
       setEstRows(data.results)
       setEstTotal(data.total)
-    } catch (e: any) {
-      Alert.error(e?.response?.data?.detail || e.message || 'No se pudo cargar la lista de estudiantes.')
+    } catch (e: unknown) {
+      Alert.error(getApiErrorMessage(e) || 'No se pudo cargar la lista de estudiantes.')
     } finally {
       setLoadingEst(false)
     }

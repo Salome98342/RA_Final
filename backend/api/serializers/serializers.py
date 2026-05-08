@@ -27,12 +27,12 @@ class DocenteSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Docente
-        fields = "__all__"
+        exclude = ("contrasenia_docente",)
 
 class EstudianteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Estudiante
-        fields = "__all__"
+        exclude = ("contrasena_estudiante",)
 
 class AsignaturaSerializer(serializers.ModelSerializer):
     # Expandir ForeignKeys como objetos anidados para el frontend

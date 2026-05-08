@@ -161,12 +161,34 @@ export function formatMessage(message: string, variables: Record<string, string 
 }
 
 // Función para construir mensaje con dinámicamente (ej: attemptsRemaining)
-export function buildMessage(messageFn: (...args: any[]) => string, ...args: any[]): string {
+export function buildMessage(messageFn: (...args: unknown[]) => string, ...args: unknown[]): string {
   return messageFn(...args)
 }
 
 // Función para obtener mensaje de error de API
-export function getApiErrorMessage(error: any): string {
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      detail?: string
+      message?: string
+      error?: string
+    }
+    status?: number
+  }
+  message?: string
+  code?: string
+}
+
+const isApiErrorLike = (error: unknown): error is ApiErrorLike =>
+  typeof error === 'object' && error !== null
+
+export function getApiErrorMessage(error: unknown): string {
+  if (!isApiErrorLike(error)) {
+    return ALERT_MESSAGES.general.unknownError
+  }
+  if (error.response?.data?.detail) {
+    return error.response.data.detail
+  }
   if (error.response?.data?.message) {
     return error.response.data.message
   }
@@ -176,16 +198,17 @@ export function getApiErrorMessage(error: any): string {
   if (error.message) {
     return error.message
   }
-  if (error.response?.status === 401) {
+  const status = error.response?.status
+  if (status === 401) {
     return ALERT_MESSAGES.auth.unauthorized
   }
-  if (error.response?.status === 403) {
+  if (status === 403) {
     return ALERT_MESSAGES.auth.unauthorized
   }
-  if (error.response?.status === 404) {
+  if (status === 404) {
     return 'No se encontró el recurso solicitado'
   }
-  if (error.response?.status >= 500) {
+  if (typeof status === 'number' && status >= 500) {
     return ALERT_MESSAGES.general.serverError
   }
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { fetchDocentePerfil, fetchPeriodosCoordinador, type DocentePerfilCompleto } from '@/services/coordinador'
 import { formatTipoDocumentoAbbr } from '@/utils/documento'
 import { sortPeriodosDesc } from '@/utils/periodos'
+import { getApiErrorMessage } from '@/utils/alertMessages'
 
 interface DocentePerfilModalProps {
   id_docente: number
@@ -43,8 +44,8 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
 
         setPeriodoSeleccionado(latestFromPeriodos || latestFromAsignaturasValue)
         setData(result)
-      } catch (err: any) {
-        setError(err?.response?.data?.detail || 'Error al cargar el perfil del docente')
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err) || 'Error al cargar el perfil del docente')
       } finally {
         setLoading(false)
       }

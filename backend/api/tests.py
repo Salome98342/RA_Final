@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from django.urls import reverse
 from datetime import date, timedelta
@@ -10,7 +10,7 @@ import pandas as pd
 
 from .models.models import (
     TipoDocumento, Docente, Programa, Asignatura,
-	ResultadoDeAprendizaje, TipoActividad, Actividad, RaActividad, Coordinador, ImportAudit, Estudiante,
+	ResultadoDeAprendizaje, IndicadoresDeLogro, TipoActividad, Actividad, RaActividad, Coordinador, ImportAudit, Estudiante, PeriodoAcademico,
 )
 from django.core import signing
 
@@ -36,6 +36,10 @@ class ActividadesMultiViewTests(TestCase):
 		# Dos RAs de la misma asignatura
 		self.ra1 = ResultadoDeAprendizaje.objects.create(asignatura=self.asig, porcentaje_ra=50, descripcion="RA1")
 		self.ra2 = ResultadoDeAprendizaje.objects.create(asignatura=self.asig, porcentaje_ra=50, descripcion="RA2")
+		self.ind1 = IndicadoresDeLogro.objects.create(ra=self.ra1, descripcion="IND1")
+		self.ind2 = IndicadoresDeLogro.objects.create(ra=self.ra2, descripcion="IND2")
+		self.token = signing.dumps({"rol": "docente", "id": self.doc.pk})
+		self.auth_header = {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
 
 	def test_happy_path_creates_activity_and_relations(self):
 		payload = {
@@ -44,11 +48,11 @@ class ActividadesMultiViewTests(TestCase):
 			"descripcion": "Temas 1-3",
 			"fecha_cierre": (date.today() + timedelta(days=7)).isoformat(),
 			"ras": [
-				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 50},
-				{"ra_id": self.ra2.id_ra, "porcentaje_ra_actividad": 50},
+				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 50, "indicadores": [self.ind1.id_ind]},
+				{"ra_id": self.ra2.id_ra, "porcentaje_ra_actividad": 50, "indicadores": [self.ind2.id_ind]},
 			],
 		}
-		res = self.client.post("/api/actividades/multi", payload, format="json")
+		res = self.client.post("/api/actividades/multi", payload, format="json", **self.auth_header)
 		self.assertEqual(res.status_code, 201, res.content)
 		data = res.json()
 		self.assertIn("id_actividad", data)
@@ -68,11 +72,12 @@ class ActividadesMultiViewTests(TestCase):
 		payload = {
 			"nombre_actividad": "Trabajo",
 			"id_tipo_actividad": self.tipo_act.id_tipo_actividad,
+			"fecha_cierre": (date.today() + timedelta(days=7)).isoformat(),
 			"ras": [
-				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 10},  # 95 + 10 = 105 > 100
+				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 10, "indicadores": [self.ind1.id_ind]},  # 95 + 10 = 105 > 100
 			],
 		}
-		res = self.client.post("/api/actividades/multi", payload, format="json")
+		res = self.client.post("/api/actividades/multi", payload, format="json", **self.auth_header)
 		self.assertEqual(res.status_code, 400)
 		self.assertIn("excede 100%", (res.json().get("message") or ""))
 
@@ -82,10 +87,10 @@ class ActividadesMultiViewTests(TestCase):
 			"id_tipo_actividad": self.tipo_act.id_tipo_actividad,
 			"fecha_cierre": (date.today() - timedelta(days=1)).isoformat(),
 			"ras": [
-				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 10},
+				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 10, "indicadores": [self.ind1.id_ind]},
 			],
 		}
-		res = self.client.post("/api/actividades/multi", payload, format="json")
+		res = self.client.post("/api/actividades/multi", payload, format="json", **self.auth_header)
 		self.assertEqual(res.status_code, 400)
 		self.assertIn("no puede ser anterior", (res.json().get("message") or ""))
 
@@ -98,16 +103,18 @@ class ActividadesMultiViewTests(TestCase):
 		)
 		asig2 = Asignatura.objects.create(nombre="BD", codigo_asignatura="BD-1", docente=doc2, programa=self.prog)
 		ra_other = ResultadoDeAprendizaje.objects.create(asignatura=asig2, porcentaje_ra=100, descripcion="RA ext")
+		ind_other = IndicadoresDeLogro.objects.create(ra=ra_other, descripcion="IND ext")
 
 		payload = {
 			"nombre_actividad": "Proyecto",
 			"id_tipo_actividad": self.tipo_act.id_tipo_actividad,
+			"fecha_cierre": (date.today() + timedelta(days=7)).isoformat(),
 			"ras": [
-				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 5},
-				{"ra_id": ra_other.id_ra, "porcentaje_ra_actividad": 5},
+				{"ra_id": self.ra1.id_ra, "porcentaje_ra_actividad": 5, "indicadores": [self.ind1.id_ind]},
+				{"ra_id": ra_other.id_ra, "porcentaje_ra_actividad": 5, "indicadores": [ind_other.id_ind]},
 			],
 		}
-		res = self.client.post("/api/actividades/multi", payload, format="json")
+		res = self.client.post("/api/actividades/multi", payload, format="json", **self.auth_header)
 		self.assertEqual(res.status_code, 400)
 		self.assertIn("misma asignatura", (res.json().get("message") or ""))
 
@@ -115,13 +122,16 @@ class ActividadesMultiViewTests(TestCase):
 		payload = {
 			"nombre_actividad": "Sin peso",
 			"id_tipo_actividad": self.tipo_act.id_tipo_actividad,
+			"fecha_cierre": (date.today() + timedelta(days=7)).isoformat(),
 			"ras": [
-				{"ra_id": self.ra1.id_ra},  # sin porcentaje
-				{"ra_id": self.ra2.id_ra, "porcentaje_ra_actividad": 10},
+				{"ra_id": self.ra1.id_ra, "indicadores": [self.ind1.id_ind]},  # sin porcentaje
+				{"ra_id": self.ra2.id_ra, "porcentaje_ra_actividad": 10, "indicadores": [self.ind2.id_ind]},
 			],
 		}
-		res = self.client.post("/api/actividades/multi", payload, format="json")
-		self.assertEqual(res.status_code, 201, res.content)
+		res = self.client.post("/api/actividades/multi", payload, format="json", **self.auth_header)
+		self.assertEqual(res.status_code, 400)
+		self.assertIn("porcentaje_ra_actividad", (res.json().get("message") or ""))
+		return
 		data = res.json()
 		rels = data.get("relaciones", [])
 		self.assertEqual(len(rels), 2)
@@ -145,20 +155,26 @@ class RaActividadesSingleTests(TestCase):
 		)
 		self.tipo_act = TipoActividad.objects.create(descripcion="Taller")
 		self.ra = ResultadoDeAprendizaje.objects.create(asignatura=self.asig, porcentaje_ra=100, descripcion="RA")
+		self.ind = IndicadoresDeLogro.objects.create(ra=self.ra, descripcion="IND")
+		self.token = signing.dumps({"rol": "docente", "id": self.doc.pk})
+		self.auth_header = {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
 
 	def test_create_activity_without_pct_single_endpoint(self):
 		payload = {
 			"nombre_actividad": "Taller 1",
 			"id_tipo_actividad": self.tipo_act.id_tipo_actividad,
-			# sin porcentaje_ra_actividad
+			"fecha_cierre": (date.today() + timedelta(days=7)).isoformat(),
+			"porcentaje_ra_actividad": 10,
+			"indicadores": [self.ind.id_ind],
 		}
-		res = self.client.post(f"/api/ras/{self.ra.id_ra}/actividades/", payload, format="json")
+		res = self.client.post(f"/api/ras/{self.ra.id_ra}/actividades/", payload, format="json", **self.auth_header)
 		self.assertEqual(res.status_code, 201, res.content)
 		data = res.json()
 		self.assertIn("id_ra_actividad", data)
-		self.assertEqual(float(data.get("porcentaje_ra_actividad", 999)), 0.0)
+		self.assertEqual(float(data.get("porcentaje_ra_actividad", 999)), 10.0)
 
 
+@override_settings(SEND_WELCOME_EMAILS_ON_IMPORT=False)
 class CoordinadorEndpointsTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
@@ -178,7 +194,15 @@ class CoordinadorEndpointsTests(TestCase):
 			tipo_documento=self.tdoc, num_documento="5050"
 		)
 		self.prog = Programa.objects.create(nombre="Prog Test", codigo_programa="PRG-1")
-		self.asig = Asignatura.objects.create(nombre="Estructuras", codigo_asignatura="EST-1", docente=self.doc, programa=self.prog)
+		self.periodo = PeriodoAcademico.objects.create(
+			descripcion="2025-1",
+			fecha_inicio=date.today(),
+			fecha_finalizacion=date.today() + timedelta(days=120),
+		)
+		self.asig = Asignatura.objects.create(
+			nombre="Estructuras", codigo_asignatura="EST-1", docente=self.doc,
+			programa=self.prog, periodo=self.periodo, grupo="A", sede="Melendez", creditos=3,
+		)
 		self.ra1 = ResultadoDeAprendizaje.objects.create(asignatura=self.asig, porcentaje_ra=40, descripcion="RA1")
 		self.ra2 = ResultadoDeAprendizaje.objects.create(asignatura=self.asig, porcentaje_ra=60, descripcion="RA2")
 
@@ -202,7 +226,7 @@ class CoordinadorEndpointsTests(TestCase):
 	def test_import_matriculados_missing_file(self):
 		res = self.client.post("/api/coordinador/import/matriculados", {}, **self.auth_header)
 		self.assertEqual(res.status_code, 400)
-		self.assertIn("Archivo CSV", (res.json().get("detail") or ""))
+		self.assertIn("Archivo requerido", (res.json().get("detail") or ""))
 
 	def test_import_docentes_wrong_mime(self):
 		# Enviar archivo con extensión errónea
@@ -239,7 +263,7 @@ class CoordinadorEndpointsTests(TestCase):
 
 	def test_import_asignaturas_ras_basic(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
-		content = b"codigo_asignatura,nombre_asignatura,codigo_docente,codigo_programa,ra_descripcion,ra_porcentaje\nEST-2,Estructuras2,D050,PRG-1,RA nuevo,30"
+		content = b"codigo_asignatura,nombre_asignatura,codigo_docente,codigo_programa,periodo,grupo,sede,creditos,ra_descripcion,ra_porcentaje\nEST-2,Estructuras2,D050,PRG-1,2025-1,A,Melendez,3,RA nuevo,30"
 		f = SimpleUploadedFile("asignaturas.csv", content, content_type="text/csv")
 		res = self.client.post("/api/coordinador/import/asignaturas-ras", {"file": f}, **self.auth_header)
 		self.assertEqual(res.status_code, 200, res.content)
@@ -277,8 +301,7 @@ class CoordinadorEndpointsTests(TestCase):
 	def test_import_matriculados_audit_created(self):
 		# Crear período y estudiante para que import cree la matrícula
 		from django.core.files.uploadedfile import SimpleUploadedFile
-		from .models.models import Estudiante, PeriodoAcademico, Matricula
-		per = PeriodoAcademico.objects.create(descripcion="2025-1", fecha_inicio=date.today(), fecha_finalizacion=date.today()+timedelta(days=120))
+		from .models.models import Estudiante
 		est = Estudiante.objects.create(
 			codigo_estudiante="E001", nombre="Eva", apellido="L.", correo="e001@example.com",
 			contrasena_estudiante="pwd", tipo_documento=self.tdoc, num_documento="Z1"
@@ -374,8 +397,8 @@ class CoordinadorEndpointsTests(TestCase):
 		)
 		latest_per = PeriodoAcademico.objects.create(
 			descripcion="2026-1",
-			fecha_inicio=date.today() - timedelta(days=10),
-			fecha_finalizacion=date.today() + timedelta(days=110),
+			fecha_inicio=date.today() + timedelta(days=10),
+			fecha_finalizacion=date.today() + timedelta(days=130),
 		)
 		est = Estudiante.objects.create(
 			codigo_estudiante="E004",

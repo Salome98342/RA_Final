@@ -508,18 +508,27 @@ const Imports: React.FC<ImportsProps> = ({
   })
   const [activeImport, setActiveImport] = useState<ImportKind | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState<ImportKind | null>(null)
-  const inputRefs = {
-    est: useRef<HTMLInputElement | null>(null),
-    mat: useRef<HTMLInputElement | null>(null),
-    doc: useRef<HTMLInputElement | null>(null),
-    asig: useRef<HTMLInputElement | null>(null),
-  }
-  const cardRefs = {
-    est: useRef<HTMLDivElement | null>(null),
-    mat: useRef<HTMLDivElement | null>(null),
-    doc: useRef<HTMLDivElement | null>(null),
-    asig: useRef<HTMLDivElement | null>(null),
-  }
+  const estInputRef = useRef<HTMLInputElement | null>(null)
+  const matInputRef = useRef<HTMLInputElement | null>(null)
+  const docInputRef = useRef<HTMLInputElement | null>(null)
+  const asigInputRef = useRef<HTMLInputElement | null>(null)
+  const estCardRef = useRef<HTMLDivElement | null>(null)
+  const matCardRef = useRef<HTMLDivElement | null>(null)
+  const docCardRef = useRef<HTMLDivElement | null>(null)
+  const asigCardRef = useRef<HTMLDivElement | null>(null)
+
+  const inputRefs = useMemo(() => ({
+    est: estInputRef,
+    mat: matInputRef,
+    doc: docInputRef,
+    asig: asigInputRef,
+  }), [])
+  const cardRefs = useMemo(() => ({
+    est: estCardRef,
+    mat: matCardRef,
+    doc: docCardRef,
+    asig: asigCardRef,
+  }), [])
 
   const configByKind = useMemo(() => {
     return cardConfigs.reduce((acc, config) => {
@@ -782,7 +791,7 @@ const Imports: React.FC<ImportsProps> = ({
     const target = cardRefs[highlightedModule].current
     if (!target) return
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [highlightedModule])
+  }, [cardRefs, highlightedModule])
 
   return (
     <div className="dashboard-body min-vh-100">

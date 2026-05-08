@@ -4,6 +4,7 @@ import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import Alert from '@/utils/alert'
+import { getApiErrorMessage } from '@/utils/alertMessages'
 import {
   createAsignaturaWithRAs,
   fetchAsignaturaDetalleEdicion,
@@ -463,8 +464,8 @@ const AsignaturasRA: React.FC = () => {
         if (!detected) {
           Alert.warning('No se pudo detectar automáticamente el programa del coordinador desde backend. Contacta al administrador para configurar este perfil.')
         }
-      } catch (e: any) {
-        Alert.error(e?.response?.data?.detail || e.message || 'No fue posible cargar docentes, periodos o perfil del coordinador.')
+      } catch (e: unknown) {
+        Alert.error(getApiErrorMessage(e) || 'No fue posible cargar docentes, periodos o perfil del coordinador.')
       } finally {
         setLoadingCatalogs(false)
       }
@@ -729,8 +730,8 @@ const AsignaturasRA: React.FC = () => {
         grupo: '',
         sede: '',
       }))
-    } catch (e: any) {
-      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible guardar la asignatura con sus RAs.')
+    } catch (e: unknown) {
+      Alert.error(getApiErrorMessage(e) || 'No fue posible guardar la asignatura con sus RAs.')
     } finally {
       setLoadingSubmit(false)
     }
@@ -792,11 +793,11 @@ const AsignaturasRA: React.FC = () => {
         }))
       )
       Alert.toast.success('Asignatura encontrada. Puedes actualizar base, RAs e indicadores.')
-    } catch (e: any) {
+    } catch (e: unknown) {
       setUpdateFoundId(null)
       setUpdateRaList([])
       setUpdateSnapshotRAs([])
-      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible consultar la asignatura.')
+      Alert.error(getApiErrorMessage(e) || 'No fue posible consultar la asignatura.')
     } finally {
       setLoadingLookup(false)
     }
@@ -938,8 +939,8 @@ const AsignaturasRA: React.FC = () => {
         `${response.detail} RAs actualizados: ${response.resumen.ras_actualizados}, creados: ${response.resumen.ras_creados}, eliminados: ${response.resumen.ras_eliminados}. ` +
         `Indicadores actualizados: ${response.resumen.indicadores_actualizados}, creados: ${response.resumen.indicadores_creados}, eliminados: ${response.resumen.indicadores_eliminados}.`
       )
-    } catch (e: any) {
-      Alert.error(e?.response?.data?.detail || e.message || 'No fue posible actualizar la asignatura.')
+    } catch (e: unknown) {
+      Alert.error(getApiErrorMessage(e) || 'No fue posible actualizar la asignatura.')
     } finally {
       setLoadingUpdateSubmit(false)
     }

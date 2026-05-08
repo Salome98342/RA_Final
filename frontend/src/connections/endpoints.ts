@@ -31,9 +31,11 @@ export const endpoints = {
   },
   ras: {
     indicadores: (id: string) => `/ras/${id}/indicadores/`,
+    crearIndicador: (id: string) => `/ras/${id}/indicadores/crear`,
     actividades: (id: string) => `/ras/${id}/actividades/`,
     actividad: (raId: string, relId: string) => `/ras/${raId}/actividades/${relId}/`,
     indicador: (raId: string, indId: string) => `/ras/${raId}/indicadores/${indId}/`,
+    actualizarIndicador: (raId: string, indId: string) => `/ras/${raId}/indicadores/${indId}/actualizar`,
   },
   actividades: {
     multi: '/actividades/multi',

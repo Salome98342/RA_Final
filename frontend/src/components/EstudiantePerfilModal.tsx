@@ -244,7 +244,6 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                           return (
                           <div className="accordion-item" key={`${String(asig._periodoId)}-${String(asig.id_asignatura)}-${idx}`}>
                             <h2 className="accordion-header">
-                              {/* eslint-disable-next-line axe/aria */}
                               <button
                                 className={`accordion-button ${idx !== 0 ? 'collapsed' : ''}`}
                                 type="button"
@@ -290,7 +289,6 @@ const EstudiantePerfilModal: React.FC<EstudiantePerfilModalProps> = ({ id_estudi
                                   <div className="col-md-4">
                                     <small className="text-muted">Cobertura:</small>
                                     <div className="progress" style={{ height: '30px' }}>
-                                      {/* eslint-disable-next-line axe/aria */}
                                       <div
                                         className={`progress-bar bg-${getCoverageColor(asig.coverage)}`}
                                         role="progressbar"

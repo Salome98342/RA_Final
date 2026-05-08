@@ -197,17 +197,10 @@ class ResultadoDeAprendizaje(models.Model):
 class IndicadoresDeLogro(models.Model):
     id_ind = models.BigAutoField(primary_key=True, db_column="id_ind")
     ra = models.ForeignKey(ResultadoDeAprendizaje, on_delete=models.CASCADE, db_column="id_ra")
-    porcentaje_ind = models.DecimalField(max_digits=5, decimal_places=2)
     descripcion = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "indicadores_de_logro"
-        constraints = [
-            models.CheckConstraint(
-                check=Q(porcentaje_ind__gte=0) & Q(porcentaje_ind__lte=100),
-                name="chk_ind_pct",
-            ),
-        ]
 
 
 class TipoActividad(models.Model):

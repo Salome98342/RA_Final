@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useState, useCallback, useEffect } from 'react'
 import Spinner from '@/components/Spinner'
 import { loadingEventBus } from '@/utils/loadingEvents'
 
@@ -48,10 +48,3 @@ export const LoadingProvider: React.FC<React.PropsWithChildren> = ({ children })
   )
 }
 
-export const useLoadingContext = () => {
-  const context = useContext(LoadingContext)
-  if (!context) {
-    throw new Error('useLoadingContext debe usarse dentro de LoadingProvider')
-  }
-  return context
-}

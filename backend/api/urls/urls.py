@@ -5,7 +5,7 @@ from ..views.views import (
     login_view, me_view, logout_view, password_forgot_view, verify_otp_view, password_reset_view,
     TipoDocumentoViewSet, TipoActividadViewSet, ProgramaViewSet,
     DocenteViewSet, EstudianteViewSet, AsignaturaViewSet,
-    ra_indicadores_view, ra_indicador_detail_view, ra_actividades_view, notas_view,
+    ra_indicadores_view, ra_indicador_detail_view, docente_crear_indicador_view, docente_actualizar_indicador_view, ra_actividades_view, notas_view,
     course_student_indicators_view, profile_view, password_change_view, profile_avatar_view,
     notifications_view, ra_validation_view, asignatura_validation_view,
     actividades_multi_view, ra_actividad_detail_view, course_grade_view, course_detail_view, course_analytics_view,
@@ -48,7 +48,9 @@ urlpatterns = [
     path("auth/password/change", password_change_view),
     path("auth/profile/avatar", profile_avatar_view),
     path("ras/<int:ra_id>/indicadores/", ra_indicadores_view, name="ra-indicadores"),
+    path("ras/<int:ra_id>/indicadores/crear", docente_crear_indicador_view, name="docente-crear-indicador"),
     path("ras/<int:ra_id>/indicadores/<int:ind_id>/", ra_indicador_detail_view, name="ra-indicador-detalle"),
+    path("ras/<int:ra_id>/indicadores/<int:ind_id>/actualizar", docente_actualizar_indicador_view, name="docente-actualizar-indicador"),
     path("ras/<int:ra_id>/actividades/", ra_actividades_view),  # GET, POST
     path("validacion/ra/<int:ra_id>", ra_validation_view),
     path("validacion/asignatura/<str:codigo_asignatura>", asignatura_validation_view),

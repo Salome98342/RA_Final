@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 type Props = { 
   text: string
@@ -17,6 +17,14 @@ const Toast: React.FC<Props> = ({ text, type = 'ok', duration = 3500, onClose })
     return () => clearTimeout(showTimer)
   }, [])
 
+  const handleClose = useCallback(() => {
+    setClosing(true)
+    setTimeout(() => {
+      setVisible(false)
+      onClose?.()
+    }, 500)
+  }, [onClose])
+
   useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(() => {
@@ -24,15 +32,7 @@ const Toast: React.FC<Props> = ({ text, type = 'ok', duration = 3500, onClose })
       }, duration)
       return () => clearTimeout(timer)
     }
-  }, [duration])
-
-  const handleClose = () => {
-    setClosing(true)
-    setTimeout(() => {
-      setVisible(false)
-      onClose?.()
-    }, 500)
-  }
+  }, [duration, handleClose])
 
   if (!visible && closing) return null
 

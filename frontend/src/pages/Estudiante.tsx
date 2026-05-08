@@ -6,7 +6,7 @@ import SearchPill from '@/components/SearchPill'
 import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import type { Course, GroupedActivity, ProfilePeriodo, ProfileDetails } from '@/types'
+import type { Course, GroupedActivity, GradeSummaryResponse, ProfilePeriodo, ProfileDetails } from '@/types'
 import { getCourses, getMyMatricula, getCourseActivitiesGrouped, getCourseGradeSummary, type Anuncio } from '@/services/api'
 import GradeSummary from '@/components/GradeSummary'
 import { getProfile, getFullProfile } from '@/services/auth'
@@ -32,7 +32,7 @@ const Estudiante: React.FC = () => {
   const [rawAnuncios, setRawAnuncios] = useState<Array<{ curso: string; items: Anuncio[] }>>([])
   // Nota ponderada por curso (0-5) y porcentaje (0-100)
   const [courseStats, setCourseStats] = useState<Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }>>({})
-  const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, import('@/types').GradeSummaryResponse>>({})
+  const [gradeSummaryByCourse, setGradeSummaryByCourse] = useState<Record<string, GradeSummaryResponse>>({})
   // Cronograma (notificaciones abajo)
   const [schedQuery, setSchedQuery] = useState('')
   const [schedFilter, setSchedFilter] = useState<'todas'|'pendientes'|'vencidas'>('todas')
@@ -95,8 +95,9 @@ const Estudiante: React.FC = () => {
           setCurrentPeriodId(null)
         }
 
-  const notes: { id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[] = []
-  const stats: Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }> = {}
+        const notes: { id: string; kind: 'danger'|'warning'; text: string; courseId?: string }[] = []
+        const stats: Record<string, { note: number | null; pct: number | null; graded: number; total: number; strict?: number | null; progressive?: number | null; coverage?: number | null }> = {}
+        const summaries: Record<string, GradeSummaryResponse> = {}
         const todos: TaskItem[] = []
         const now = new Date()
         const day = now.getDay()
@@ -161,7 +162,7 @@ const Estudiante: React.FC = () => {
           if (studentId) {
             const summary = await getCourseGradeSummary(c.id, studentId)
             if (summary) {
-              gradeSummaryByCourse[c.id] = summary
+              summaries[c.id] = summary
               // Preferir promedio progresivo como nota principal
               courseNote = summary.total.progressive
               stats[c.id] = {
@@ -224,7 +225,7 @@ const Estudiante: React.FC = () => {
         const anunciosData = await Promise.all(anunciosPromises)
         if (mounted) setRawAnuncios(anunciosData)
 
-        if (mounted) { setNotifications(notes); setTasks(todos); setCourseStats(stats); setGradeSummaryByCourse({...gradeSummaryByCourse}) }
+        if (mounted) { setNotifications(notes); setTasks(todos); setCourseStats(stats); setGradeSummaryByCourse(summaries) }
       })
       .finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }

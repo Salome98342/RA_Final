@@ -42,7 +42,6 @@ const ProgressModal: React.FC<ProgressModalProps> = ({
             
             {status === 'loading' && (
               <div className="progress" style={{ height: '25px' }}>
-                {/* eslint-disable-next-line axe/aria */}
                 <div
                   className="progress-bar progress-bar-striped progress-bar-animated"
                   role="progressbar"

@@ -36,7 +36,7 @@ const MateriaDetalle = () => {
         } else {
           setError('No se pudo cargar la información de la asignatura')
         }
-      } catch (e) {
+      } catch {
         setError('Error al cargar datos')
       } finally {
         setLoading(false)

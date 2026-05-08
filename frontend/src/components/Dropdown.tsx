@@ -7,7 +7,6 @@ const Dropdown: React.FC<Props> = ({ options, value, onChange }) => {
   const selected = options.find((o) => o.value === value)?.label ?? value
   
   return (
-    // eslint-disable-next-line jsx-a11y/aria-props, axe/aria
     <div
       className="dropdown"
       tabIndex={0}
@@ -31,7 +30,6 @@ const Dropdown: React.FC<Props> = ({ options, value, onChange }) => {
       {open && (
         <ul className="dropdown-list" id={listId} role="listbox" aria-label="Opciones">
           {options.map((o) => (
-            // eslint-disable-next-line jsx-a11y/aria-props, axe/aria
             <li
               key={o.value}
               role="option"

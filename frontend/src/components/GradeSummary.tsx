@@ -107,7 +107,7 @@ const GradeSummary: React.FC<GradeSummaryProps> = ({ summary }) => {
                 {summary.ras.map(ra => {
                   const nota = typeof ra.progressive === 'number' ? ra.progressive.toFixed(2) : '—'
                   const totalActs = ra.actividades.length
-                  const gradedActs = ra.actividades.filter(a => typeof (a as any).nota === 'number').length
+                  const gradedActs = ra.actividades.filter(a => typeof a.nota === 'number').length
                   const cov = Math.round(ra.coverage * 100)
                   const covStep = Math.round(cov / 10) * 10
                   const covWidth = `w-pct-${covStep}`

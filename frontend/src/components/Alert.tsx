@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 type AlertType = 'success' | 'error' | 'warning' | 'info'
 
@@ -28,6 +28,14 @@ const Alert: React.FC<AlertProps> = ({
     return () => clearTimeout(showTimer)
   }, [])
 
+  const handleClose = useCallback(() => {
+    setClosing(true)
+    setTimeout(() => {
+      setVisible(false)
+      onClose?.()
+    }, 400)
+  }, [onClose])
+
   useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(() => {
@@ -35,15 +43,7 @@ const Alert: React.FC<AlertProps> = ({
       }, duration)
       return () => clearTimeout(timer)
     }
-  }, [duration])
-
-  const handleClose = () => {
-    setClosing(true)
-    setTimeout(() => {
-      setVisible(false)
-      onClose?.()
-    }, 400)
-  }
+  }, [duration, handleClose])
 
   if (!visible && closing) return null
 

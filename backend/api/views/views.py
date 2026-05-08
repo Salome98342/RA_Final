@@ -482,6 +482,9 @@ def _send_bulk_enrollment_emails_async(enrollments_for_emails):
     """Envia correos de matricula en segundo plano para no bloquear la respuesta HTTP."""
     if not enrollments_for_emails:
         return 0
+    if not getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", True):
+        logger.info("Envio de correos de matricula deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
+        return 0
 
     def _worker():
         sent = 0
@@ -1109,6 +1112,59 @@ def _require_asignatura_access(request, asig, id_estudiante=None):
         return {"rol": rol, "id": uid}, None
 
     return None, Response({"detail": "Rol no autorizado"}, status=status.HTTP_403_FORBIDDEN)
+
+
+def _require_docente_for_ra(request, ra_id: int):
+    """Valida que el token pertenezca al docente dueño del RA."""
+    token = _bearer_token(request)
+    if not token:
+        return None, None, Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return None, None, Response({"detail": "Token invÃ¡lido"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if tok.get("rol") != "docente":
+        return None, None, Response({"detail": "Requiere rol docente"}, status=status.HTTP_403_FORBIDDEN)
+
+    ra = ResultadoDeAprendizaje.objects.select_related("asignatura").filter(pk=ra_id).first()
+    if not ra:
+        return None, None, Response({"detail": "RA no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    if ra.asignatura.docente_id != tok.get("id"):
+        return None, None, Response({"detail": "No tienes permiso sobre este RA"}, status=status.HTTP_403_FORBIDDEN)
+
+    return tok, ra, None
+
+
+def _require_docente_for_grade(request, id_matricula, id_ra_actividad):
+    """Valida que un docente pueda calificar una matrÃ­cula/actividad concreta."""
+    token = _bearer_token(request)
+    if not token:
+        return None, None, None, Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return None, None, None, Response({"detail": "Token invÃ¡lido"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if tok.get("rol") != "docente":
+        return None, None, None, Response({"detail": "Solo docentes pueden registrar calificaciones"}, status=status.HTTP_403_FORBIDDEN)
+
+    matricula = Matricula.objects.select_related("asignatura").filter(pk=id_matricula).first()
+    if not matricula:
+        return None, None, None, Response({"detail": "MatrÃ­cula no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    rel = RaActividad.objects.select_related("ra__asignatura").filter(pk=id_ra_actividad).first()
+    if not rel:
+        return None, None, None, Response({"detail": "Actividad de RA no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+    if rel.ra.asignatura_id != matricula.asignatura_id:
+        return None, None, None, Response({"detail": "La actividad no pertenece a la asignatura de la matrÃ­cula"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if matricula.asignatura.docente_id != tok.get("id"):
+        return None, None, None, Response({"detail": "No tienes permiso para calificar esta asignatura"}, status=status.HTTP_403_FORBIDDEN)
+
+    return tok, matricula, rel, None
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
@@ -2626,7 +2682,6 @@ def coordinador_crear_asignatura_ra_view(request):
 
         indicadores_normalizados = []
         indicadores_desc = set()
-        suma_indicadores = 0.0
         for ind_idx, ind_item in enumerate(indicadores_input):
             if not isinstance(ind_item, dict):
                 return Response(
@@ -2635,36 +2690,9 @@ def coordinador_crear_asignatura_ra_view(request):
                 )
 
             ind_descripcion = str(ind_item.get("descripcion") or "").strip()
-            raw_pct_ind = ind_item.get("porcentaje_ind")
-
-            if not ind_descripcion and (raw_pct_ind is None or str(raw_pct_ind).strip() == ""):
-                continue
 
             if not ind_descripcion:
-                return Response(
-                    {"detail": f"La descripción del indicador es obligatoria en RA {idx + 1}, indicador {ind_idx + 1}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if raw_pct_ind is None or str(raw_pct_ind).strip() == "":
-                return Response(
-                    {"detail": f"El porcentaje del indicador es obligatorio en RA {idx + 1}, indicador {ind_idx + 1}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            try:
-                porcentaje_ind = float(raw_pct_ind)
-            except (TypeError, ValueError):
-                return Response(
-                    {"detail": f"porcentaje_ind inválido en RA {idx + 1}, indicador {ind_idx + 1}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if porcentaje_ind <= 0 or porcentaje_ind > 100:
-                return Response(
-                    {"detail": f"El porcentaje del indicador en RA {idx + 1}, indicador {ind_idx + 1} debe ser mayor que 0 y no exceder 100"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                continue
 
             ind_desc_key = ind_descripcion.lower()
             if ind_desc_key in indicadores_desc:
@@ -2676,19 +2704,11 @@ def coordinador_crear_asignatura_ra_view(request):
 
             indicadores_normalizados.append({
                 "descripcion": ind_descripcion,
-                "porcentaje_ind": porcentaje_ind,
             })
-            suma_indicadores += porcentaje_ind
 
         if not indicadores_normalizados:
             return Response(
                 {"detail": f"Cada RA debe tener al menos un indicador de logro. RA {idx + 1} no tiene indicadores válidos"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if suma_indicadores > 100:
-            return Response(
-                {"detail": f"La suma de indicadores del RA {idx + 1} excede 100% ({suma_indicadores:.2f}%)"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2794,7 +2814,6 @@ def coordinador_crear_asignatura_ra_view(request):
                         IndicadoresDeLogro(
                             ra=ra_creado,
                             descripcion=indicador["descripcion"],
-                            porcentaje_ind=indicador["porcentaje_ind"],
                         )
                     )
 
@@ -2809,7 +2828,6 @@ def coordinador_crear_asignatura_ra_view(request):
             indicadores_por_ra.setdefault(ind.ra_id, []).append({
                 "id_ind": ind.id_ind,
                 "descripcion": ind.descripcion,
-                "porcentaje_ind": float(ind.porcentaje_ind),
             })
 
     try:
@@ -2917,7 +2935,6 @@ def coordinador_asignatura_detalle_edicion_view(request):
                     {
                         "id_ind": ind.id_ind,
                         "descripcion": ind.descripcion,
-                        "porcentaje_ind": float(ind.porcentaje_ind or 0),
                     }
                     for ind in indicadores
                 ],
@@ -3048,7 +3065,6 @@ def coordinador_actualizar_asignatura_ra_view(request):
 
         ind_desc_seen = set()
         indicadores_normalizados = []
-        sum_ind = 0.0
         for ind_idx, ind_item in enumerate(indicadores_input):
             if not isinstance(ind_item, dict):
                 return Response(
@@ -3058,25 +3074,10 @@ def coordinador_actualizar_asignatura_ra_view(request):
 
             ind_id = ind_item.get("id_ind")
             ind_desc = str(ind_item.get("descripcion") or "").strip()
-            raw_pct_ind = ind_item.get("porcentaje_ind")
 
             if not ind_desc:
                 return Response(
                     {"detail": f"La descripción del indicador es obligatoria en RA {idx + 1}, indicador {ind_idx + 1}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            try:
-                porcentaje_ind = float(raw_pct_ind)
-            except (TypeError, ValueError):
-                return Response(
-                    {"detail": f"porcentaje_ind inválido en RA {idx + 1}, indicador {ind_idx + 1}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if porcentaje_ind <= 0 or porcentaje_ind > 100:
-                return Response(
-                    {"detail": f"El porcentaje del indicador en RA {idx + 1}, indicador {ind_idx + 1} debe ser mayor que 0 y no exceder 100"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -3092,20 +3093,12 @@ def coordinador_actualizar_asignatura_ra_view(request):
                 {
                     "id_ind": ind_id,
                     "descripcion": ind_desc,
-                    "porcentaje_ind": porcentaje_ind,
                 }
             )
-            sum_ind += porcentaje_ind
 
         if not indicadores_normalizados:
             return Response(
                 {"detail": f"Cada RA debe tener al menos un indicador. RA {idx + 1} no tiene indicadores válidos"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if sum_ind > 100:
-            return Response(
-                {"detail": f"La suma de indicadores del RA {idx + 1} excede 100% ({sum_ind:.2f}%)"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -3216,9 +3209,6 @@ def coordinador_actualizar_asignatura_ra_view(request):
                         if (ind_obj.descripcion or "") != ind_item["descripcion"]:
                             ind_obj.descripcion = ind_item["descripcion"]
                             ind_changes.append("descripcion")
-                        if float(ind_obj.porcentaje_ind or 0) != float(ind_item["porcentaje_ind"]):
-                            ind_obj.porcentaje_ind = ind_item["porcentaje_ind"]
-                            ind_changes.append("porcentaje_ind")
                         if ind_changes:
                             ind_obj.save(update_fields=ind_changes)
                             inds_actualizados += 1
@@ -3226,7 +3216,6 @@ def coordinador_actualizar_asignatura_ra_view(request):
                         IndicadoresDeLogro.objects.create(
                             ra=ra_obj,
                             descripcion=ind_item["descripcion"],
-                            porcentaje_ind=ind_item["porcentaje_ind"],
                         )
                         inds_creados += 1
 
@@ -4789,7 +4778,6 @@ def coordinador_import_asignaturas_ras_view(request):
                     'porcentaje': pct,
                     'indicadores': [],
                     'indicadores_desc': set(),
-                    'suma_indicadores': 0.0,
                 }
                 ra_entries[ra_key] = ra_entry
                 ra_sumas[asig_key] = suma_actual + pct
@@ -4801,33 +4789,15 @@ def coordinador_import_asignaturas_ras_view(request):
 
             # Validar indicadores cuando una de las columnas venga informada
             has_ind_desc = bool(ind_desc)
-            has_ind_pct = raw_ind_pct is not None and str(raw_ind_pct).strip() != ""
-            if has_ind_desc != has_ind_pct:
-                errors.append({"row": row_num, "error": "Para indicador debes enviar indicador_descripcion e indicador_porcentaje"}); continue
-
-            if has_ind_desc and has_ind_pct:
-                try:
-                    ind_pct = float(raw_ind_pct)
-                except (TypeError, ValueError):
-                    errors.append({"row": row_num, "error": f"indicador_porcentaje inválido: {raw_ind_pct}"}); continue
-
-                if ind_pct <= 0 or ind_pct > 100:
-                    errors.append({"row": row_num, "error": f"indicador_porcentaje fuera de rango: {ind_pct}"}); continue
-
+            if has_ind_desc:
                 ind_key = str(ind_desc).strip().lower()
                 if ind_key in ra_entry['indicadores_desc']:
                     errors.append({"row": row_num, "error": f"Indicador repetido en RA '{ra_desc}': {ind_desc}"}); continue
 
-                new_sum = float(ra_entry['suma_indicadores']) + ind_pct
-                if new_sum > 100:
-                    errors.append({"row": row_num, "error": f"Suma de indicadores excede 100% para RA '{ra_desc}' ({new_sum:.2f})"}); continue
-
                 ra_entry['indicadores'].append({
                     'descripcion': str(ind_desc).strip(),
-                    'porcentaje_ind': ind_pct,
                 })
                 ra_entry['indicadores_desc'].add(ind_key)
-                ra_entry['suma_indicadores'] = new_sum
 
     # Convertir entradas consolidadas a estructura pendiente de creación
     if ra_entries:
@@ -4899,7 +4869,6 @@ def coordinador_import_asignaturas_ras_view(request):
                             indicadores_to_create.append(IndicadoresDeLogro(
                                 ra_id=ra_pk,
                                 descripcion=ind['descripcion'],
-                                porcentaje_ind=ind['porcentaje_ind'],
                             ))
 
                     if indicadores_to_create:
@@ -5331,6 +5300,7 @@ class DocenteViewSet(viewsets.ModelViewSet):
     queryset = Docente.objects.select_related('tipo_documento').all()
     serializer_class = DocenteSerializer
     permission_classes = [AllowAny]  # TODO: Cambiar a IsAuthenticated + custom permissions
+    http_method_names = ['head', 'options']
     # TODO: Implementar filtrado por usuario autenticado
 
 
@@ -5343,6 +5313,7 @@ class EstudianteViewSet(viewsets.ModelViewSet):
     queryset = Estudiante.objects.select_related('tipo_documento').all()
     serializer_class = EstudianteSerializer
     permission_classes = [AllowAny]  # TODO: Cambiar a IsAuthenticated + custom permissions
+    http_method_names = ['head', 'options']
     # TODO: Implementar filtrado por usuario autenticado
 
 
@@ -5585,7 +5556,6 @@ def ra_indicadores_view(request, ra_id: int):
         "id": ind.id_ind,
         "id_ind": ind.id_ind,
         "descripcion": ind.descripcion,
-        "porcentaje_ind": float(ind.porcentaje_ind),
     } for ind in inds])
 
 @api_view(["DELETE"])
@@ -5596,7 +5566,6 @@ def ra_indicador_detail_view(request, ra_id: int, ind_id: int):
     DELETE: Elimina un indicador de logro de un RA.
       Requiere:
         - Header Authorization con token de docente
-        - Body: { password: "..." }
 
       Efectos:
         - Elimina el Indicador (cascada elimina vínculos ra_actividad_indicador)
@@ -5605,6 +5574,10 @@ def ra_indicador_detail_view(request, ra_id: int, ind_id: int):
     ind = IndicadoresDeLogro.objects.filter(pk=ind_id, ra_id=ra_id).first()
     if not ind:
         return Response({"detail": "Indicador no encontrado para este RA"}, status=status.HTTP_404_NOT_FOUND)
+
+    _, _, auth_err = _require_docente_for_ra(request, ra_id)
+    if auth_err:
+        return auth_err
 
     token = _bearer_token(request)
     if not token:
@@ -5619,15 +5592,6 @@ def ra_indicador_detail_view(request, ra_id: int, ind_id: int):
     doc = Docente.objects.filter(pk=docente_id).first()
     if not doc:
         return Response({"detail": "Docente no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
-
-    password = (request.data or {}).get("password")
-    if not password:
-        return Response({"message": "Se requiere la contraseña para confirmar la eliminación"}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        if not check_password(password, doc.contrasenia_docente) and password != (doc.contrasenia_docente or ""):
-            return Response({"message": "Contraseña incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
-    except Exception:
-        pass
 
     with transaction.atomic():
         # Eliminación en cascada de relaciones se maneja por FK CASCADE en RaActividadIndicador
@@ -5670,6 +5634,137 @@ def anuncio_delete_view(request, anuncio_id: int):
     anuncio.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def docente_crear_indicador_view(request, ra_id: int):
+    """
+    Crea un nuevo indicador de logro para un RA.
+    Solo docentes pueden crear indicadores de sus propios RAs.
+    
+    Body esperado:
+    {
+        "descripcion": "str (requerido)"
+    }
+    """
+    token = _bearer_token(request)
+    if not token:
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        return Response({"detail": "Solo docentes pueden crear indicadores"}, status=status.HTTP_403_FORBIDDEN)
+    
+    docente_id = tok.get("id")
+    
+    # Verificar que el RA existe y pertenece a una asignatura del docente
+    ra = ResultadoDeAprendizaje.objects.select_related('asignatura').filter(id_ra=ra_id).first()
+    if not ra:
+        return Response({"detail": "RA no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+    
+    if ra.asignatura.docente_id != docente_id:
+        return Response({"detail": "No tienes permiso para crear indicadores en este RA"}, status=status.HTTP_403_FORBIDDEN)
+    
+    data = request.data or {}
+    descripcion = str(data.get("descripcion") or "").strip()
+    
+    if not descripcion:
+        return Response({"detail": "La descripción del indicador es requerida"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if len(descripcion) > 1000:
+        return Response({"detail": "La descripción no puede exceder 1000 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Verificar que no exista un indicador con la misma descripción en este RA
+    existe = IndicadoresDeLogro.objects.filter(ra_id=ra_id, descripcion__iexact=descripcion).exists()
+    if existe:
+        return Response({"detail": f"Ya existe un indicador con la descripción '{descripcion}' en este RA"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        indicador = IndicadoresDeLogro.objects.create(
+            ra_id=ra_id,
+            descripcion=descripcion
+        )
+        return Response({
+            "detail": "Indicador creado exitosamente",
+            "indicador": {
+                "id_ind": indicador.id_ind,
+                "descripcion": indicador.descripcion,
+            }
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({"detail": f"Error al crear indicador: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def docente_actualizar_indicador_view(request, ra_id: int, ind_id: int):
+    """
+    Actualiza la descripción de un indicador de logro.
+    Solo el docente propietario del RA puede actualizar.
+    
+    Body esperado:
+    {
+        "descripcion": "str (requerido)"
+    }
+    """
+    token = _bearer_token(request)
+    if not token:
+        return Response({"detail": "No autorizado"}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        tok = signing.loads(token, max_age=TOKEN_MAX_AGE)
+    except Exception:
+        return Response({"detail": "Token inválido"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    if tok.get("rol") != "docente":
+        return Response({"detail": "Solo docentes pueden actualizar indicadores"}, status=status.HTTP_403_FORBIDDEN)
+    
+    docente_id = tok.get("id")
+    
+    # Verificar que el indicador existe y pertenece al RA especificado
+    indicador = IndicadoresDeLogro.objects.select_related('ra__asignatura').filter(id_ind=ind_id, ra_id=ra_id).first()
+    if not indicador:
+        return Response({"detail": "Indicador no encontrado para este RA"}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Verificar que el docente tiene permiso
+    if indicador.ra.asignatura.docente_id != docente_id:
+        return Response({"detail": "No tienes permiso para actualizar este indicador"}, status=status.HTTP_403_FORBIDDEN)
+    
+    data = request.data or {}
+    descripcion = str(data.get("descripcion") or "").strip()
+    
+    if not descripcion:
+        return Response({"detail": "La descripción del indicador es requerida"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if len(descripcion) > 1000:
+        return Response({"detail": "La descripción no puede exceder 1000 caracteres"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Verificar que no exista otro indicador con la misma descripción en este RA
+    existe = IndicadoresDeLogro.objects.filter(
+        ra_id=ra_id, 
+        descripcion__iexact=descripcion
+    ).exclude(id_ind=ind_id).exists()
+    if existe:
+        return Response({"detail": f"Ya existe otro indicador con la descripción '{descripcion}' en este RA"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        indicador.descripcion = descripcion
+        indicador.save()
+        return Response({
+            "detail": "Indicador actualizado exitosamente",
+            "indicador": {
+                "id_ind": indicador.id_ind,
+                "descripcion": indicador.descripcion,
+            }
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"detail": f"Error al actualizar indicador: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -5687,7 +5782,6 @@ def ra_actividades_view(request, ra_id: int):
                 {
                     "id_ind": rir.indicador_id,
                     "descripcion": rir.indicador.descripcion,
-                    "porcentaje_ind": float(rir.indicador.porcentaje_ind),
                 }
                 for rir in rel.indicadores_rel.all()
             ]
@@ -5726,6 +5820,10 @@ def ra_actividades_view(request, ra_id: int):
                     row["id_ind"] = nota.indicador_id
             out.append(row)
         return Response(out, status=status.HTTP_200_OK)
+
+    _, ra_obj, auth_err = _require_docente_for_ra(request, ra_id)
+    if auth_err:
+        return auth_err
 
     body = request.data or {}
     nombre = body.get("nombre_actividad")
@@ -5792,7 +5890,6 @@ def ra_actividades_view(request, ra_id: int):
     
     # Crear notificación personalizada para cada estudiante del curso
     try:
-        ra_obj = ResultadoDeAprendizaje.objects.filter(pk=ra_id).select_related('asignatura').first()
         if ra_obj:
             asignatura = ra_obj.asignatura
             # Obtener todos los estudiantes matriculados en la asignatura
@@ -5803,7 +5900,7 @@ def ra_actividades_view(request, ra_id: int):
             
             # Crear notificación personalizada para cada estudiante
             for mat in matriculas:
-                notif_text = f"{mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                notif_text = f"{mat.estudiante.nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
                 _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
     except Exception:
         pass  # No fallar si hay error en notificación
@@ -5841,6 +5938,10 @@ def ra_actividad_detail_view(request, ra_id: int, rel_id: int):
     act = rel.actividad
 
     if request.method == "PATCH":
+        _, _, auth_err = _require_docente_for_ra(request, ra_id)
+        if auth_err:
+            return auth_err
+
         body = request.data or {}
         nombre = body.get("nombre_actividad")
         descripcion = body.get("descripcion")
@@ -5933,8 +6034,11 @@ def ra_actividad_detail_view(request, ra_id: int, rel_id: int):
         return Response({"detail": "Docente no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
 
     password = (request.data or {}).get("password")
+    password_ok = check_user_password(doc.contrasenia_docente, password)
     if not password:
         return Response({"message": "Se requiere la contraseña para confirmar la eliminación"}, status=status.HTTP_400_BAD_REQUEST)
+    if not password_ok:
+        return Response({"message": "Contraseña incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         if not check_password(password, doc.contrasenia_docente) and password != (doc.contrasenia_docente or ""):
             return Response({"message": "Contraseña incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
@@ -5964,10 +6068,16 @@ def notas_view(request):
     id_ind = body.get("id_ind")
     if not (id_matricula and id_ra_actividad and nota is not None):
         return Response({"detail": "Campos requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+
+    _, _, rel, auth_err = _require_docente_for_grade(request, id_matricula, id_ra_actividad)
+    if auth_err:
+        return auth_err
     
     # Normalizar id_ind: convertir valores vacíos, 'null', 'undefined' a None
     if id_ind in (None, '', 'null', 'undefined'):
         id_ind = None
+    elif not RaActividadIndicador.objects.filter(ra_actividad=rel, indicador_id=id_ind).exists():
+        return Response({"detail": "El indicador no está asociado a esta actividad"}, status=status.HTTP_400_BAD_REQUEST)
     
     # Incluir indicador en la búsqueda para permitir múltiples notas por indicador
     obj, created = NotasActividad.objects.get_or_create(
@@ -5990,7 +6100,7 @@ def notas_view(request):
         estudiante = matricula.estudiante
         
         # Mensaje personalizado con el nombre del estudiante
-        notif_text = f"{estudiante.primer_nombre}, tu calificación en {asignatura.nombre}: {actividad.nombre_actividad} es {nota}/5"
+        notif_text = f"{estudiante.nombre}, tu calificación en {asignatura.nombre}: {actividad.nombre_actividad} es {nota}/5"
         notif_link = f"/estudiante?curso={asignatura.codigo_asignatura}"
         
         _add_notification(estudiante.id_estudiante, "grade", notif_text, notif_link)
@@ -6028,7 +6138,6 @@ def course_student_indicators_view(request, codigo_asignatura: str, id_estudiant
             "id_ind": ind.id_ind,
             "ra_id": ind.ra_id,
             "descripcion": ind.descripcion,
-            "porcentaje_ind": float(ind.porcentaje_ind),
             "avg_nota": float(avg_nota) if avg_nota is not None else None,
             "avg_pct": float(avg_nota * 20) if avg_nota is not None else None,
         })
@@ -6821,11 +6930,11 @@ def ra_validation_view(request, ra_id: int):
         return Response({"detail": "RA no existe"}, status=status.HTTP_404_NOT_FOUND)
     act_sum = RaActividad.objects.filter(ra_id=ra_id).aggregate(v=Sum("porcentaje_ra_actividad"))["v"] or 0
     act_count = RaActividad.objects.filter(ra_id=ra_id).count()
-    ind_sum = IndicadoresDeLogro.objects.filter(ra_id=ra_id).aggregate(v=Sum("porcentaje_ind"))["v"] or 0
+    ind_count = IndicadoresDeLogro.objects.filter(ra_id=ra_id).count()
     return Response({
         "ra_id": ra_id,
         "actividades": {"suma": float(act_sum), "count": act_count, "ok": float(act_sum) == 100.0, "faltante": max(0.0, 100.0 - float(act_sum))},
-        "indicadores": {"suma": float(ind_sum), "ok": float(ind_sum) == 100.0, "faltante": max(0.0, 100.0 - float(ind_sum))},
+        "indicadores": {"suma": 0, "count": ind_count, "ok": ind_count > 0, "faltante": 0},
     })
 
 @api_view(["GET"])
@@ -6959,6 +7068,10 @@ def actividades_multi_view(request):
     if len(asig_ids) != 1:
         return Response({"message": "Todas las RAs deben pertenecer a la misma asignatura"}, status=status.HTTP_400_BAD_REQUEST)
 
+    _, _, auth_err = _require_docente_for_ra(request, ra_objs[0].id_ra)
+    if auth_err:
+        return auth_err
+
     # Validar porcentajes por RA e indicadores (ambos obligatorios, aporte > 0)
     for item in ras:
         try:
@@ -7027,7 +7140,7 @@ def actividades_multi_view(request):
                     
                     # Crear notificación personalizada para cada estudiante
                     for mat in matriculas:
-                        notif_text = f"{mat.estudiante.primer_nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
+                        notif_text = f"{mat.estudiante.nombre}, nueva actividad en {asignatura.nombre}: {nombre} - Vence: {fecha_str}"
                         _add_notification(mat.estudiante_id, "deadline", notif_text, notif_link)
             except Exception:
                 pass  # No fallar si hay error en notificación
@@ -7189,7 +7302,6 @@ def course_activities_grouped_view(request, codigo_asignatura: str):
             {
                 "id_ind": rir.indicador_id,
                 "descripcion": rir.indicador.descripcion,
-                "porcentaje_ind": float(rir.indicador.porcentaje_ind),
             }
             for rir in rel.indicadores_rel.all()
         ]

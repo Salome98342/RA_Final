@@ -221,6 +221,7 @@ const DocenteRAs: React.FC = () => {
           onClick={(k)=>{
             if(k==='inicio') navigate('/docente/inicio')
             if(k==='cursos') navigate('/docente/cursos')
+            if(k==='indicadores' && curso) navigate(`/docente/${curso}/indicadores`)
             if(k==='recursos' && curso) navigate(`/docente/${curso}/recursos`)
             if(k==='volver-coordinador') navigate('/coordinador/asignaturas')
             if(k==='calificar') {
@@ -231,6 +232,7 @@ const DocenteRAs: React.FC = () => {
             {key:'inicio',icon:'bi-house-door',title:'Inicio'},
             {key:'cursos',icon:'bi-grid-3x3-gap',title:'Cursos'},
             {key:'crear',icon:'bi-pencil-square',title:'RA/Actividades'},
+            {key:'indicadores',icon:'bi-bookmark-check',title:'Indicadores'},
             {key:'calificar',icon:'bi-check2-square',title:'Calificar'},
             {key:'recursos',icon:'bi-paperclip',title:'Recursos'},
             ...(state.role === 'coordinador' ? [{ key: 'volver-coordinador', icon: 'bi-arrow-left-circle', title: 'Vista coordinador' }] : []),
@@ -308,9 +310,21 @@ const DocenteRAs: React.FC = () => {
 
           {selectedRA && (
             <div className="mt-4">
-              <div className="content-title">
-                <i className="bi bi-clipboard-data text-success me-2"></i>
-                Detalle de RA: {selectedRA.titulo}
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="content-title">
+                  <i className="bi bi-clipboard-data text-success me-2"></i>
+                  Detalle de RA: {selectedRA.titulo}
+                </div>
+                {!readOnly && (
+                  <button
+                    className="btn btn-outline-info btn-sm"
+                    onClick={() => navigate(`/docente/${curso}/indicadores`)}
+                    title="Gestionar indicadores de logro para este curso"
+                  >
+                    <i className="bi bi-bookmark-check me-1"></i>
+                    Gestionar Indicadores
+                  </button>
+                )}
               </div>
               {loadingDetail && (
                 <div className="d-flex align-items-center text-muted mb-3">
