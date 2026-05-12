@@ -358,6 +358,7 @@ const Asignaturas: React.FC = () => {
                       <>
                         <div className="row g-3">
                           {avance.ras.map(r => {
+                            const raNumero = r.numero_ra ?? r.id_ra
                             const pct = r.avg != null ? Math.round((r.avg/5)*100) : 0
                             const tone = toneByPct(pct)
                             const step = Math.round(pct/10)*10
@@ -370,10 +371,10 @@ const Asignaturas: React.FC = () => {
                                   type="button"
                                   onClick={()=> setSelectedRAId(String(r.id_ra))}
                                   className={`border rounded p-2 h-100 w-100 text-start bg-white ra-hover-card asignaturas-ra-card ${isActive?'border-primary shadow-sm':''}`}
-                                  aria-label={`Seleccionar RA ${r.id_ra}`}
+                                  aria-label={`Seleccionar RA ${raNumero}`}
                                 >
                                   <div className="d-flex align-items-center justify-content-between mb-1">
-                                    <div className="fw-semibold">RA {r.id_ra}</div>
+                                    <div className="fw-semibold">RA {raNumero}</div>
                                     <span className={`badge bg-${tone}`}>{pct}%</span>
                                   </div>
                                   <div className="ra-small text-muted mb-2 asignaturas-ra-desc" title={r.descripcion || ''}>{r.descripcion || 'Sin descripción'}</div>

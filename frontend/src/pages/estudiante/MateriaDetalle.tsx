@@ -245,7 +245,7 @@ const MateriaDetalle = () => {
                     <tbody>
                       {resultados_aprendizaje.map((ra) => (
                         <tr key={ra.id_ra}>
-                          <td><span className="badge bg-secondary">RA {ra.id_ra}</span></td>
+                          <td><span className="badge bg-secondary">RA {ra.numero_ra ?? ra.id_ra}</span></td>
                           <td><small>{ra.descripcion}</small></td>
                           <td><span className="badge bg-primary">{ra.porcentaje_ra}%</span></td>
                           <td>

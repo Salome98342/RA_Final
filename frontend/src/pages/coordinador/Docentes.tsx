@@ -131,7 +131,17 @@ const Docentes: React.FC = () => {
         num_documento: '',
       })
       setShowForm(false)
-      await loadDocentes(searchTerm)
+      // Try to reload list from server; if the new docente is not returned (no asignaturas yet),
+      // insert it locally so the user sees the created docente immediately.
+      // Immediately show the created docente so the user sees it without depending on server filters
+      const created = (result as any).docente as DocenteListItem
+      if (created) {
+        setDocentes(prev => [created, ...prev])
+        setPage(1)
+      }
+
+      // Refresh from server in background to keep data consistent (may not include docentes without asignaturas)
+      loadDocentes(searchTerm).catch(() => {})
     } catch (error: unknown) {
       Alert.error(getErrorMessage(error, 'Error al crear docente'))
     } finally {
@@ -191,7 +201,7 @@ const Docentes: React.FC = () => {
                 onClick={() => navigate('/coordinador/imports')}
               >
                 <i className="bi bi-upload me-1"></i>
-                Carga masiva (CSV)
+                Carga masiva
               </button>
             </div>
           </div>

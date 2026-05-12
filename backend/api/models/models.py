@@ -47,6 +47,7 @@ class Docente(models.Model):
     codigo_docente = models.CharField(max_length=50, unique=True)
     contrasenia_docente = models.CharField(max_length=255)
     correo = models.EmailField(max_length=255, unique=True)
+    programa = models.ForeignKey("Programa", on_delete=models.RESTRICT, db_column="id_programa", null=True, blank=True)
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.RESTRICT, db_column="id_tipo_documento")
     num_documento = models.CharField(max_length=50, unique=True)
     num_telefono = models.CharField(max_length=30, blank=True, null=True)
@@ -178,6 +179,7 @@ class Asignatura(models.Model):
 class ResultadoDeAprendizaje(models.Model):
     id_ra = models.BigAutoField(primary_key=True, db_column="id_ra")
     asignatura = models.ForeignKey(Asignatura, on_delete=models.CASCADE, db_column="id_asignatura")
+    numero_ra = models.IntegerField(default=1)  # Número secuencial por asignatura (1, 2, 3...)
     porcentaje_ra = models.DecimalField(max_digits=5, decimal_places=2)
     descripcion = models.TextField(blank=True, null=True)
 
@@ -188,10 +190,29 @@ class ResultadoDeAprendizaje(models.Model):
                 check=Q(porcentaje_ra__gte=0) & Q(porcentaje_ra__lte=100),
                 name="chk_ra_pct",
             ),
+            models.UniqueConstraint(
+                fields=["asignatura", "numero_ra"],
+                name="uq_ra_numero_por_asignatura",
+            ),
         ]
 
     def __str__(self):
-        return f"RA {self.id_ra} - {self.asignatura}"
+        return f"RA {self.numero_ra} - {self.asignatura}"
+    
+    def get_next_numero_ra(self):
+        """Obtiene el siguiente número disponible para esta asignatura"""
+        last_ra = ResultadoDeAprendizaje.objects.filter(
+            asignatura=self.asignatura
+        ).order_by("-numero_ra").first()
+        return (last_ra.numero_ra + 1) if last_ra else 1
+    
+    @staticmethod
+    def get_next_numero_for_asignatura(asignatura):
+        """Obtiene el siguiente número disponible para una asignatura"""
+        last_ra = ResultadoDeAprendizaje.objects.filter(
+            asignatura=asignatura
+        ).order_by("-numero_ra").first()
+        return (last_ra.numero_ra + 1) if last_ra else 1
 
 
 class IndicadoresDeLogro(models.Model):

@@ -365,20 +365,21 @@ const AsignaturaDetalle: React.FC = () => {
 
                   <div className="row g-2">
                     {avance.ras.map((ra) => {
+                      const raNumero = ra.numero_ra ?? ra.id_ra
                       const raPct = ra.avg != null ? Math.max(0, Math.min(100, Math.round((ra.avg / 5) * 100))) : 0
                       const raStep = Math.round(raPct / 10) * 10
                       return (
                         <div className="col-12" key={ra.id_ra}>
                           <div className="d-flex justify-content-between small text-muted mb-1">
-                            <span>RA {ra.id_ra}</span>
+                            <span>RA {raNumero}</span>
                             <span>{ra.avg != null ? `${ra.avg.toFixed(2)} / 5` : 'Sin datos'} ({raPct}%)</span>
                           </div>
                           <div className="progress progress-compact">
                             <div
                               className={`progress-bar bg-info w-pct-${raStep}`}
                               role="progressbar"
-                              aria-label={`Porcentaje de desempeño RA ${ra.id_ra}`}
-                              title={`RA ${ra.id_ra}: ${raPct}%`}
+                              aria-label={`Porcentaje de desempeño RA ${raNumero}`}
+                              title={`RA ${raNumero}: ${raPct}%`}
                             ></div>
                           </div>
                         </div>
@@ -489,7 +490,7 @@ const AsignaturaDetalle: React.FC = () => {
                         <tbody>
                           {rasRows.map((row) => (
                             <tr key={row.id_ra}>
-                              <td><span className="badge bg-secondary">RA {row.id_ra}</span></td>
+                              <td><span className="badge bg-secondary">RA {row.numero_ra ?? row.id_ra}</span></td>
                               <td>{row.descripcion || '-'}</td>
                               <td>{row.porcentaje_ra}%</td>
                               <td>{row.total_actividades}</td>

@@ -38,6 +38,7 @@ export type GradeSummaryActivity = {
 }
 export type GradeSummaryRA = {
   id_ra: number | string
+  numero_ra?: number
   descripcion: string
   porcentaje_ra: number
   strict: number | null
@@ -92,6 +93,7 @@ export type CourseDetailResponse = {
   }
   resultados_aprendizaje: Array<{
     id_ra: number
+    numero_ra?: number
     descripcion: string
     porcentaje_ra: number
     actividades_total: number
@@ -134,6 +136,7 @@ export type CourseAnalyticsResponse = {
   }
   resultados_aprendizaje: Array<{
     id_ra: number
+    numero_ra?: number
     descripcion: string
     porcentaje_ra: number
     actividades_total: number
@@ -157,6 +160,7 @@ export type Periodo = { id: string; descripcion: string }
 // Actividad agrupada (sin duplicación por RA)
 export type GroupedActivityRA = {
   id_ra: number | string
+  numero_ra?: number
   id_ra_actividad: number | string
   titulo_ra: string
   porcentaje_ra: number

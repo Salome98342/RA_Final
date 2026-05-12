@@ -241,7 +241,7 @@ OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '5'))  # Tiempo de expi
 
 # Contraseña provisional usada en importación masiva de estudiantes.
 # Se recomienda cambiarla por una propia del entorno.
-DEFAULT_BULK_STUDENT_PASSWORD = os.getenv('DEFAULT_BULK_STUDENT_PASSWORD', 'Estudiante123*')
+DEFAULT_BULK_STUDENT_PASSWORD = os.getenv('DEFAULT_BULK_STUDENT_PASSWORD', 'estudiante123')
 
 # Si está en True, la importación masiva intentará enviar correos de bienvenida.
 SEND_WELCOME_EMAILS_ON_IMPORT = _env_bool('SEND_WELCOME_EMAILS_ON_IMPORT', True)

@@ -54,6 +54,11 @@ const createEmptyRA = (): RAFormItem => ({
 
 const normalizeCode = (value: string) => value.toUpperCase().trim()
 
+const sedeOptions = [
+  { value: '41', label: '41 - Nodo Sevilla' },
+  { value: '02', label: '02 - Sede Caicedonia' },
+]
+
 const AsignaturasRA: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -374,6 +379,7 @@ const AsignaturasRA: React.FC = () => {
   const canSubmit = requiredValid && !hasInvalidRA && !hasDuplicateDescription && sumPct <= 100
 
   const progressStep = Math.round(Math.max(0, Math.min(100, sumPct)) / 10) * 10
+  const isCreateOverLimit = sumPct > 100
 
   const isCreateDirty = useMemo(() => {
     const hasBaseData = Boolean(
@@ -387,6 +393,8 @@ const AsignaturasRA: React.FC = () => {
     const hasRAData = raParsed.some((ra) => ra.hasAnyValue || ra.indicadoresParsed.some((ind) => ind.hasAnyValue))
     return hasBaseData || hasRAData
   }, [formData, raParsed])
+
+  const hasUnsavedCreateChanges = activeForm === 'create' && isCreateDirty
 
   const isUpdateDirty = useMemo(() => {
     const hasFilterData = Boolean(
@@ -437,6 +445,34 @@ const AsignaturasRA: React.FC = () => {
       )
     })
   }, [updateDocenteSearch, docentesOrdenados])
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedCreateChanges) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedCreateChanges])
+
+  const confirmLeaveCreateForm = async () => {
+    if (!hasUnsavedCreateChanges) return true
+
+    return Alert.confirm({
+      title: 'Salir sin guardar',
+      text: 'Hay texto ingresado en el formulario de creación. ¿Deseas salir y perder los cambios?',
+      confirmButtonText: 'Sí, salir',
+      cancelButtonText: 'Cancelar',
+      type: 'warning',
+    })
+  }
+
+  const navigateWithCreateGuard = async (to: string) => {
+    const confirmed = await confirmLeaveCreateForm()
+    if (confirmed) navigate(to)
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -890,9 +926,9 @@ const AsignaturasRA: React.FC = () => {
       confirmLines.push('', 'Cambios destructivos detectados:')
       if (deletedRAs.length) {
         confirmLines.push(`- RAs a eliminar: ${deletedRAs.length}`)
-        deletedRAs.slice(0, 6).forEach((ra) => {
-          const label = ra.descripcion ? `${ra.descripcion}` : `RA ${ra.id_ra}`
-          confirmLines.push(`  • RA ${ra.id_ra}: ${label}`)
+        deletedRAs.slice(0, 6).forEach((ra, index) => {
+          const label = ra.descripcion ? `${ra.descripcion}` : `RA ${index + 1}`
+          confirmLines.push(`  • RA ${index + 1}: ${label}`)
         })
         if (deletedRAs.length > 6) {
           confirmLines.push(`  • ... y ${deletedRAs.length - 6} RA(s) más`)
@@ -954,14 +990,14 @@ const AsignaturasRA: React.FC = () => {
           active={active}
           items={items}
           onClick={(key) => {
-            if (key === 'inicio') navigate('/coordinador')
-            else if (key === 'desempenio') navigate('/coordinador/desempenio')
-            else if (key === 'asignaturas') navigate('/coordinador/asignaturas')
-            else if (key === 'docentes') navigate('/coordinador/docentes')
-            else if (key === 'estudiantes') navigate('/coordinador/estudiantes')
-            else if (key === 'matriculados') navigate('/coordinador/matriculados')
-            else if (key === 'asignaturas-ra') navigate('/coordinador/asignaturas-ra')
-            else if (key === 'imports') navigate('/coordinador/imports')
+            if (key === 'inicio') void navigateWithCreateGuard('/coordinador')
+            else if (key === 'desempenio') void navigateWithCreateGuard('/coordinador/desempenio')
+            else if (key === 'asignaturas') void navigateWithCreateGuard('/coordinador/asignaturas')
+            else if (key === 'docentes') void navigateWithCreateGuard('/coordinador/docentes')
+            else if (key === 'estudiantes') void navigateWithCreateGuard('/coordinador/estudiantes')
+            else if (key === 'matriculados') void navigateWithCreateGuard('/coordinador/matriculados')
+            else if (key === 'asignaturas-ra') void navigateWithCreateGuard('/coordinador/asignaturas-ra')
+            else if (key === 'imports') void navigateWithCreateGuard('/coordinador/imports')
           }}
         />
 
@@ -971,7 +1007,9 @@ const AsignaturasRA: React.FC = () => {
               { label: 'Coordinador', to: '/coordinador' },
               { label: 'Asignaturas + RA' },
             ]}
-            onNavigate={navigate}
+            onNavigate={(to) => {
+              void navigateWithCreateGuard(to)
+            }}
           />
           <div className="content-title d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
@@ -980,11 +1018,13 @@ const AsignaturasRA: React.FC = () => {
             </div>
             <button
               className="btn btn-sm btn-outline-danger"
-              onClick={() => navigate('/coordinador/imports?modulo=asig')}
+              onClick={() => {
+                void navigateWithCreateGuard('/coordinador/imports?modulo=asig')
+              }}
               type="button"
             >
               <i className="bi bi-upload me-1"></i>
-              Carga masiva (CSV/Excel)
+              Carga masiva
             </button>
           </div>
 
@@ -1192,18 +1232,19 @@ const AsignaturasRA: React.FC = () => {
 
                   <div className="col-md-3 mb-3">
                     <label className="form-label fw-semibold">Sede <span className="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
+                    <select
+                      className="form-select"
                       title="Sede"
-                      inputMode="numeric"
-                      pattern="[0-9]+"
-                      maxLength={3}
                       value={formData.sede}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
-                      placeholder="Ej: 02"
-                    />
-                    <div className="form-text">Usa código numérico de sede (ej: 01, 02).</div>
+                      onChange={(e) => setFormData((prev) => ({ ...prev, sede: e.target.value }))}
+                    >
+                      <option value="">Selecciona una sede</option>
+                      {sedeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1364,11 +1405,13 @@ const AsignaturasRA: React.FC = () => {
                   </div>
                   <div className="progress coordinator-inline-progress">
                     <div
-                      className={`progress-bar ${sumPct > 100 ? 'bg-danger' : 'bg-success'} w-pct-${progressStep}`}
+                      className={`progress-bar ${isCreateOverLimit ? 'bg-danger' : 'bg-success'} w-pct-${progressStep}`}
                     ></div>
                   </div>
-                  <div className="form-text">
-                    El backend valida contra el total existente de la asignatura y no permite superar 100%.
+                  <div className={`form-text ${isCreateOverLimit ? 'text-danger' : 'text-success'}`}>
+                    {isCreateOverLimit
+                      ? 'La suma de porcentajes no puede superar el 100%.'
+                      : 'La suma de porcentajes se encuentra dentro del rango permitido.'}
                   </div>
                 </div>
 
@@ -1460,16 +1503,18 @@ const AsignaturasRA: React.FC = () => {
                 </div>
                 <div className="col-md-2">
                   <label className="form-label fw-semibold">Sede</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    inputMode="numeric"
-                    pattern="[0-9]+"
-                    maxLength={3}
+                  <select
+                    className="form-select"
                     value={updateFilter.sede}
-                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
-                    placeholder="Ej: 01"
-                  />
+                    onChange={(e) => setUpdateFilter((prev) => ({ ...prev, sede: e.target.value }))}
+                  >
+                    <option value="">Todas</option>
+                    {sedeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-md-2 d-grid">
                   <button type="button" className="btn btn-danger" onClick={handleLookupAsignatura} disabled={loadingLookup}>
@@ -1518,15 +1563,18 @@ const AsignaturasRA: React.FC = () => {
                   </div>
                   <div className="col-md-2 mb-3">
                     <label className="form-label fw-semibold">Sede</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      inputMode="numeric"
-                      pattern="[0-9]+"
-                      maxLength={3}
+                    <select
+                      className="form-select"
                       value={updateFormData.sede}
-                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, sede: e.target.value.replace(/\D/g, '') }))}
-                    />
+                      onChange={(e) => setUpdateFormData((prev) => ({ ...prev, sede: e.target.value }))}
+                    >
+                      <option value="">Selecciona una sede</option>
+                      {sedeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="col-md-4 mb-3">
                     <label className="form-label fw-semibold">Programa</label>
@@ -1582,7 +1630,7 @@ const AsignaturasRA: React.FC = () => {
                         <div className="card-body">
                           <div className="d-flex justify-content-between align-items-center mb-2">
                             <h6 className="mb-0">
-                              RA #{index + 1} {ra.id_ra ? `(ID ${ra.id_ra})` : '(Nuevo)'}
+                              RA #{index + 1}
                             </h6>
                             <button
                               type="button"

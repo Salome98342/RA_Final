@@ -37,6 +37,7 @@ export interface EstudianteRow {
 
 export interface RARow {
   id_ra: number
+  numero_ra?: number
   descripcion: string | null
   porcentaje_ra: number
   total_actividades: number
@@ -44,6 +45,7 @@ export interface RARow {
 
 export interface AvanceRAItem {
   id_ra: number
+  numero_ra?: number
   descripcion: string | null
   porcentaje_ra: number
   avg: number | null
@@ -139,6 +141,7 @@ export type CreateAsignaturaWithRAResponse = {
   asignatura_actualizada: boolean
   ras_creados: Array<{
     id_ra: number
+    numero_ra?: number
     descripcion: string | null
     porcentaje_ra: number
     indicadores: Array<{
@@ -550,6 +553,10 @@ export interface HU11Asignatura {
   total_matriculados: number
   estudiantes_bajo_desempenio: number
   porcentaje_bajo_desempenio: number
+  estudiantes_promedio_sobre_3: number
+  estudiantes_promedio_bajo_3: number
+  porcentaje_promedio_sobre_3: number
+  porcentaje_promedio_bajo_3: number
   ras_afectados: Array<{
     id_ra: number
     nombre: string
@@ -563,10 +570,13 @@ export interface DashboardDesempenioResponse {
   filtros_aplicados: {
     periodo: string | null
     asignatura: string | null
+    grupo?: string | null
+    id_asignatura?: number | null
     cohorte: string | null
   }
   resumen: {
     total_estudiantes_bajo_desempenio: number
+    total_estudiantes_considerados?: number
     total_asignaturas: number
     asignatura_con_mas_bajo_desempenio: string | null
   }
@@ -575,6 +585,8 @@ export interface DashboardDesempenioResponse {
 export async function fetchDashboardDesempenio(params?: {
   periodo?: string
   asignatura?: string
+  grupo?: string
+  id_asignatura?: number
   cohorte?: string
 }): Promise<DashboardDesempenioResponse> {
   const { data } = await api.get(endpoints.coordinador?.dashboardDesempenio || '/coordinador/dashboard/desempenio/', { 

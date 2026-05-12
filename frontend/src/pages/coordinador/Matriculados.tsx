@@ -402,7 +402,7 @@ const Matriculados: React.FC = () => {
               onClick={() => navigate('/coordinador/imports?modulo=mat')}
             >
               <i className="bi bi-upload me-1"></i>
-              Carga masiva (CSV/Excel)
+              Carga masiva
             </button>
           </div>
 
