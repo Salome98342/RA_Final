@@ -6482,6 +6482,8 @@ def notas_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([])
 def course_student_indicators_view(request, codigo_asignatura: str, id_estudiante: int):
+    from django.db.models import F, Avg, Case, When, DecimalField
+    
     asignatura = Asignatura.objects.filter(codigo_asignatura=codigo_asignatura).first()
     if not asignatura:
         return Response({"detail": "Asignatura no existe"}, status=status.HTTP_404_NOT_FOUND)
@@ -6491,11 +6493,21 @@ def course_student_indicators_view(request, codigo_asignatura: str, id_estudiant
     mat = Matricula.objects.filter(asignatura=asignatura, estudiante_id=id_estudiante).order_by("-id_matricula").first()
     if not mat:
         return Response([], status=status.HTTP_200_OK)
-    inds = IndicadoresDeLogro.objects.filter(ra__asignatura=asignatura).select_related("ra")
+    
+    # Optimized: Use a single aggregation query instead of N+1 queries
+    inds = IndicadoresDeLogro.objects.filter(ra__asignatura=asignatura).select_related("ra").annotate(
+        avg_nota=Avg(
+            Case(
+                When(notasactividad__matricula=mat, then=F('notasactividad__nota_ra_actividad')),
+                default=None,
+                output_field=DecimalField()
+            )
+        )
+    )
+    
     rows = []
     for ind in inds:
-        qs = NotasActividad.objects.filter(matricula=mat, indicador_id=ind.id_ind)
-        avg_nota = qs.aggregate(v=Avg("nota_ra_actividad"))["v"]
+        avg_nota = ind.avg_nota
         rows.append({
             "id_ind": ind.id_ind,
             "ra_id": ind.ra_id,

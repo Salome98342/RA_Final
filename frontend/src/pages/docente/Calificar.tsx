@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
@@ -6,8 +6,7 @@ import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
 import { Alert } from '@/utils/alert'
 import { useSession } from '@/state/SessionContext'
 import type { Student, Activity, RA } from '@/types'
-import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade, getIndicatorChart } from '@/services/api'
-import Chart from 'chart.js/auto'
+import { getStudentsByCourse, getActivitiesByRA, getRAsByCourse, upsertGrade } from '@/services/api'
 import StudentList from '@/components/StudentList'
 import '@/styles/calificar.css'
 
@@ -24,9 +23,6 @@ const DocenteCalificar: React.FC = () => {
   const [edits, setEdits] = useState<Record<string, { nota?: string; indicadorId?: string; retro?: string; dirty?: boolean; saving?: boolean; savedAt?: number }>>({})
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [bulkSaving, setBulkSaving] = useState(false)
-  const chartRef = useRef<HTMLCanvasElement | null>(null)
-  const chartInstance = useRef<Chart | null>(null)
-  const [chartEmpty, setChartEmpty] = useState(false)
 
   useEffect(() => {
     if (!curso) return
@@ -121,159 +117,6 @@ const DocenteCalificar: React.FC = () => {
     if (totalWeight <= 0) return null
     return weighted / totalWeight
   }
-
-  const localIndicatorChart = useMemo(() => {
-    if (!selectedStudent) return [] as Array<{ id_ind: string; ra_id: string; descripcion: string; avg_nota: number | null; avg_pct: number | null }>
-
-    const acc = new Map<string, { ra_id: string; descripcion: string; values: number[] }>()
-    const indicadorDescriptions = new Map<string, string>()
-
-    // First pass: gather all indicator descriptions from activities
-    for (const activity of activities) {
-      const indicadores = Array.isArray(activity.indicadores) ? activity.indicadores : []
-      for (const ind of indicadores) {
-        const indId = String(ind.id)
-        if (!indicadorDescriptions.has(indId)) {
-          indicadorDescriptions.set(indId, ind.descripcion)
-        }
-      }
-    }
-
-    // Second pass: process activities and grades
-    for (const activity of activities) {
-      const notas = Array.isArray(activity.notasPorIndicador) ? activity.notasPorIndicador : []
-      const indicadores = Array.isArray(activity.indicadores) ? activity.indicadores : []
-      const generalNota = activity.nota
-      const raId = String((activity as unknown as { _raId?: string })._raId || '')
-      
-      // Filtrar notas que SÍ tienen indicador específico (no null, no 'null' string)
-      const notasConIndicador = notas.filter(n => n?.id_ind != null && String(n.id_ind) !== 'null')
-      
-      if (notasConIndicador.length > 0) {
-        // Tenemos notas específicas por indicador - usar estas
-        for (const nota of notasConIndicador) {
-          if (!nota || nota.nota == null) continue
-          const indicadorId = String(nota.id_ind)
-          const score = Number(nota.nota)
-          if (Number.isNaN(score) || score < 0 || score > 5) continue
-
-          const desc = indicadorDescriptions.get(indicadorId) || indicadores.find(ind => String(ind.id) === indicadorId)?.descripcion || ''
-          const current = acc.get(indicadorId) || {
-            ra_id: raId,
-            descripcion: desc,
-            values: []
-          }
-          current.values.push(score)
-          acc.set(indicadorId, current)
-        }
-      } else if (generalNota != null && indicadores.length > 0) {
-        // No hay notas específicas por indicador, pero hay nota general
-        // Distribuir entre todos los indicadores de esta actividad
-        const score = Number(generalNota)
-        if (!Number.isNaN(score) && score >= 0 && score <= 5) {
-          for (const indicador of indicadores) {
-            const indicadorId = String(indicador.id)
-            const current = acc.get(indicadorId) || {
-              ra_id: raId,
-              descripcion: indicador.descripcion,
-              values: []
-            }
-            current.values.push(score)
-            acc.set(indicadorId, current)
-          }
-        }
-      }
-    }
-
-    return Array.from(acc.entries()).map(([id_ind, row]) => {
-      const avg = row.values.length ? row.values.reduce((sum, value) => sum + value, 0) / row.values.length : null
-      return {
-        id_ind,
-        ra_id: row.ra_id,
-        descripcion: row.descripcion,
-        avg_nota: avg,
-        avg_pct: avg != null ? avg * 20 : null,
-      }
-    })
-  }, [activities, selectedStudent])
-
-  const renderChart = useCallback(async (student: Student) => {
-    if (!curso) return
-    const apiData = await getIndicatorChart(curso, student.id)
-    const baseData = apiData.length > 0 ? apiData : localIndicatorChart
-    const filtered = raId ? baseData.filter((d) => String(d.ra_id) === String(raId)) : baseData
-    const noData = filtered.length === 0 || filtered.every((d) => d.avg_pct == null)
-    setChartEmpty(noData)
-    if (noData) {
-      if (chartInstance.current) {
-        chartInstance.current.destroy()
-        chartInstance.current = null
-      }
-      return
-    }
-
-    const labels = filtered.map((d) => d.descripcion)
-    const values = filtered.map((d) => d.avg_pct ?? 0)
-    const ctx = chartRef.current?.getContext('2d')
-    if (!ctx) return
-
-    if (chartInstance.current) chartInstance.current.destroy()
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Avance indicador (%)',
-          data: values,
-          backgroundColor: '#c8102e',
-          borderRadius: 8,
-          maxBarThickness: 42,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}%` } },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            max: 100,
-            grid: { color: 'rgba(17, 24, 39, 0.08)' },
-          },
-          x: {
-            grid: { display: false },
-          },
-        },
-      },
-    })
-  }, [curso, raId, localIndicatorChart])
-
-  useEffect(() => {
-    // Renderiza el gráfico cuando:
-    // 1. Se selecciona un estudiante y sus actividades terminan de cargar
-    // 2. renderChart se recalcula (incluye cambios en activities vía localIndicatorChart)
-    if (!selectedStudent || loadingActs) return
-    void renderChart(selectedStudent)
-  }, [selectedStudent, renderChart, loadingActs])
-
-  useEffect(() => {
-    if (!selectedStudent) {
-      setChartEmpty(false)
-      if (chartInstance.current) {
-        chartInstance.current.destroy()
-        chartInstance.current = null
-      }
-    }
-  }, [selectedStudent])
-
-  useEffect(() => {
-    return () => {
-      if (chartInstance.current) chartInstance.current.destroy()
-    }
-  }, [])
 
   const groupedByActivityAndState = useMemo(() => {
     const grouped: Record<string, {
@@ -550,9 +393,9 @@ const DocenteCalificar: React.FC = () => {
 
   const activeKey = 'calificar'
 
-  const onSelectStudent = useCallback(async (stu: Student) => {
+  const onSelectStudent = async (stu: Student) => {
     setSelectedStudent(stu)
-  }, [])
+  }
 
   return (
     <div className="dashboard-body min-vh-100">
@@ -666,37 +509,6 @@ const DocenteCalificar: React.FC = () => {
                 </div>
 
                 <div className="card-body">
-                  <div className="calificar-chart-card mb-4">
-                    <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
-                      <div>
-                        <div className="text-uppercase text-muted small fw-semibold mb-1">Referencia rápida</div>
-                        <h6 className="mb-1">
-                          <i className="bi bi-bar-chart-line me-2 text-primary"></i>
-                          Avance por indicador de logro
-                        </h6>
-                        <div className="text-muted small">
-                          {selectedStudent ? 'Resumen contextual del estudiante seleccionado antes de registrar la nota.' : 'Selecciona un estudiante para ver su desempeño por indicador.'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {!selectedStudent ? (
-                      <div className="calificar-chart-empty">
-                        <i className="bi bi-bar-chart-fill fs-1 text-muted d-block mb-2"></i>
-                        <div className="text-muted small">La gráfica aparece aquí cuando eliges un estudiante.</div>
-                      </div>
-                    ) : chartEmpty ? (
-                      <div className="calificar-chart-empty">
-                        <i className="bi bi-graph-up fs-1 text-muted d-block mb-2"></i>
-                        <div className="text-muted small">No hay datos suficientes para construir la gráfica todavía.</div>
-                      </div>
-                    ) : (
-                      <div className="calificar-chart-wrap">
-                        <canvas ref={chartRef} />
-                      </div>
-                    )}
-                  </div>
-
                   {loadingActs ? (
                     <div className="text-center py-5">
                       <div className="spinner-border text-primary" role="status">
