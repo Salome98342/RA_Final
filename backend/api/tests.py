@@ -22,12 +22,13 @@ class ActividadesMultiViewTests(TestCase):
 		self.client = APIClient()
 		# Catálogos mínimos
 		self.tdoc = TipoDocumento.objects.create(descripcion="CC")
+		self.prog = Programa.objects.create(nombre="Ing", codigo_programa="ING01")
 		self.doc = Docente.objects.create(
 			nombre="Ana", apellido="P.", codigo_docente="D001",
 			contrasenia_docente="pwd", correo="doc@example.com",
-			tipo_documento=self.tdoc, num_documento="111"
+			tipo_documento=self.tdoc, num_documento="111",
+			programa=self.prog
 		)
-		self.prog = Programa.objects.create(nombre="Ing", codigo_programa="ING01")
 		self.asig = Asignatura.objects.create(
 			nombre="Algoritmos", codigo_asignatura="ALG-1", docente=self.doc, programa=self.prog
 		)
@@ -99,7 +100,8 @@ class ActividadesMultiViewTests(TestCase):
 		doc2 = Docente.objects.create(
 			nombre="Luis", apellido="Q.", codigo_docente="D002",
 			contrasenia_docente="pwd", correo="doc2@example.com",
-			tipo_documento=self.tdoc, num_documento="222"
+			tipo_documento=self.tdoc, num_documento="222",
+			programa=self.prog
 		)
 		asig2 = Asignatura.objects.create(nombre="BD", codigo_asignatura="BD-1", docente=doc2, programa=self.prog)
 		ra_other = ResultadoDeAprendizaje.objects.create(asignatura=asig2, porcentaje_ra=100, descripcion="RA ext")
@@ -144,12 +146,13 @@ class RaActividadesSingleTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
 		self.tdoc = TipoDocumento.objects.create(descripcion="CC")
+		self.prog = Programa.objects.create(nombre="Ing", codigo_programa="ING10")
 		self.doc = Docente.objects.create(
 			nombre="Ana", apellido="P.", codigo_docente="D010",
 			contrasenia_docente="pwd", correo="doc10@example.com",
-			tipo_documento=self.tdoc, num_documento="9911"
+			tipo_documento=self.tdoc, num_documento="9911",
+			programa=self.prog
 		)
-		self.prog = Programa.objects.create(nombre="Ing", codigo_programa="ING10")
 		self.asig = Asignatura.objects.create(
 			nombre="Cálculo", codigo_asignatura="CAL-1", docente=self.doc, programa=self.prog
 		)
@@ -179,6 +182,7 @@ class CoordinadorEndpointsTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
 		self.tdoc = TipoDocumento.objects.create(descripcion="CC")
+		self.prog = Programa.objects.create(nombre="Prog Test", codigo_programa="PRG-1")
 		self.coord = Coordinador.objects.create(
 			nombre="Coord Uno", codigo_coordinador="C001",
 			contrasenia_coord="pwd", correo="coord@example.com"
@@ -191,9 +195,9 @@ class CoordinadorEndpointsTests(TestCase):
 		self.doc = Docente.objects.create(
 			nombre="Ana", apellido="X", codigo_docente="D050",
 			contrasenia_docente="pwd", correo="doc50@example.com",
-			tipo_documento=self.tdoc, num_documento="5050"
+			tipo_documento=self.tdoc, num_documento="5050",
+			programa=self.prog
 		)
-		self.prog = Programa.objects.create(nombre="Prog Test", codigo_programa="PRG-1")
 		self.periodo = PeriodoAcademico.objects.create(
 			descripcion="2025-1",
 			fecha_inicio=date.today(),
@@ -254,6 +258,44 @@ class CoordinadorEndpointsTests(TestCase):
 		doc = Docente.objects.get(codigo_docente="D200")
 		self.assertIsNotNone(doc.tipo_documento)
 
+	def test_coordinador_create_docente_assigns_program_automatically(self):
+		payload = {
+			"codigo_docente": "D300",
+			"nombre": "Laura",
+			"apellido": "Gomez",
+			"correo": "laura.gomez@example.com",
+			"tipo_documento": self.tdoc.descripcion,
+			"num_documento": "9300",
+		}
+
+		res = self.client.post("/api/coordinador/docentes", payload, format="json", **self.auth_header)
+		self.assertEqual(res.status_code, 201, res.content)
+
+		from .models.models import Docente
+		doc = Docente.objects.get(codigo_docente="D300")
+		self.assertIsNotNone(doc.programa)
+		self.assertEqual(doc.programa.codigo_programa, self.prog.codigo_programa)
+
+	def test_coordinador_docente_perfil_without_asignaturas_returns_profile(self):
+		docente = Docente.objects.create(
+			nombre="Marta",
+			apellido="López",
+			codigo_docente="D301",
+			contrasenia_docente="pwd",
+			correo="marta.lopez@example.com",
+			tipo_documento=self.tdoc,
+			num_documento="9301",
+			programa=self.prog,
+		)
+
+		res = self.client.get(f"/api/coordinador/docentes/{docente.id_docente}/perfil", **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+		data = res.json()
+		self.assertEqual(data.get("docente", {}).get("codigo_docente"), "D301")
+		self.assertEqual(data.get("docente", {}).get("programa"), self.prog.nombre)
+		self.assertEqual(data.get("estadisticas", {}).get("total_asignaturas"), 0)
+		self.assertEqual(len(data.get("asignaturas", [])), 0)
+
 	def test_import_matriculados_invalid_mime(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
 		f = SimpleUploadedFile("matriculados.txt", b"codigo_estudiante,codigo_asignatura,periodo\nX,E1,2025-1", content_type="text/plain")
@@ -270,6 +312,28 @@ class CoordinadorEndpointsTests(TestCase):
 		data = res.json()
 		self.assertGreaterEqual(data.get("created_asignaturas", 0), 1)
 		self.assertGreaterEqual(data.get("created_ras", 0), 1)
+
+	def test_coordinador_docentes_includes_docente_without_asignaturas_when_program_matches(self):
+		from .models.models import Docente
+
+		docente_sin_asignaturas = Docente.objects.create(
+			nombre="Laura",
+			apellido="Gómez",
+			codigo_docente="D051",
+			contrasenia_docente="pwd",
+			correo="laura.gomez@example.com",
+			tipo_documento=self.tdoc,
+			num_documento="5051",
+			programa=self.prog,
+		)
+
+		res = self.client.get("/api/coordinador/docentes", **self.auth_header)
+		self.assertEqual(res.status_code, 200, res.content)
+
+		data = res.json()
+		codigos = {item.get("codigo_docente") for item in data}
+		self.assertIn(self.doc.codigo_docente, codigos)
+		self.assertIn(docente_sin_asignaturas.codigo_docente, codigos)
 
 	def test_import_asignaturas_template_headers_include_periodo_and_creditos(self):
 		from openpyxl import load_workbook

@@ -116,6 +116,10 @@ const DocentePerfilModal: React.FC<DocentePerfilModalProps> = ({ id_docente, onC
                           <strong className="text-muted me-2">Correo:</strong>
                           <span>{data.docente.correo}</span>
                         </div>
+                        <div className="mb-2">
+                          <strong className="text-muted me-2">Programa:</strong>
+                          <span>{data.docente.programa || 'N/A'}</span>
+                        </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-2">

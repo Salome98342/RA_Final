@@ -89,7 +89,9 @@ def _get_bulk_student_password() -> str:
     configured = getattr(settings, "DEFAULT_BULK_STUDENT_PASSWORD", "")
     password = str(configured or "").strip()
     if not password:
-        password = "Estudiante123*"
+        # Default generic password for students (legacy: Estudiante123*)
+        # User requirement: use 'estudiante123' as generic student password
+        password = "estudiante123"
     return password
 
 
@@ -269,27 +271,59 @@ def _student_program_from_code(estudiante_codigo: str):
 
 
 def _infer_program_for_coordinador(coord: Coordinador):
-    """Intenta resolver el programa del coordinador con reglas estrictas y no ambiguas."""
+    """Intenta resolver el programa del coordinador usando varias heurísticas:
+    - coincidencia exacta con `codigo_coordinador`
+    - tokenización del `codigo_coordinador` (separadores - _ /)
+    - búsqueda en la parte local del correo (antes de @)
+    - comparación con tokens del nombre/apellido
+    - coincidencia parcial con `codigo_programa` o nombre del programa
+    """
+    import re
+
     programas = list(Programa.objects.all())
     if not programas:
         return None
 
     coord_code = _norm_code(getattr(coord, "codigo_coordinador", ""))
+    coord_email_local = (getattr(coord, "correo", "") or "").split("@")[0].upper()
+    name_tokens = set()
+    if getattr(coord, "nombre", None):
+        name_tokens.update([t.upper() for t in re.split(r"\s+", coord.nombre.strip()) if t])
+    if getattr(coord, "apellido", None):
+        name_tokens.update([t.upper() for t in re.split(r"\s+", coord.apellido.strip()) if t])
 
-    # 1) Match exacto por código.
+    # Precompute token set from code and email
+    tokens = set(re.split(r"[-_/\s]+", coord_code)) if coord_code else set()
+    if coord_email_local:
+        tokens.update(re.split(r"[._\-\s]+", coord_email_local))
+
+    # 1) Exact match by program code
     for p in programas:
-        if _norm_code(p.codigo_programa) == coord_code:
+        if _norm_code(p.codigo_programa) == coord_code and coord_code:
             return p
 
-    # 2) Match por token del código (ej: COORD-ADM -> ADM, COORD-2724 -> 2724).
-    if coord_code:
-        tokenized = coord_code.replace("-", " ").replace("_", " ").replace("/", " ").split()
+    # 2) Token match against program code
+    if tokens:
         for p in programas:
             p_code = _norm_code(p.codigo_programa)
-            if p_code in tokenized:
+            if p_code in tokens:
                 return p
 
-    # 3) Si solo existe un programa, usarlo.
+    # 3) Partial match against program name or code in any token or name parts
+    for p in programas:
+        p_code = _norm_code(p.codigo_programa)
+        p_name = (getattr(p, "nombre", "") or "").upper()
+        # If program code appears inside coordinator code/email
+        if coord_code and p_code and p_code in coord_code:
+            return p
+        # If program name token appears in coordinator name/email/tokens
+        for nt in re.split(r"\s+", p_name):
+            if not nt:
+                continue
+            if nt in tokens or nt in name_tokens or nt in coord_email_local.upper():
+                return p
+
+    # 4) If only one program exists, assume it
     if len(programas) == 1:
         return programas[0]
 
@@ -475,6 +509,39 @@ def _send_bulk_welcome_emails_async(passwords_for_emails, max_emails=10):
 
     threading.Thread(target=_worker, daemon=True, name="import-welcome-emails").start()
     logger.info(f"Envio de correos programado en background: {total_to_send}/{len(passwords_for_emails)}")
+    return total_to_send
+
+
+def _send_bulk_welcome_emails_docente_async(passwords_for_emails, max_emails=10):
+    """
+    Envia correos de bienvenida a docentes en segundo plano para no bloquear la respuesta HTTP.
+    """
+    if not passwords_for_emails:
+        return 0
+
+    if not getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", True):
+        logger.info("Envio de correos en import docentes deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
+        return 0
+
+    total_to_send = min(max_emails, len(passwords_for_emails))
+
+    def _worker():
+        sent = 0
+        for email_data in passwords_for_emails[:total_to_send]:
+            try:
+                docente = Docente.objects.filter(codigo_docente=email_data['codigo']).first()
+                if not docente:
+                    logger.warning(f"Docente {email_data['codigo']} no encontrado para envio de correo")
+                    continue
+                if _send_welcome_email_docente(docente, email_data['password']):
+                    sent += 1
+            except Exception as e:
+                logger.error(f"Error enviando correo a {email_data.get('correo')}: {str(e)}")
+
+        logger.info(f"Correos de bienvenida docentes enviados en background: {sent}/{total_to_send}")
+
+    threading.Thread(target=_worker, daemon=True, name="import-welcome-emails-docentes").start()
+    logger.info(f"Envio de correos docentes programado en background: {total_to_send}/{len(passwords_for_emails)}")
     return total_to_send
 
 
@@ -1334,8 +1401,12 @@ def coordinador_estudiantes_view(request):
                 activo=True,
             )
             
-            # Enviar correo de bienvenida
-            email_sent = _send_welcome_email(estudiante, password_provisional)
+            # Enviar correo de bienvenida (respetar setting para no saturar el servicio)
+            if getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", True):
+                email_sent = _send_welcome_email(estudiante, password_provisional)
+            else:
+                logger.info("Envio de correo de bienvenida deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
+                email_sent = False
             
             # Registrar auditoría
             try:
@@ -1679,8 +1750,8 @@ def coordinador_docentes_view(request):
 
         docentes = (
             Docente.objects
-            .select_related('tipo_documento')
-            .filter(asignatura__programa=detected_program)
+            .select_related('tipo_documento', 'programa')
+            .filter(Q(programa=detected_program) | Q(asignatura__programa=detected_program))
             .distinct()
         )
 
@@ -1704,6 +1775,7 @@ def coordinador_docentes_view(request):
                 "nombre": doc.nombre,
                 "apellido": doc.apellido,
                 "correo": doc.correo,
+                "programa_codigo": doc.programa.codigo_programa if doc.programa else None,
                 "tipo_documento": doc.tipo_documento.descripcion if doc.tipo_documento else None,
                 "num_documento": doc.num_documento,
             })
@@ -1787,7 +1859,15 @@ def coordinador_docentes_view(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    password_provisional = secrets.token_urlsafe(8)
+    detected_program = _infer_program_for_coordinador(coord)
+    if not detected_program:
+        return Response(
+            {"detail": "No se pudo determinar el programa del coordinador para asignar el docente"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Use fixed generic docente password per user requirement
+    password_provisional = "docente123"
     hashed_password = make_password(password_provisional)
 
     try:
@@ -1797,11 +1877,17 @@ def coordinador_docentes_view(request):
             codigo_docente=codigo,
             contrasenia_docente=hashed_password,
             correo=correo,
+            programa=detected_program,
             tipo_documento=tipo_doc,
             num_documento=num_documento,
         )
 
-        email_sent = _send_welcome_email_docente(docente, password_provisional)
+        # Enviar correo de bienvenida (respetar setting para no saturar el servicio)
+        if getattr(settings, "SEND_WELCOME_EMAILS_ON_IMPORT", True):
+            email_sent = _send_welcome_email_docente(docente, password_provisional)
+        else:
+            logger.info("Envio de correo de bienvenida docente deshabilitado por configuracion (SEND_WELCOME_EMAILS_ON_IMPORT=False)")
+            email_sent = False
 
         try:
             ImportAudit.objects.create(
@@ -1852,7 +1938,7 @@ def coordinador_docente_perfil_view(request, id_docente: int):
         return err
 
     try:
-        docente = Docente.objects.select_related('tipo_documento').get(id_docente=id_docente)
+        docente = Docente.objects.select_related('tipo_documento', 'programa').get(id_docente=id_docente)
     except Docente.DoesNotExist:
         return Response({"detail": "Docente no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1860,7 +1946,7 @@ def coordinador_docente_perfil_view(request, id_docente: int):
     if not detected_program:
         return Response({"detail": "No se pudo determinar el programa del coordinador"}, status=status.HTTP_403_FORBIDDEN)
 
-    if not Asignatura.objects.filter(docente=docente, programa=detected_program).exists():
+    if docente.programa_id != detected_program.id_programa and not Asignatura.objects.filter(docente=docente, programa=detected_program).exists():
         return Response({"detail": "Docente fuera del alcance de tu programa"}, status=status.HTTP_404_NOT_FOUND)
 
     asignaturas = Asignatura.objects.filter(docente=docente, programa=detected_program).select_related('programa', 'periodo').order_by('codigo_asignatura')
@@ -1895,6 +1981,7 @@ def coordinador_docente_perfil_view(request, id_docente: int):
             "apellido": docente.apellido,
             "nombre_completo": f"{docente.nombre} {docente.apellido}",
             "correo": docente.correo,
+            "programa": docente.programa.nombre if docente.programa else None,
             "tipo_documento": docente.tipo_documento.descripcion if docente.tipo_documento else None,
             "num_documento": docente.num_documento,
             "num_telefono": docente.num_telefono,
@@ -2096,6 +2183,16 @@ def coordinador_import_estudiantes_view(request):
     logger.info(f"[DEBUG] Tipos de documento disponibles (normalizados): {list(tipos_documento_map_desc_norm.keys())}")
     existing_students = list(Estudiante.objects.all())
     existing_students_by_code = {s.codigo_estudiante: s for s in existing_students}
+    existing_students_by_doc = {
+        s.num_documento: s
+        for s in existing_students
+        if getattr(s, 'num_documento', None)
+    }
+    existing_students_by_email = {
+        s.correo: s
+        for s in existing_students
+        if getattr(s, 'correo', None)
+    }
     existing_estudiantes_codigos = set(existing_students_by_code.keys())
     correo_owner_by_code = {
         s.correo: s.codigo_estudiante
@@ -2269,23 +2366,40 @@ def coordinador_import_estudiantes_view(request):
                 "error": f"TipoDocumento no encontrado o no permitido: '{tipo_doc_desc}'"
             }); continue
         
-        # UPSERT: si el estudiante ya existe por código, actualizar su información.
+        # UPSERT: si el estudiante ya existe por código, documento o correo, actualizar su información.
         existing_student = existing_students_by_code.get(codigo)
+        match_by = "codigo"
+        if not existing_student and num_documento:
+            existing_student = existing_students_by_doc.get(num_documento)
+            match_by = "num_documento" if existing_student else match_by
+        if not existing_student and correo:
+            existing_student = existing_students_by_email.get(correo)
+            match_by = "correo" if existing_student else match_by
+
         if existing_student:
-            correo_owner = correo_owner_by_code.get(correo)
-            if correo_owner and correo_owner != codigo:
+            correo_owner = existing_students_by_email.get(correo)
+            if correo_owner and correo_owner != existing_student:
                 errors.append({"row": row_num, "error": f"Correo ya existe en otro estudiante: {correo}"})
                 continue
 
-            doc_owner = doc_owner_by_code.get(num_documento)
-            if doc_owner and doc_owner != codigo:
+            doc_owner = existing_students_by_doc.get(num_documento)
+            if doc_owner and doc_owner != existing_student:
                 errors.append({"row": row_num, "error": f"Documento ya existe en otro estudiante: {num_documento}"})
+                continue
+
+            code_owner = existing_students_by_code.get(codigo)
+            if code_owner and code_owner != existing_student:
+                errors.append({"row": row_num, "error": f"codigo_estudiante ya existe en otro estudiante: {codigo}"})
                 continue
 
             old_correo = existing_student.correo
             old_doc = existing_student.num_documento
+            old_code = existing_student.codigo_estudiante
 
             changed = False
+            if existing_student.codigo_estudiante != codigo:
+                existing_student.codigo_estudiante = codigo
+                changed = True
             if existing_student.nombre != nombre:
                 existing_student.nombre = nombre
                 changed = True
@@ -2320,20 +2434,26 @@ def coordinador_import_estudiantes_view(request):
             else:
                 existing += 1
 
-            if old_correo and old_correo in correo_owner_by_code:
-                correo_owner_by_code.pop(old_correo, None)
-            correo_owner_by_code[correo] = codigo
+            if old_correo and old_correo in existing_students_by_email:
+                existing_students_by_email.pop(old_correo, None)
+            existing_students_by_email[correo] = existing_student
 
-            if old_doc and old_doc in doc_owner_by_code:
-                doc_owner_by_code.pop(old_doc, None)
-            doc_owner_by_code[num_documento] = codigo
+            if old_doc and old_doc in existing_students_by_doc:
+                existing_students_by_doc.pop(old_doc, None)
+            existing_students_by_doc[num_documento] = existing_student
+
+            if old_code and old_code in existing_students_by_code:
+                existing_students_by_code.pop(old_code, None)
+            existing_students_by_code[codigo] = existing_student
+            existing_estudiantes_codigos.discard(old_code)
+            existing_estudiantes_codigos.add(codigo)
 
             continue
 
         # Crear nuevo estudiante si no existe por código.
-        if correo in correo_owner_by_code:
+        if correo in existing_students_by_email:
             errors.append({"row": row_num, "error": f"Correo ya existe: {correo}"}); continue
-        if num_documento in doc_owner_by_code:
+        if num_documento in existing_students_by_doc:
             errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
         
         # Import masivo: usar contraseña genérica única para todos los estudiantes.
@@ -2370,8 +2490,8 @@ def coordinador_import_estudiantes_view(request):
         
         # Marcar como existente para evitar duplicados en el mismo archivo
         existing_estudiantes_codigos.add(codigo)
-        correo_owner_by_code[correo] = codigo
-        doc_owner_by_code[num_documento] = codigo
+        existing_students_by_email[correo] = to_create[-1]
+        existing_students_by_doc[num_documento] = to_create[-1]
         existing_students_by_code[codigo] = to_create[-1]
         created += 1
     
@@ -2397,7 +2517,7 @@ def coordinador_import_estudiantes_view(request):
             with transaction.atomic():
                 Estudiante.objects.bulk_update(
                     to_update,
-                    ['nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento', 'jornada'],
+                    ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento', 'jornada'],
                     batch_size=500,
                 )
         except Exception as e:
@@ -2542,6 +2662,7 @@ def coordinador_asignatura_ras_view(request):
         
         out.append({
             "id_ra": ra.id_ra,
+            "numero_ra": ra.numero_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
             "total_actividades": count,
@@ -2805,7 +2926,16 @@ def coordinador_crear_asignatura_ra_view(request):
             )
             ras_to_create_payload.append(ra)
 
+        # Obtener el próximo número de RA para esta asignatura
+        next_numero_ra = ResultadoDeAprendizaje.get_next_numero_for_asignatura(asignatura)
+
+        # Asignar números secuenciales a los RAs que se van a crear
+        for idx, ra_obj in enumerate(ras_to_create):
+            ra_obj.numero_ra = next_numero_ra + idx
+
+        # Guardar los RAs con sus números asignados
         ras_creados = ResultadoDeAprendizaje.objects.bulk_create(ras_to_create, batch_size=200) if ras_to_create else []
+
         indicadores_to_create = []
         if ras_creados:
             for ra_creado, ra_payload in zip(ras_creados, ras_to_create_payload):
@@ -2929,6 +3059,7 @@ def coordinador_asignatura_detalle_edicion_view(request):
         ras_payload.append(
             {
                 "id_ra": ra.id_ra,
+                "numero_ra": ra.numero_ra,
                 "descripcion": ra.descripcion,
                 "porcentaje_ra": float(ra.porcentaje_ra or 0),
                 "indicadores": [
@@ -3183,6 +3314,7 @@ def coordinador_actualizar_asignatura_ra_view(request):
                         asignatura=asig,
                         descripcion=ra_item["descripcion"],
                         porcentaje_ra=ra_item["porcentaje_ra"],
+                            numero_ra=ResultadoDeAprendizaje.get_next_numero_for_asignatura(asig),
                     )
                     ras_creados += 1
 
@@ -3469,6 +3601,7 @@ def coordinador_asignatura_avance_view(request):
         coverage_avg = (cov_acc / total)
         ras_out.append({
             "id_ra": r.id_ra,
+            "numero_ra": r.numero_ra,
             "descripcion": r.descripcion,
             "porcentaje_ra": float(r.porcentaje_ra),
             "avg": round(avg, 2) if avg is not None else None,
@@ -3683,6 +3816,7 @@ def coordinador_estudiante_perfil_view(request, id_estudiante: int):
             
             ras_data.append({
                 "id_ra": ra.id_ra,
+                "numero_ra": ra.numero_ra,
                 "descripcion": ra.descripcion,
                 "porcentaje_ra": float(ra.porcentaje_ra),
                 "nota_strict": round(ra_strict, 2) if ra_strict else 0,
@@ -3823,13 +3957,20 @@ def coordinador_import_matriculados_view(request):
     existing_matriculas = set(
         Matricula.objects.values_list('estudiante_id', 'periodo_id', 'asignatura_id')
     )
+    existing_matriculas_map = {
+        (m.estudiante_id, m.periodo_id, m.asignatura_id): m
+        for m in Matricula.objects.select_related('estudiante', 'periodo', 'asignatura').all()
+    }
     
     created = 0
+    updated = 0
     existing = 0
     errors = []
     max_rows = 5000
     to_create = []
+    to_update = []
     enrollments_for_emails = []
+    created_keys = set()
     
     # Helper function para acceder a columnas de pandas de forma segura
     def get_col(row, *col_names):
@@ -3853,6 +3994,7 @@ def coordinador_import_matriculados_view(request):
         grupo = get_col(row, "grupo")
         semestre_desc = get_col(row, "semestre")
         periodo_desc = get_col(row, "periodo", "periodo_academico", "periodo academico", "periodo académico")
+        raw_nota_final = get_col(row, "nota_final", "nota", "calificacion")
         
         # Limpiar strings
         if cod_est: cod_est = str(cod_est).strip()[:50]
@@ -3913,12 +4055,36 @@ def coordinador_import_matriculados_view(request):
             if not per:
                 errors.append({"row": row_num, "error": "No existe un período académico para usar por defecto"})
                 continue
+
+        nota_final = None
+        if raw_nota_final not in (None, ""):
+            try:
+                nota_final = float(raw_nota_final)
+            except (TypeError, ValueError):
+                errors.append({"row": row_num, "error": f"nota_final inválida: {raw_nota_final}"})
+                continue
+            if nota_final < 0 or nota_final > 5:
+                errors.append({"row": row_num, "error": f"nota_final fuera de rango: {nota_final}"})
+                continue
         
         for asig in row_asignaturas:
             # Verificar si ya existe
             key = (est.id_estudiante, per.id_periodo, asig.id_asignatura)
-            if key in existing_matriculas:
+            if key in created_keys:
                 existing += 1
+                continue
+            existing_matricula = existing_matriculas_map.get(key)
+            if existing_matricula:
+                changed = False
+                if raw_nota_final not in (None, "") and float(existing_matricula.nota_final or 0) != float(nota_final if nota_final is not None else existing_matricula.nota_final or 0):
+                    existing_matricula.nota_final = nota_final
+                    changed = True
+
+                if changed:
+                    to_update.append(existing_matricula)
+                    updated += 1
+                else:
+                    existing += 1
                 continue
 
             # Agregar a lista de creación y marcar como existente para evitar duplicados en el mismo archivo
@@ -3926,7 +4092,7 @@ def coordinador_import_matriculados_view(request):
                 estudiante=est,
                 periodo=per,
                 asignatura=asig,
-                nota_final=None
+                nota_final=nota_final
             ))
             enrollments_for_emails.append({
                 "estudiante_nombre": f"{est.nombre} {est.apellido}".strip(),
@@ -3940,6 +4106,8 @@ def coordinador_import_matriculados_view(request):
                 "docente": f"{getattr(asig.docente, 'nombre', '')} {getattr(asig.docente, 'apellido', '')}".strip(),
             })
             existing_matriculas.add(key)
+            existing_matriculas_map[key] = to_create[-1]
+            created_keys.add(key)
             created += 1
     
     # BULK INSERT con transacción atómica
@@ -3950,6 +4118,14 @@ def coordinador_import_matriculados_view(request):
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva: {str(e)}"})
             created = 0
+
+    if to_update:
+        try:
+            with transaction.atomic():
+                Matricula.objects.bulk_update(to_update, ["nota_final"], batch_size=500)
+        except Exception as e:
+            errors.append({"error": f"Error en actualización masiva: {str(e)}"})
+            updated = 0
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
@@ -3960,12 +4136,12 @@ def coordinador_import_matriculados_view(request):
         except Exception as e:
             logger.error(f"No fue posible programar correos de matricula: {str(e)}")
 
-    payload = {"created": created, "existing": existing, "errors": errors, "notified": notified}
+    payload = {"created": created, "updated": updated, "existing": existing, "errors": errors, "notified": notified}
     try:
         logger.info("import_matriculados: %s", {
             "coordinador": getattr(coord, "codigo_coordinador", None),
             "filename": getattr(f, "name", None),
-            **{k: payload[k] for k in ("created", "existing")},
+            **{k: payload[k] for k in ("created", "updated", "existing")},
             "errors_count": len(errors)
         })
         # Persistir auditoría mínima
@@ -4010,6 +4186,8 @@ def coordinador_download_template_view(request, filename: str):
     except Exception:
         return Response({"detail": "No se pudo descargar la plantilla"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+    detected_program = _infer_program_for_coordinador(coord)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([])
@@ -4437,12 +4615,25 @@ def coordinador_import_docentes_view(request):
     if ppt_norm not in tipos_documento_map_desc_norm:
         tipo_ppt = TipoDocumento.objects.create(descripcion="Permiso por Protección Temporal")
         tipos_documento_map_desc_norm[_normalize_text(tipo_ppt.descripcion)] = tipo_ppt
-    existing_docentes_codigos = set(Docente.objects.values_list('codigo_docente', flat=True))
-    existing_docentes_correos = set(Docente.objects.values_list('correo', flat=True))
-    existing_docentes_docs = set(Docente.objects.values_list('num_documento', flat=True))
-    docentes_to_update = {}
+    existing_docentes_by_code = {
+        d.codigo_docente: d
+        for d in Docente.objects.select_related('programa', 'tipo_documento').all()
+    }
+    existing_docentes_correos = {
+        d.correo: d.codigo_docente
+        for d in existing_docentes_by_code.values()
+        if getattr(d, 'correo', None)
+    }
+    existing_docentes_docs = {
+        d.num_documento: d.codigo_docente
+        for d in existing_docentes_by_code.values()
+        if getattr(d, 'num_documento', None)
+    }
+    existing_docentes_codigos = set(existing_docentes_by_code.keys())
+    docentes_to_update = []
     
     created = 0
+    updated = 0
     existing = 0
     errors = []
     max_rows = 5000
@@ -4501,24 +4692,78 @@ def coordinador_import_docentes_view(request):
 
         if not tipo_doc:
             errors.append({"row": row_num, "error": f"Tipo de documento no válido: {tipo_doc_desc}"}); continue
+
+        detected_program = _infer_program_for_coordinador(coord)
+        if not detected_program:
+            errors.append({"row": row_num, "error": "No se pudo determinar el programa del coordinador para asignar el docente"}); continue
         
-        # Verificar si ya existe
-        if codigo in existing_docentes_codigos:
-            existing += 1
-            # Guardar para actualizar teléfono después si es necesario
-            if telefono:
-                docentes_to_update[codigo] = telefono
+        existing_docente = existing_docentes_by_code.get(codigo)
+        if existing_docente:
+            correo_owner = existing_docentes_correos.get(correo)
+            if correo_owner and correo_owner != codigo:
+                errors.append({"row": row_num, "error": f"Correo ya existe en otro docente: {correo}"}); continue
+
+            doc_owner = existing_docentes_docs.get(num_documento)
+            if doc_owner and doc_owner != codigo:
+                errors.append({"row": row_num, "error": f"Documento ya existe en otro docente: {num_documento}"}); continue
+
+            changed = False
+            if existing_docente.nombre != nombre:
+                existing_docente.nombre = nombre
+                changed = True
+            if existing_docente.apellido != apellido:
+                existing_docente.apellido = apellido
+                changed = True
+            if existing_docente.correo != correo:
+                old_correo = existing_docente.correo
+                existing_docente.correo = correo
+                changed = True
+            else:
+                old_correo = None
+            if existing_docente.num_documento != num_documento:
+                old_doc = existing_docente.num_documento
+                existing_docente.num_documento = num_documento
+                changed = True
+            else:
+                old_doc = None
+            if getattr(existing_docente, 'tipo_documento_id', None) != getattr(tipo_doc, 'id_tipo_documento', None):
+                existing_docente.tipo_documento = tipo_doc
+                changed = True
+            if getattr(existing_docente, 'programa_id', None) != getattr(detected_program, 'id_programa', None):
+                existing_docente.programa = detected_program
+                changed = True
+            if telefono is not None and existing_docente.num_telefono != (telefono or None):
+                existing_docente.num_telefono = telefono or None
+                changed = True
+            if raw_pass:
+                existing_docente.contrasenia_docente = make_password(raw_pass)
+                changed = True
+
+            if changed:
+                docentes_to_update.append(existing_docente)
+                updated += 1
+                if old_correo:
+                    existing_docentes_correos.pop(old_correo, None)
+                existing_docentes_correos[correo] = codigo
+                if old_doc:
+                    existing_docentes_docs.pop(old_doc, None)
+                existing_docentes_docs[num_documento] = codigo
+            else:
+                existing += 1
             continue
-        
-        # Validar unicidad de correo y documento
+
+        # Validar unicidad de correo y documento para nuevos docentes
         if correo in existing_docentes_correos:
             errors.append({"row": row_num, "error": f"Correo ya existe: {correo}"}); continue
         if num_documento in existing_docentes_docs:
             errors.append({"row": row_num, "error": f"Documento ya existe: {num_documento}"}); continue
         
-        # Generar contraseña si no viene
-        password = raw_pass or secrets.token_urlsafe(8)  # ~11 chars base64
+        # Generar contraseña si no viene. Use fixed generic docente password per user request.
+        password = raw_pass or "docente123"
         hashed = make_password(password)
+        # Preparar lista de envios de correo para docentes importados
+        if 'passwords_for_emails' not in locals():
+            passwords_for_emails = []
         
         # Agregar a lista de creación
         to_create.append(Docente(
@@ -4527,14 +4772,23 @@ def coordinador_import_docentes_view(request):
             codigo_docente=codigo,
             contrasenia_docente=hashed,
             correo=correo,
+            programa=detected_program,
             tipo_documento=tipo_doc,
             num_documento=num_documento,
             num_telefono=telefono or None
         ))
+        passwords_for_emails.append({
+            'correo': correo,
+            'nombre': nombre,
+            'apellido': apellido,
+            'codigo': codigo,
+            'password': password
+        })
         # Marcar como existente para evitar duplicados en el mismo archivo
         existing_docentes_codigos.add(codigo)
-        existing_docentes_correos.add(correo)
-        existing_docentes_docs.add(num_documento)
+        existing_docentes_correos[correo] = codigo
+        existing_docentes_docs[num_documento] = codigo
+        existing_docentes_by_code[codigo] = to_create[-1]
         created += 1
     
     # BULK INSERT con transacción atómica
@@ -4545,23 +4799,42 @@ def coordinador_import_docentes_view(request):
         except Exception as e:
             errors.append({"error": f"Error en inserción masiva: {str(e)}"})
             created = 0
-    
-    # Actualizar teléfonos de existentes si es necesario
+    # Enviar correos de bienvenida a docentes creados (en background)
+    try:
+        if 'passwords_for_emails' in locals() and passwords_for_emails:
+            _send_bulk_welcome_emails_docente_async(passwords_for_emails, max_emails=10)
+    except Exception:
+        logger.exception("Error programando envios de correo docentes")
+
     if docentes_to_update:
         try:
-            for codigo, telefono in docentes_to_update.items():
-                Docente.objects.filter(codigo_docente=codigo).update(num_telefono=telefono)
-        except Exception:
-            pass
+            with transaction.atomic():
+                Docente.objects.bulk_update(
+                    docentes_to_update,
+                    [
+                        'nombre',
+                        'apellido',
+                        'correo',
+                        'tipo_documento',
+                        'num_documento',
+                        'num_telefono',
+                        'programa',
+                        'contrasenia_docente',
+                    ],
+                    batch_size=500,
+                )
+        except Exception as e:
+            errors.append({"error": f"Error en actualización masiva de docentes: {str(e)}"})
+            updated = 0
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
-    payload = {"created": created, "existing": existing, "errors": errors}
+    payload = {"created": created, "updated": updated, "existing": existing, "errors": errors}
     try:
         logger.info("import_docentes: %s", {
             "coordinador": getattr(coord, "codigo_coordinador", None),
             "filename": getattr(f, "name", None),
-            **{k: payload[k] for k in ("created", "existing")},
+            **{k: payload[k] for k in ("created", "updated", "existing")},
             "errors_count": len(errors)
         })
         ImportAudit.objects.create(
@@ -4635,11 +4908,28 @@ def coordinador_import_asignaturas_ras_view(request):
     ra_sumas = {}
     for ra in ResultadoDeAprendizaje.objects.values('asignatura__codigo_asignatura', 'asignatura__grupo', 'asignatura__sede', 'asignatura__periodo_id').annotate(suma=Sum('porcentaje_ra')):
         ra_sumas[(ra['asignatura__codigo_asignatura'], ra['asignatura__grupo'], ra['asignatura__sede'], ra['asignatura__periodo_id'])] = float(ra['suma'] or 0)
+
+    existing_ras_by_key = {}
+    for ra in ResultadoDeAprendizaje.objects.select_related('asignatura').all():
+        existing_ras_by_key[(
+            ra.asignatura.codigo_asignatura,
+            ra.asignatura.grupo,
+            ra.asignatura.sede,
+            ra.asignatura.periodo_id,
+            _normalize_text(ra.descripcion or ""),
+        )] = ra
+
+    existing_indicators_by_ra = {}
+    for ind in IndicadoresDeLogro.objects.select_related('ra__asignatura').all():
+        existing_indicators_by_ra.setdefault(ind.ra_id, {})[_normalize_text(ind.descripcion or "")] = ind
     
     created_asig = 0
+    updated_asig = 0
     existing_asig = 0
     created_ras = 0
+    updated_ras = 0
     created_indicadores = 0
+    updated_indicadores = 0
     errors = []
     max_rows = 5000
     asignaturas_to_create = []
@@ -4756,18 +5046,24 @@ def coordinador_import_asignaturas_ras_view(request):
             try:
                 pct = float(raw_pct)
             except (TypeError, ValueError):
-                errors.append({"row": idx, "error": f"ra_porcentaje inválido: {raw_pct}"}); continue
+                errors.append({"row": row_num, "error": f"ra_porcentaje inválido: {raw_pct}"}); continue
             if pct < 0 or pct > 100:
-                errors.append({"row": idx, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
+                errors.append({"row": row_num, "error": f"ra_porcentaje fuera de rango: {pct}"}); continue
 
-            ra_key = (codigo, grupo, sede, periodo.id_periodo, ra_desc.lower())
+            ra_desc_norm = _normalize_text(ra_desc)
+            ra_key = (codigo, grupo, sede, periodo.id_periodo, ra_desc_norm)
             ra_entry = ra_entries.get(ra_key)
 
             if not ra_entry:
-                # Validar suma de porcentajes por asignatura solo para RAs nuevos
-                suma_actual = ra_sumas.get(asig_key, 0)
-                if float(suma_actual) + pct > 100.0:
-                    errors.append({"row": idx, "error": f"Suma RA excede 100% ({float(suma_actual)+pct:.2f})"}); continue
+                existing_ra = existing_ras_by_key.get(ra_key)
+                suma_actual = ra_sumas.get(asig_key, 0.0)
+                if existing_ra:
+                    suma_proyectada = float(suma_actual) - float(existing_ra.porcentaje_ra or 0) + pct
+                else:
+                    suma_proyectada = float(suma_actual) + pct
+
+                if suma_proyectada > 100.0:
+                    errors.append({"row": row_num, "error": f"Suma RA excede 100% ({suma_proyectada:.2f})"}); continue
 
                 ra_entry = {
                     'codigo_asignatura': codigo,
@@ -4775,42 +5071,31 @@ def coordinador_import_asignaturas_ras_view(request):
                     'sede': sede,
                     'periodo_id': periodo.id_periodo,
                     'descripcion': ra_desc,
+                    'descripcion_norm': ra_desc_norm,
                     'porcentaje': pct,
+                    'existing_ra': existing_ra,
                     'indicadores': [],
-                    'indicadores_desc': set(),
+                    'indicator_keys': set(),
+                    'existing_indicators': existing_indicators_by_ra.get(getattr(existing_ra, 'id_ra', None), {}) if existing_ra else {},
+                    'is_new': existing_ra is None,
                 }
                 ra_entries[ra_key] = ra_entry
-                ra_sumas[asig_key] = suma_actual + pct
-                created_ras += 1
+                ra_sumas[asig_key] = suma_proyectada
+                if existing_ra is None:
+                    created_ras += 1
             else:
-                # Mismo RA repetido con porcentaje diferente es inconsistente
                 if abs(float(ra_entry['porcentaje']) - pct) > 1e-9:
                     errors.append({"row": row_num, "error": f"RA repetido con porcentaje distinto para '{ra_desc}'"}); continue
 
-            # Validar indicadores cuando una de las columnas venga informada
-            has_ind_desc = bool(ind_desc)
-            if has_ind_desc:
-                ind_key = str(ind_desc).strip().lower()
-                if ind_key in ra_entry['indicadores_desc']:
+            if ind_desc:
+                ind_key = _normalize_text(ind_desc)
+                if ind_key in ra_entry['indicator_keys']:
                     errors.append({"row": row_num, "error": f"Indicador repetido en RA '{ra_desc}': {ind_desc}"}); continue
-
+                ra_entry['indicator_keys'].add(ind_key)
                 ra_entry['indicadores'].append({
                     'descripcion': str(ind_desc).strip(),
+                    'descripcion_norm': ind_key,
                 })
-                ra_entry['indicadores_desc'].add(ind_key)
-
-    # Convertir entradas consolidadas a estructura pendiente de creación
-    if ra_entries:
-        for entry in ra_entries.values():
-            ras_pendientes.append({
-                'codigo_asignatura': entry['codigo_asignatura'],
-                'grupo': entry['grupo'],
-                'sede': entry['sede'],
-                'periodo_id': entry['periodo_id'],
-                'descripcion': entry['descripcion'],
-                'porcentaje': entry['porcentaje'],
-                'indicadores': entry['indicadores'],
-            })
     
     # BULK INSERT de asignaturas nuevas
     if asignaturas_to_create:
@@ -4829,63 +5114,137 @@ def coordinador_import_asignaturas_ras_view(request):
         try:
             for (codigo, grupo, sede, periodo_id), updates in asignaturas_to_update.items():
                 Asignatura.objects.filter(codigo_asignatura=codigo, grupo=grupo, sede=sede, periodo_id=periodo_id).update(**updates)
+            updated_asig = len(asignaturas_to_update)
         except Exception:
             pass
     
-    # BULK INSERT de RAs
-    if ras_pendientes:
+    # UPSERT de RAs e indicadores
+    if ra_entries:
         try:
-            ra_meta = []
-            for ra_data in ras_pendientes:
-                asign = asignaturas_map.get((ra_data['codigo_asignatura'], ra_data['grupo'], ra_data['sede'], ra_data['periodo_id']))
-                if asign:
-                    ra_obj = ResultadoDeAprendizaje(
-                        asignatura=asign,
-                        porcentaje_ra=ra_data['porcentaje'],
-                        descripcion=ra_data['descripcion']
-                    )
-                    ras_to_create.append(ra_obj)
-                    ra_meta.append((ra_obj, ra_data))
-            
-            if ras_to_create:
-                with transaction.atomic():
-                    ResultadoDeAprendizaje.objects.bulk_create(ras_to_create, batch_size=500)
+            ras_to_create_objs = []
+            ras_to_update = []
+            indicadores_to_create = []
+            indicadores_to_update = []
+            next_numero_by_asig = {}
 
-                    indicadores_to_create = []
-                    for ra_obj, ra_data in ra_meta:
+            for ra_entry in ra_entries.values():
+                asig_key = (
+                    ra_entry['codigo_asignatura'],
+                    ra_entry['grupo'],
+                    ra_entry['sede'],
+                    ra_entry['periodo_id'],
+                )
+                asign = asignaturas_map.get(asig_key)
+                if not asign:
+                    continue
+
+                existing_ra = ra_entry['existing_ra']
+                if existing_ra:
+                    changed = False
+                    if existing_ra.asignatura_id != asign.id_asignatura:
+                        existing_ra.asignatura = asign
+                        changed = True
+                    if (existing_ra.descripcion or "").strip() != ra_entry['descripcion']:
+                        existing_ra.descripcion = ra_entry['descripcion']
+                        changed = True
+                    if float(existing_ra.porcentaje_ra or 0) != float(ra_entry['porcentaje']):
+                        existing_ra.porcentaje_ra = ra_entry['porcentaje']
+                        changed = True
+                    if changed:
+                        ras_to_update.append(existing_ra)
+
+                    existing_inds = ra_entry['existing_indicators']
+                    for ind_data in ra_entry['indicadores']:
+                        existing_ind = existing_inds.get(ind_data['descripcion_norm'])
+                        if existing_ind:
+                            if (existing_ind.descripcion or "").strip() != ind_data['descripcion']:
+                                existing_ind.descripcion = ind_data['descripcion']
+                                indicadores_to_update.append(existing_ind)
+                        else:
+                            indicadores_to_create.append(
+                                IndicadoresDeLogro(
+                                    ra=existing_ra,
+                                    descripcion=ind_data['descripcion'],
+                                )
+                            )
+                    continue
+
+                next_numero = next_numero_by_asig.get(asig_key)
+                if next_numero is None:
+                    next_numero = ResultadoDeAprendizaje.get_next_numero_for_asignatura(asign)
+                ra_obj = ResultadoDeAprendizaje(
+                    asignatura=asign,
+                    porcentaje_ra=ra_entry['porcentaje'],
+                    descripcion=ra_entry['descripcion'],
+                    numero_ra=next_numero,
+                )
+                next_numero_by_asig[asig_key] = next_numero + 1
+                ras_to_create_objs.append((ra_obj, ra_entry))
+
+            if ras_to_update:
+                with transaction.atomic():
+                    ResultadoDeAprendizaje.objects.bulk_update(
+                        ras_to_update,
+                        ['asignatura', 'descripcion', 'porcentaje_ra'],
+                        batch_size=500,
+                    )
+
+            if ras_to_create_objs:
+                new_ra_objs = [item[0] for item in ras_to_create_objs]
+                with transaction.atomic():
+                    ResultadoDeAprendizaje.objects.bulk_create(new_ra_objs, batch_size=500)
+
+                    for ra_obj, ra_entry in ras_to_create_objs:
                         ra_pk = getattr(ra_obj, 'id_ra', None)
                         if not ra_pk:
-                            # Fallback para entornos donde bulk_create no retorna PKs en memoria
                             found = ResultadoDeAprendizaje.objects.filter(
                                 asignatura=ra_obj.asignatura,
-                                descripcion=ra_obj.descripcion,
-                                porcentaje_ra=ra_obj.porcentaje_ra,
+                                numero_ra=ra_obj.numero_ra,
                             ).order_by('-id_ra').first()
                             ra_pk = getattr(found, 'id_ra', None)
                         if not ra_pk:
                             continue
 
-                        for ind in (ra_data.get('indicadores') or []):
-                            indicadores_to_create.append(IndicadoresDeLogro(
-                                ra_id=ra_pk,
-                                descripcion=ind['descripcion'],
-                            ))
+                        for ind in (ra_entry.get('indicadores') or []):
+                            indicadores_to_create.append(
+                                IndicadoresDeLogro(
+                                    ra_id=ra_pk,
+                                    descripcion=ind['descripcion'],
+                                )
+                            )
 
-                    if indicadores_to_create:
-                        created_inds = IndicadoresDeLogro.objects.bulk_create(indicadores_to_create, batch_size=500)
-                        created_indicadores = len(created_inds)
+            if indicadores_to_update:
+                with transaction.atomic():
+                    IndicadoresDeLogro.objects.bulk_update(
+                        indicadores_to_update,
+                        ['descripcion'],
+                        batch_size=500,
+                    )
+
+            if indicadores_to_create:
+                with transaction.atomic():
+                    created_inds = IndicadoresDeLogro.objects.bulk_create(indicadores_to_create, batch_size=500)
+                    created_indicadores = len(created_inds)
+
+            updated_ras = len(ras_to_update)
+            updated_indicadores = len(indicadores_to_update)
         except Exception as e:
-            errors.append({"error": f"Error en inserción masiva de RAs: {str(e)}"})
+            errors.append({"error": f"Error en upsert masivo de RAs: {str(e)}"})
             created_ras = 0
+            updated_ras = 0
             created_indicadores = 0
+            updated_indicadores = 0
     
     if len(errors) > 100:
         errors = errors[:100] + [{"more": "se omitieron errores adicionales"}]
     payload = {
         "created_asignaturas": created_asig,
+        "updated_asignaturas": updated_asig,
         "existing_asignaturas": existing_asig,
         "created_ras": created_ras,
+        "updated_ras": updated_ras,
         "created_indicadores": created_indicadores,
+        "updated_indicadores": updated_indicadores,
         "errors": errors,
     }
     try:
@@ -4893,9 +5252,12 @@ def coordinador_import_asignaturas_ras_view(request):
             "coordinador": getattr(coord, "codigo_coordinador", None),
             "filename": getattr(f, "name", None),
             "created_asignaturas": created_asig,
+            "updated_asignaturas": updated_asig,
             "existing_asignaturas": existing_asig,
             "created_ras": created_ras,
+            "updated_ras": updated_ras,
             "created_indicadores": created_indicadores,
+            "updated_indicadores": updated_indicadores,
             "errors_count": len(errors)
         })
         ImportAudit.objects.create(
@@ -6242,6 +6604,7 @@ def course_grade_view(request, codigo_asignatura: str, id_estudiante: int):
 
         out_ras.append({
             "id_ra": ra.id_ra,
+            "numero_ra": ra.numero_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
             "strict": round(ra_strict, 2) if ra_strict is not None else None,
@@ -6370,6 +6733,7 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
 
         ras_info.append({
             "id_ra": ra.id_ra,
+            "numero_ra": ra.numero_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
             "actividades_total": len(rels),
@@ -6635,6 +6999,7 @@ def course_analytics_view(request, codigo_asignatura: str):
 
         ras_info.append({
             "id_ra": ra.id_ra,
+            "numero_ra": ra.numero_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
             "actividades_total": len(rels),

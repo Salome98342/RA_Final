@@ -35,9 +35,12 @@ type ImportApiResponse = {
   updated?: number
   existing?: number
   created_asignaturas?: number
+  updated_asignaturas?: number
   existing_asignaturas?: number
   created_ras?: number
+  updated_ras?: number
   created_indicadores?: number
+  updated_indicadores?: number
   imported_students?: Array<{
     nombre?: string
     apellido?: string
@@ -389,21 +392,25 @@ const buildResult = (kind: ImportKind, response: ImportApiResponse, durationMs: 
 
   if (kind === 'asig') {
     const createdAsignaturas = Number(response.created_asignaturas || 0)
+    const updatedAsignaturas = Number(response.updated_asignaturas || 0)
     const createdRas = Number(response.created_ras || 0)
+    const updatedRas = Number(response.updated_ras || 0)
     const createdIndicadores = Number(response.created_indicadores || 0)
+    const updatedIndicadores = Number(response.updated_indicadores || 0)
     const inserted = createdAsignaturas + createdRas + createdIndicadores
+    const updated = updatedAsignaturas + updatedRas + updatedIndicadores
     const existing = Number(response.existing_asignaturas || 0)
     const failed = errors.length
-    const processed = inserted + existing + failed
+    const processed = inserted + updated + existing + failed
 
     return {
       inserted,
-      updated: 0,
+      updated,
       existing,
       failed,
       processed,
       durationMs,
-      details: `Asignaturas creadas: ${createdAsignaturas}, RAs creados: ${createdRas}, IL creados: ${createdIndicadores}`,
+      details: `Asignaturas creadas: ${createdAsignaturas}, actualizadas: ${updatedAsignaturas}; RAs creados: ${createdRas}, actualizados: ${updatedRas}; IL creados: ${createdIndicadores}, actualizados: ${updatedIndicadores}`,
       errors,
       importedStudents,
     }

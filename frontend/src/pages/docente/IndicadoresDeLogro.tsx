@@ -14,6 +14,7 @@ import { getApiErrorMessage } from '@/utils/alertMessages'
 interface RAsResponse {
   id_ra?: string | number
   id?: string | number
+  numero_ra?: number
   titulo?: string
   descripcion?: string
   porcentaje_ra?: number
@@ -57,7 +58,7 @@ const DocenteIndicadoresDeLogro: React.FC = () => {
         const rows = Array.isArray(response.data) ? response.data : []
         const mapped: RA[] = rows.map((it) => ({
           id: String(it.id_ra ?? it.id ?? ''),
-          titulo: (it.titulo || it.descripcion || `RA ${it.id_ra}`) as string,
+          titulo: (it.titulo || it.descripcion || `RA ${it.numero_ra ?? it.id_ra}`) as string,
           info: '',
           porcentajeRA: it.porcentaje_ra,
         }))

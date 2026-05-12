@@ -270,7 +270,7 @@ const Estudiantes: React.FC = () => {
               onClick={() => navigate('/coordinador/imports')}
             >
               <i className="bi bi-upload me-1"></i>
-              Carga masiva (CSV)
+              Carga masiva
             </button>
           </div>
 

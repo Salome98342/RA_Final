@@ -30,21 +30,46 @@ def _norm_code(value: str) -> str:
 
 
 def _infer_program_for_coordinador(coord: Coordinador):
+    import re
+
     programas = list(Programa.objects.all())
     if not programas:
         return None
 
     coord_code = _norm_code(getattr(coord, "codigo_coordinador", ""))
+    coord_email_local = (getattr(coord, "correo", "") or "").split("@")[0].upper()
+    name_tokens = set()
+    if getattr(coord, "nombre", None):
+        name_tokens.update([t.upper() for t in re.split(r"\s+", coord.nombre.strip()) if t])
+    if getattr(coord, "apellido", None):
+        name_tokens.update([t.upper() for t in re.split(r"\s+", coord.apellido.strip()) if t])
 
+    tokens = set(re.split(r"[-_/\s]+", coord_code)) if coord_code else set()
+    if coord_email_local:
+        tokens.update(re.split(r"[._\-\s]+", coord_email_local))
+
+    # Exact match
     for p in programas:
-        if _norm_code(p.codigo_programa) == coord_code:
+        if _norm_code(p.codigo_programa) == coord_code and coord_code:
             return p
 
-    if coord_code:
-        tokenized = coord_code.replace("-", " ").replace("_", " ").replace("/", " ").split()
+    # Token match
+    if tokens:
         for p in programas:
             p_code = _norm_code(p.codigo_programa)
-            if p_code in tokenized:
+            if p_code in tokens:
+                return p
+
+    # Partial match against program name or code
+    for p in programas:
+        p_code = _norm_code(p.codigo_programa)
+        p_name = (getattr(p, "nombre", "") or "").upper()
+        if coord_code and p_code and p_code in coord_code:
+            return p
+        for nt in re.split(r"\s+", p_name):
+            if not nt:
+                continue
+            if nt in tokens or nt in name_tokens or nt in coord_email_local.upper():
                 return p
 
     if len(programas) == 1:
@@ -143,6 +168,8 @@ def coordinador_dashboard_desempenio_view(request):
     # Obtener parámetros de filtro
     periodo_desc = (request.query_params.get("periodo") or "").strip()
     asignatura_codigo = (request.query_params.get("asignatura") or "").strip()
+    grupo = (request.query_params.get("grupo") or "").strip()
+    id_asignatura = (request.query_params.get("id_asignatura") or "").strip()
     cohorte = (request.query_params.get("cohorte") or "").strip()
     
     # ==================== HU-10: ESTUDIANTES CON BAJO DESEMPEÑO ====================
@@ -161,11 +188,22 @@ def coordinador_dashboard_desempenio_view(request):
     
     if asignatura_codigo:
         matriculas = matriculas.filter(asignatura__codigo_asignatura=asignatura_codigo)
+
+    if grupo:
+        matriculas = matriculas.filter(asignatura__grupo=grupo)
+
+    if id_asignatura:
+        try:
+            matriculas = matriculas.filter(asignatura__id_asignatura=int(id_asignatura))
+        except (TypeError, ValueError):
+            pass
     
     if cohorte:
         # Si existe campo cohorte en estudiante, filtrar
         matriculas = matriculas.filter(estudiante__cohorte=cohorte)
     
+    total_estudiantes_considerados = matriculas.values("estudiante_id").distinct().count()
+
     # Calcular notas de estudiantes por RA
     # La nota de un estudiante en un RA es el promedio ponderado de sus actividades en ese RA
     estudiantes_bajo_desempenio_dict = {}  # {id_estudiante: {datos}}
@@ -272,6 +310,8 @@ def coordinador_dashboard_desempenio_view(request):
                 "sede": getattr(asignatura, "sede", None),
                 "total_matriculados": 0,
                 "estudiantes_con_bajo_desempenio": set(),  # Set para evitar duplicados
+                "estudiantes_promedio_sobre_3": set(),
+                "estudiantes_promedio_bajo_3": set(),
                 "ras_afectados": {},  # {id_ra: {count, total}}
             }
         
@@ -282,6 +322,8 @@ def coordinador_dashboard_desempenio_view(request):
         
         tiene_bajo_desempenio = False
         
+        notas_ra_estudiante = []
+
         for ra in ras:
             rels = RaActividad.objects.filter(ra=ra)
             
@@ -306,6 +348,7 @@ def coordinador_dashboard_desempenio_view(request):
             # Calcular nota promedio
             if suma_w_graded > 0:
                 nota_ra = acc_nota / suma_w_graded
+                notas_ra_estudiante.append(nota_ra)
             else:
                 nota_ra = None
             
@@ -326,6 +369,24 @@ def coordinador_dashboard_desempenio_view(request):
             asignaturas_stats[asig_key]["estudiantes_con_bajo_desempenio"].add(
                 mat.estudiante.id_estudiante
             )
+
+        # Clasificar por promedio final del estudiante en la asignatura.
+        # Si no hay notas aún, se clasifica como "no bajo" para mantener
+        # consistencia total: sobre_3 + bajo_3 == total_matriculados.
+        if notas_ra_estudiante:
+            promedio_asignatura = sum(notas_ra_estudiante) / len(notas_ra_estudiante)
+            if promedio_asignatura < 3.0:
+                asignaturas_stats[asig_key]["estudiantes_promedio_bajo_3"].add(
+                    mat.estudiante.id_estudiante
+                )
+            else:
+                asignaturas_stats[asig_key]["estudiantes_promedio_sobre_3"].add(
+                    mat.estudiante.id_estudiante
+                )
+        else:
+            asignaturas_stats[asig_key]["estudiantes_promedio_sobre_3"].add(
+                mat.estudiante.id_estudiante
+            )
         
         # Actualizar total para cada RA
         for ra in ras:
@@ -342,9 +403,13 @@ def coordinador_dashboard_desempenio_view(request):
     
     for asig_key, asig_data in asignaturas_stats.items():
         total_bajo = len(asig_data["estudiantes_con_bajo_desempenio"])
+        total_promedio_sobre_3 = len(asig_data["estudiantes_promedio_sobre_3"])
+        total_promedio_bajo_3 = len(asig_data["estudiantes_promedio_bajo_3"])
         total_mat = asig_data["total_matriculados"]
         
         porcentaje_bajo = (total_bajo / total_mat * 100) if total_mat > 0 else 0
+        porcentaje_promedio_sobre_3 = (total_promedio_sobre_3 / total_mat * 100) if total_mat > 0 else 0
+        porcentaje_promedio_bajo_3 = (total_promedio_bajo_3 / total_mat * 100) if total_mat > 0 else 0
         
         # Calcular porcentaje de bajo desempeño por RA
         ras_afectados_list = []
@@ -367,6 +432,10 @@ def coordinador_dashboard_desempenio_view(request):
             "total_matriculados": total_mat,
             "estudiantes_bajo_desempenio": total_bajo,
             "porcentaje_bajo_desempenio": round(porcentaje_bajo, 1),
+            "estudiantes_promedio_sobre_3": total_promedio_sobre_3,
+            "estudiantes_promedio_bajo_3": total_promedio_bajo_3,
+            "porcentaje_promedio_sobre_3": round(porcentaje_promedio_sobre_3, 1),
+            "porcentaje_promedio_bajo_3": round(porcentaje_promedio_bajo_3, 1),
             "ras_afectados": ras_afectados_list
         })
     
@@ -388,10 +457,13 @@ def coordinador_dashboard_desempenio_view(request):
         "filtros_aplicados": {
             "periodo": periodo_desc if periodo_desc else None,
             "asignatura": asignatura_codigo if asignatura_codigo else None,
+            "grupo": grupo if grupo else None,
+            "id_asignatura": int(id_asignatura) if id_asignatura.isdigit() else None,
             "cohorte": cohorte if cohorte else None
         },
         "resumen": {
             "total_estudiantes_bajo_desempenio": len(hu10_estudiantes),
+            "total_estudiantes_considerados": total_estudiantes_considerados,
             "total_asignaturas": len(asignaturas_criticas),
             "asignatura_con_mas_bajo_desempenio": asignatura_con_mas_bajo
         }

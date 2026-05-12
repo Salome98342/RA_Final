@@ -28,6 +28,8 @@ const DesempenioEstudiantes: React.FC = () => {
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState<string>('')
   const [asignaturasFiltro, setAsignaturasFiltro] = useState<AsignaturaRow[]>([])
   const [asignaturaSeleccionada, setAsignaturaSeleccionada] = useState<string>('')
+  const [asignaturaSeleccionadaId, setAsignaturaSeleccionadaId] = useState<string>('')
+  const [gruposComparacion, setGruposComparacion] = useState<string[]>([])
   
   // Datos
   const [datosDesempenio, setDatosDesempenio] = useState<DashboardDesempenioResponse | null>(null)
@@ -67,6 +69,8 @@ const DesempenioEstudiantes: React.FC = () => {
   // Cargar asignaturas disponibles para filtro (según alcance del coordinador)
   useEffect(() => {
     setAsignaturaSeleccionada('')
+    setAsignaturaSeleccionadaId('')
+    setGruposComparacion([])
     const cargarAsignaturas = async () => {
       try {
         const data = await fetchAsignaturas({
@@ -83,6 +87,10 @@ const DesempenioEstudiantes: React.FC = () => {
     cargarAsignaturas()
   }, [periodoSeleccionado])
 
+  useEffect(() => {
+    setGruposComparacion([])
+  }, [asignaturaSeleccionada])
+
   // Cargar datos del dashboard
     useEffect(() => {
       const cargarDatos = async () => {
@@ -92,6 +100,8 @@ const DesempenioEstudiantes: React.FC = () => {
       const datos = await fetchDashboardDesempenio({
         periodo: periodoSeleccionado || undefined,
         asignatura: asignaturaSeleccionada || undefined,
+        // Enviar id_asignatura siempre que esté seleccionada para mantener coherencia
+        id_asignatura: asignaturaSeleccionadaId ? Number(asignaturaSeleccionadaId) : undefined,
       })
       setDatosDesempenio(datos)
     } catch (err) {
@@ -102,7 +112,7 @@ const DesempenioEstudiantes: React.FC = () => {
     }
   }
     cargarDatos()
-  }, [periodoSeleccionado, asignaturaSeleccionada])
+  }, [periodoSeleccionado, asignaturaSeleccionada, asignaturaSeleccionadaId, activeTab])
 
   // Refs para gráficos
   const chartEstudiantesRef = useRef<HTMLCanvasElement>(null)
@@ -116,16 +126,11 @@ const DesempenioEstudiantes: React.FC = () => {
     if (!datosDesempenio || !chartEstudiantesRef.current) return
 
     const totalBajo = datosDesempenio.resumen.total_estudiantes_bajo_desempenio
-    let totalEstudiantesEstimado = 0
-    datosDesempenio.hu11_asignaturas_ranking.forEach(asig => {
-      totalEstudiantesEstimado = Math.max(totalEstudiantesEstimado, asig.total_matriculados)
-    })
+    const totalEstudiantes =
+      datosDesempenio.resumen.total_estudiantes_considerados ??
+      datosDesempenio.hu11_asignaturas_ranking.reduce((max, asig) => Math.max(max, asig.total_matriculados), 0)
 
-    if (totalEstudiantesEstimado === 0) {
-      totalEstudiantesEstimado = Math.max(totalBajo * 2, 10) // Fallback
-    }
-
-    const normalDesempenio = Math.max(totalEstudiantesEstimado - totalBajo, 0)
+    const normalDesempenio = Math.max(totalEstudiantes - totalBajo, 0)
 
     const ctx = chartEstudiantesRef.current.getContext('2d')
     if (!ctx) return
@@ -185,7 +190,11 @@ const DesempenioEstudiantes: React.FC = () => {
     if (!datosDesempenio || activeTab !== 'asignaturas') return
 
     const rafId = window.requestAnimationFrame(() => {
-      datosDesempenio.hu11_asignaturas_ranking.forEach((asig, idx) => {
+      const rankingFiltrado = gruposComparacion.length
+        ? datosDesempenio.hu11_asignaturas_ranking.filter((a) => gruposComparacion.includes(a.grupo || 'N/A'))
+        : datosDesempenio.hu11_asignaturas_ranking
+
+      rankingFiltrado.forEach((asig, idx) => {
         const canvasId = `chart-asignatura-${idx}`
         const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null
         if (!canvas) return
@@ -198,13 +207,14 @@ const DesempenioEstudiantes: React.FC = () => {
           chartsAsignaturasRef.current[idx]?.destroy()
         }
 
-        const bajoDesempenio = asig.estudiantes_bajo_desempenio
-        const normalDesempenio = asig.total_matriculados - asig.estudiantes_bajo_desempenio
+        // Usar el conteo de estudiantes con RA < 3.0 para coherencia con HU-10
+        const bajoDesempenio = asig.estudiantes_bajo_desempenio ?? asig.estudiantes_promedio_bajo_3
+        const normalDesempenio = Math.max(asig.total_matriculados - (bajoDesempenio || 0), 0)
 
         chartsAsignaturasRef.current[idx] = new ChartJS(ctx, {
           type: 'pie',
           data: {
-            labels: ['Con Bajo Desempeño', 'Desempeño Normal'],
+            labels: ['RA < 3.0', 'RA >= 3.0'],
             datasets: [
               {
                 data: [bajoDesempenio, normalDesempenio],
@@ -247,7 +257,7 @@ const DesempenioEstudiantes: React.FC = () => {
       })
       chartsAsignaturasRef.current = {}
     }
-  }, [datosDesempenio, activeTab])
+  }, [datosDesempenio, activeTab, gruposComparacion])
 
   // Crear gráfico de ranking de asignaturas (Bar chart)
   useEffect(() => {
@@ -265,15 +275,16 @@ const DesempenioEstudiantes: React.FC = () => {
         chartInstanceRankingRef.current.destroy()
       }
 
-      const asignaturas = datosDesempenio.hu11_asignaturas_ranking
-      const labels = asignaturas.map(a => `${a.codigo}`)
-      const porcentajes = asignaturas.map(a => a.porcentaje_bajo_desempenio)
-      
-      // Definir colores basado en el porcentaje
-      const colors = porcentajes.map(pct => {
-        if (pct >= 50) return '#9A1915' // Rojo - critico
-        if (pct >= 30) return '#E73431' // Rojo - alerta
-        return '#199A75' // Verde - bajo riesgo
+      const dataBase = datosDesempenio.hu11_asignaturas_ranking
+      const asignaturas = gruposComparacion.length
+        ? dataBase.filter((a) => gruposComparacion.includes(a.grupo || 'N/A'))
+        : dataBase
+
+      const labels = asignaturas.map(a => `${a.codigo} • Grupo ${a.grupo || 'N/A'}`)
+      const conteosBajo3 = asignaturas.map((a) => a.estudiantes_bajo_desempenio ?? a.estudiantes_promedio_bajo_3 ?? 0)
+      const conteosSobre3 = asignaturas.map((a) => {
+        const bajo = a.estudiantes_bajo_desempenio ?? a.estudiantes_promedio_bajo_3 ?? 0
+        return Math.max(a.total_matriculados - bajo, 0)
       })
 
       const barChart = new ChartJS(ctx, {
@@ -282,10 +293,17 @@ const DesempenioEstudiantes: React.FC = () => {
           labels: labels,
           datasets: [
             {
-              label: 'Porcentaje de Bajo Desempeño (%)',
-              data: porcentajes,
-              backgroundColor: colors,
-              borderColor: colors.map(c => c.replace(')', ', 0.8)').replace('rgb', 'rgba')),
+              label: 'RA >= 3.0',
+              data: conteosSobre3,
+              backgroundColor: '#199A75',
+              borderColor: '#0F6B50',
+              borderWidth: 1,
+            },
+            {
+              label: 'RA < 3.0',
+              data: conteosBajo3,
+              backgroundColor: '#E73431',
+              borderColor: '#9A1915',
               borderWidth: 1,
             },
           ],
@@ -297,10 +315,13 @@ const DesempenioEstudiantes: React.FC = () => {
           scales: {
             x: {
               beginAtZero: true,
-              max: 100,
+              stacked: true,
               ticks: {
-                callback: (value) => value + '%',
+                precision: 0,
               },
+            },
+            y: {
+              stacked: true,
             },
           },
           plugins: {
@@ -311,7 +332,11 @@ const DesempenioEstudiantes: React.FC = () => {
             tooltip: {
               callbacks: {
                 label: function (context) {
-                  return `${context.parsed.x.toFixed(1)}%`
+                  const dataIndex = context.dataIndex
+                  const total = (conteosSobre3[dataIndex] || 0) + (conteosBajo3[dataIndex] || 0)
+                  const value = context.parsed.x as number
+                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
+                  return `${context.dataset.label}: ${value} estudiantes (${percentage}%)`
                 },
               },
             },
@@ -329,7 +354,27 @@ const DesempenioEstudiantes: React.FC = () => {
         chartInstanceRankingRef.current = null
       }
     }
-  }, [datosDesempenio, activeTab])
+  }, [datosDesempenio, activeTab, gruposComparacion])
+
+  const gruposDisponibles = Array.from(
+    new Set((datosDesempenio?.hu11_asignaturas_ranking || []).map((a) => a.grupo || 'N/A'))
+  )
+
+  const rankingFiltrado = gruposComparacion.length
+    ? (datosDesempenio?.hu11_asignaturas_ranking || []).filter((a) => gruposComparacion.includes(a.grupo || 'N/A'))
+    : (datosDesempenio?.hu11_asignaturas_ranking || [])
+
+  const toggleGrupoComparacion = (grupo: string) => {
+    setGruposComparacion((prev) => {
+      if (prev.includes(grupo)) {
+        return prev.filter((g) => g !== grupo)
+      }
+      if (prev.length >= 2) {
+        return prev
+      }
+      return [...prev, grupo]
+    })
+  }
 
   const goTo = (key: string) => {
     if (key === 'inicio') {
@@ -445,12 +490,21 @@ const DesempenioEstudiantes: React.FC = () => {
                     <label className="form-label">Asignatura</label>
                     <select 
                       className="form-select" 
-                      value={asignaturaSeleccionada}
-                      onChange={(e) => setAsignaturaSeleccionada(e.target.value)}
+                      value={asignaturaSeleccionadaId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value
+                        setAsignaturaSeleccionadaId(selectedId)
+                        if (!selectedId) {
+                          setAsignaturaSeleccionada('')
+                          return
+                        }
+                        const asignatura = asignaturasFiltro.find((a) => String(a.id_asignatura) === selectedId)
+                        setAsignaturaSeleccionada(asignatura?.codigo || '')
+                      }}
                     >
                       <option value="">General (todas las asignaturas)</option>
                       {asignaturasFiltro.map((a) => (
-                        <option key={a.id_asignatura} value={a.codigo}>
+                        <option key={a.id_asignatura} value={String(a.id_asignatura)}>
                           {a.codigo} - {a.nombre} - Grupo {a.grupo} - Sede {a.sede || 'N/A'}
                         </option>
                       ))}
@@ -502,7 +556,6 @@ const DesempenioEstudiantes: React.FC = () => {
                                     {est.total_ras_perdidos} RA{est.total_ras_perdidos !== 1 ? 's' : ''} perdido{est.total_ras_perdidos !== 1 ? 's' : ''}
                                   </p>
                                 </div>
-                                <span className="badge bg-danger">{est.ras_perdidos.map(r => r.nota_promedio).reduce((a, b) => a + b, 0) / est.ras_perdidos.length | 0}</span>
                               </div>
                             </div>
                           ))}
@@ -546,12 +599,9 @@ const DesempenioEstudiantes: React.FC = () => {
                                 </td>
                                 <td>
                                   <div className="small">
-                                    {est.asignaturas_perdidas.slice(0, 2).map((a, i) => (
+                                    {est.asignaturas_perdidas.map((a, i) => (
                                       <span key={i} className="badge bg-warning text-dark me-1">{a.codigo}</span>
                                     ))}
-                                    {est.asignaturas_perdidas.length > 2 && (
-                                      <span className="text-muted">+{est.asignaturas_perdidas.length - 2}</span>
-                                    )}
                                   </div>
                                 </td>
                                 <td>
@@ -602,6 +652,32 @@ const DesempenioEstudiantes: React.FC = () => {
                   </div>
                 </div>
 
+                {asignaturaSeleccionada && gruposDisponibles.length > 0 && (
+                  <div className="mb-4">
+                    <label className="form-label">Comparar cohortes por grupo (máximo 2)</label>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {gruposDisponibles.map((grupo) => {
+                        const selected = gruposComparacion.includes(grupo)
+                        return (
+                          <button
+                            key={grupo}
+                            type="button"
+                            className={`btn btn-sm ${selected ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => toggleGrupoComparacion(grupo)}
+                          >
+                            Grupo {grupo}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {gruposComparacion.length === 2 && (
+                      <div className="form-text">
+                        Comparación activa entre grupos {gruposComparacion[0]} y {gruposComparacion[1]}.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Mensajes de estado */}
                 {error && (
                   <div className="alert alert-danger mb-4" role="alert">
@@ -617,13 +693,13 @@ const DesempenioEstudiantes: React.FC = () => {
                     </div>
                     <p className="mt-2 text-muted">Cargando datos...</p>
                   </div>
-                ) : datosDesempenio && datosDesempenio.hu11_asignaturas_ranking.length > 0 ? (
+                ) : datosDesempenio && rankingFiltrado.length > 0 ? (
                   <>
                     {/* Gráfico de Ranking (Barra Horizontal) */}
                     <div className="mb-5">
                       <h6 className="mb-3">
                         <i className="bi bi-bar-chart me-2"></i>
-                        Ranking por Porcentaje de Bajo Desempeño
+                        Comparativo de estudiantes por RA (RA &gt;=3.0 y RA &lt;3.0)
                       </h6>
                       <div className="card border-0 bg-light p-3" style={{minHeight: '400px'}}>
                         <canvas ref={chartRankingRef}></canvas>
@@ -644,18 +720,23 @@ const DesempenioEstudiantes: React.FC = () => {
                               <th>Nombre</th>
                               <th>Grupo</th>
                               <th>Matriculados</th>
-                              <th>Bajo Desempeño</th>
-                              <th>Porcentaje</th>
+                              <th>RA &lt; 3.0</th>
+                              <th>RA &gt;= 3.0</th>
                               <th>RAs Afectados</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {datosDesempenio.hu11_asignaturas_ranking.map((asig: HU11Asignatura, idx: number) => {
-                              const porcentajeNum = asig.porcentaje_bajo_desempenio
+                            {rankingFiltrado.map((asig: HU11Asignatura, idx: number) => {
+                              // Usar porcentaje y conteos basados en estudiantes con RA < 3.0
+                              const porcentajeNum = asig.porcentaje_bajo_desempenio ?? asig.porcentaje_promedio_bajo_3
                               let badgeClass = 'bg-success'
                               if (porcentajeNum >= 50) badgeClass = 'bg-danger'
                               else if (porcentajeNum >= 30) badgeClass = 'bg-warning text-dark'
                               else if (porcentajeNum >= 15) badgeClass = 'bg-info'
+                              const bajo3 = asig.estudiantes_bajo_desempenio ?? asig.estudiantes_promedio_bajo_3
+                              const sobre3 = Math.max(asig.total_matriculados - (bajo3 || 0), 0)
+                              const pctBajo3 = asig.porcentaje_bajo_desempenio ?? ((bajo3 / (asig.total_matriculados || 1)) * 100)
+                              const pctSobre3 = asig.porcentaje_promedio_sobre_3 ?? ((sobre3 / (asig.total_matriculados || 1)) * 100)
                               
                               return (
                                 <tr key={`${asig.codigo}-${idx}`}>
@@ -668,23 +749,22 @@ const DesempenioEstudiantes: React.FC = () => {
                                     <span className="badge bg-light text-dark">{asig.total_matriculados}</span>
                                   </td>
                                   <td>
-                                    <span className="badge bg-danger">{asig.estudiantes_bajo_desempenio}</span>
+                                    <span className={`badge ${badgeClass}`}>
+                                      {bajo3} ({pctBajo3.toFixed(1)}%)
+                                    </span>
                                   </td>
                                   <td>
-                                    <span className={`badge ${badgeClass}`}>
-                                      {asig.porcentaje_bajo_desempenio}%
+                                    <span className="badge bg-success">
+                                      {sobre3} ({pctSobre3.toFixed(1)}%)
                                     </span>
                                   </td>
                                   <td>
                                     <div className="small">
-                                      {asig.ras_afectados.slice(0, 2).map((ra, i) => (
+                                      {asig.ras_afectados.map((ra, i) => (
                                         <span key={i} className="badge bg-light text-dark me-1">
                                             {ra.nombre}
                                         </span>
                                       ))}
-                                      {asig.ras_afectados.length > 2 && (
-                                        <span className="text-muted">+{asig.ras_afectados.length - 2}</span>
-                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -702,7 +782,7 @@ const DesempenioEstudiantes: React.FC = () => {
                         Distribución de Desempeño por Asignatura
                       </h6>
                       <div className="row">
-                        {datosDesempenio.hu11_asignaturas_ranking.slice(0, 6).map((asig: HU11Asignatura, idx: number) => (
+                        {rankingFiltrado.slice(0, 6).map((asig: HU11Asignatura, idx: number) => (
                           <div key={`${asig.codigo}-chart-${idx}`} className="col-md-4 mb-4">
                             <div className="card border-0 shadow-sm">
                               <div className="card-body p-3">
@@ -717,23 +797,33 @@ const DesempenioEstudiantes: React.FC = () => {
                                   <canvas id={`chart-asignatura-${idx}`}></canvas>
                                 </div>
                                 <div className="mt-3 text-center small border-top pt-2">
-                                  <div className="d-flex justify-content-around mb-1">
-                                    <div>
-                                      <div className="badge bg-danger">
-                                        {asig.estudiantes_bajo_desempenio}
-                                      </div>
-                                      <div className="text-muted" style={{fontSize: '0.75rem'}}>Bajo</div>
-                                    </div>
-                                    <div>
-                                      <div className="badge bg-success">
-                                        {asig.total_matriculados - asig.estudiantes_bajo_desempenio}
-                                      </div>
-                                      <div className="text-muted" style={{fontSize: '0.75rem'}}>Normal</div>
-                                    </div>
-                                  </div>
-                                  <div className="fw-bold text-danger mt-2">
-                                    {asig.porcentaje_bajo_desempenio}% crítico
-                                  </div>
+                                  {(() => {
+                                    const bajo3 = asig.estudiantes_bajo_desempenio ?? asig.estudiantes_promedio_bajo_3
+                                    const sobre3 = Math.max(asig.total_matriculados - (bajo3 || 0), 0)
+                                    const pctBajo3 = asig.porcentaje_bajo_desempenio ?? ((bajo3 / (asig.total_matriculados || 1)) * 100)
+                                    const pctSobre3 = asig.porcentaje_promedio_sobre_3 ?? ((sobre3 / (asig.total_matriculados || 1)) * 100)
+                                    return (
+                                      <>
+                                        <div className="d-flex justify-content-around mb-1">
+                                          <div>
+                                            <div className="badge bg-danger">
+                                              {bajo3} ({pctBajo3.toFixed(1)}%)
+                                            </div>
+                                            <div className="text-muted" style={{fontSize: '0.75rem'}}>RA &lt; 3.0</div>
+                                          </div>
+                                          <div>
+                                            <div className="badge bg-success">
+                                              {sobre3} ({pctSobre3.toFixed(1)}%)
+                                            </div>
+                                            <div className="text-muted" style={{fontSize: '0.75rem'}}>RA &gt;= 3.0</div>
+                                          </div>
+                                        </div>
+                                        <div className="fw-bold text-danger mt-2">
+                                          {pctBajo3.toFixed(1)}% con RA &lt; 3.0
+                                        </div>
+                                      </>
+                                    )
+                                  })()}
                                 </div>
                               </div>
                             </div>
