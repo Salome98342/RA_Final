@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import HeaderBar from '@/components/HeaderBar'
 import Sidebar from '@/components/Sidebar'
 import ModuleBreadcrumbs from '@/components/ModuleBreadcrumbs'
@@ -7,12 +7,11 @@ import CardGrid from '@/components/CardGrid'
 import RaCard from '@/components/RaCard'
 import StudentList from '@/components/StudentList'
 import PaginationControls from '@/components/PaginationControls'
-import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, getActivitiesByRA, createActivityForRA, upsertGrade, getIndicatorChart, getRAValidation } from '@/services/api'
+import { getCourses, getRAsByCourse, getStudentsByCourse, getIndicatorsByRA, getActivitiesByRA, createActivityForRA, upsertGrade, getRAValidation } from '@/services/api'
 import type { Course, RA, Indicator, Activity, Student } from '@/types'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '@/state/SessionContext'
 import { Alert } from '@/utils/alert'
-import Chart from 'chart.js/auto'
 
 const DEFAULT_PAGE_SIZE = 10
 
@@ -42,9 +41,6 @@ const Docente: React.FC = () => {
   // Calificación
   const [grade, setGrade] = useState({ nota: '', retro: '', indicadorId: '' })
   const [raVal, setRaVal] = useState<{ actividades: { suma: number; ok: boolean; faltante: number }; indicadores: { suma: number; ok: boolean; faltante: number } } | null>(null)
-  const chartRef = useRef<HTMLCanvasElement | null>(null)
-  const chartInstance = useRef<Chart | null>(null)
-  const [chartEmpty, setChartEmpty] = useState(false)
   const [savingGrade, setSavingGrade] = useState(false)
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [params, setParams] = useSearchParams()
@@ -119,31 +115,6 @@ const Docente: React.FC = () => {
     }
   }
 
-  // Render/actualiza gráfico de indicadores del estudiante
-  const renderChart = useCallback(async (student: Student) => {
-    if (!selectedCurso) return
-    const data = await getIndicatorChart(selectedCurso, student.id)
-    const noData = data.length === 0 || data.every(d => d.avg_pct == null)
-    setChartEmpty(noData)
-    if (noData) {
-      if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null }
-      return
-    }
-    const labels = data.map(d => d.descripcion)
-    const values = data.map(d => (d.avg_pct ?? 0))
-    const ctx = chartRef.current?.getContext('2d')
-    if (!ctx) return
-    if (chartInstance.current) chartInstance.current.destroy()
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{ label: 'Avance indicador (%)', data: values, backgroundColor: '#dc3545' }]
-      },
-      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
-    })
-  }, [selectedCurso])
-
   const onSelectStudent = async (s: Student) => {
     setSelectedStudent(s)
     setView('ra')
@@ -152,17 +123,7 @@ const Docente: React.FC = () => {
       if (indicators.length === 0) setIndicators(await getIndicatorsByRA(selectedRA.id))
       if (activities.length === 0) setActivities(await getActivitiesByRA(selectedRA.id))
     }
-    await renderChart(s)
   }
-
-  // Garantizar que el canvas esté montado antes de renderizar el gráfico al cambiar de estudiante
-  React.useEffect(() => {
-    if (!selectedStudent) return
-    const id = window.setTimeout(() => {
-      renderChart(selectedStudent)
-    }, 0)
-    return () => window.clearTimeout(id)
-  }, [selectedStudent, renderChart])
 
   const submitNewActivity = async () => {
     if (!selectedRA) return
@@ -230,7 +191,6 @@ const Docente: React.FC = () => {
       Alert.toast.success('Guardado correctamente.')
       setGrade({ nota: '', retro: '', indicadorId: '' })
       setSelectedActivity('')
-      await renderChart(selectedStudent)
     } catch (err: unknown) {
       let msg = 'No se pudo guardar. Inténtalo de nuevo.'
       const resData = (err as { response?: { data?: unknown } })?.response?.data
@@ -798,39 +758,6 @@ const Docente: React.FC = () => {
                               }
                             </div>
                           </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="mb-2">
-                        <label className="form-label fw-bold text-danger d-flex align-items-center mb-3">
-                          <span className="badge bg-danger me-2">3</span>
-                          <i className="bi bi-bar-chart me-2"></i>
-                          Progreso del Estudiante
-                        </label>
-                        {!selectedStudent ? (
-                          <div className="text-center py-5">
-                            <i className="bi bi-bar-chart-fill fs-1 text-muted d-block mb-3"></i>
-                            <p className="text-muted small mb-0">Selecciona un estudiante<br/>para ver su progreso</p>
-                          </div>
-                        ) : chartEmpty ? (
-                          <div className="alert alert-info shadow-sm d-flex align-items-start mb-0">
-                            <i className="bi bi-info-circle-fill me-2 fs-5 mt-1"></i>
-                            <div>
-                              <strong className="d-block mb-1">{selectedStudent.name}</strong>
-                              <small>No hay calificaciones aún. Ingresa notas para ver el progreso.</small>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <div className="alert alert-light shadow-sm py-2 px-3 mb-3 d-flex align-items-center border">
-                              <i className="bi bi-person-circle me-2 text-primary fs-5"></i>
-                              <strong>{selectedStudent.name}</strong>
-                            </div>
-                            <div className="border rounded p-3 bg-white shadow-sm">
-                              <canvas ref={chartRef} height={220} />
-                            </div>
-                          </div>
                         )}
                       </div>
                     </div>
