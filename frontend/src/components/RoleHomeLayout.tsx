@@ -18,8 +18,7 @@ type ModuleCard = {
 }
 
 type Slide =
-  | { kind: 'text'; title: string; text: string; tips?: string[]; ctaLabel?: string; ctaHref?: string; variant?: 'default' | 'highlight' }
-  | { kind: 'modules'; title: string; text: string }
+  { title: string; imageSrc: string; alt: string; href?: string; hrefLabel?: string }
 
 type RoleHomeLayoutProps = {
   roleLabel: string
@@ -30,7 +29,6 @@ type RoleHomeLayoutProps = {
   sidebarItems: SidebarItem[]
   moduleCards: ModuleCard[]
   onSidebarClick: (key: string) => void
-  additionalSlides?: Slide[]
 }
 
 const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
@@ -40,59 +38,77 @@ const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
   welcomeFallback,
   welcomeDescription,
   sidebarItems,
-  moduleCards,
   onSidebarClick,
-  additionalSlides,
 }) => {
   const [activeSlide, setActiveSlide] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
 
-  const slides = useMemo<Slide[]>(() => ([
-    {
-      kind: 'text',
-      title: 'Buenas prácticas',
-      text: 'Revisa notificaciones al iniciar, valida la información antes de guardar cambios y usa mensajes de confirmación para evitar errores.',
-      tips: [
-        'Consulta primero alertas y pendientes para priorizar tareas.',
-        'Verifica datos y fechas antes de crear o actualizar registros.',
-        'Usa el botón ? para entender el contexto de cada pantalla.',
-        'Evita cerrar la pestaña mientras un guardado esté en proceso.',
-        'Si algo no carga, recarga la página y vuelve a intentar.',
-        'Ante dudas funcionales, revisa el manual de usuario.',
-      ],
-    },
-    {
-      kind: 'modules',
-      title: 'Accesos rápidos del módulo',
-      text: 'Selecciona una tarjeta para abrir directamente la sección correspondiente.',
-    },
-    {
-      kind: 'text',
-      title: '¿Tienes dudas? Usa la ayuda',
-      text: 'Si tienes dudas en la página actual, busca el ícono ? para ver ayuda contextual. También puedes consultar el manual de usuario.',
-      ctaLabel: 'Leer manual de usuario',
-      ctaHref: 'https://i.pinimg.com/originals/ee/12/a9/ee12a906d097550141060360ccc54fd2.jpg',
-    },
-    ...(additionalSlides || []),
-  ]), [additionalSlides])
+  const slides = useMemo<Slide[]>(() => {
+    const baseSlide: Slide = {
+      title: 'Bienvenida',
+      imageSrc: '/carrusel/Bienvenida.png',
+      alt: `Bienvenida ${roleLabel}`,
+    }
+
+    if (roleLabel === 'Coordinador') {
+      return [
+        baseSlide,
+        { title: 'Acceso Coordinador', imageSrc: '/carrusel/Acceso_Coordinador.png', alt: 'Acceso Coordinador' },
+        { title: 'Acceso Coordinador 2', imageSrc: '/carrusel/Acceso_Coordinador2.png', alt: 'Acceso Coordinador 2' },
+        { title: 'Buenas Prácticas', imageSrc: '/carrusel/BP_Coordinador.png', alt: 'Buenas prácticas Coordinador' },
+        {
+          title: 'Manual',
+          imageSrc: '/carrusel/Manual.png',
+          alt: 'Manual de usuario',
+          href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+          hrefLabel: 'Abrir manual',
+        },
+      ]
+    }
+
+    if (roleLabel === 'Docente') {
+      return [
+        baseSlide,
+        { title: 'Acceso Docente', imageSrc: '/carrusel/Acceso_Docente.png', alt: 'Acceso Docente' },
+        { title: 'Buenas Prácticas', imageSrc: '/carrusel/BP_Docente.png', alt: 'Buenas prácticas Docente' },
+        {
+          title: 'Manual',
+          imageSrc: '/carrusel/Manual.png',
+          alt: 'Manual de usuario',
+          href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+          hrefLabel: 'Abrir manual',
+        },
+      ]
+    }
+
+    return [
+      baseSlide,
+      { title: 'Acceso Estudiante', imageSrc: '/carrusel/Acceso_Estudiante.png', alt: 'Acceso Estudiante' },
+      { title: 'Buenas Prácticas', imageSrc: '/carrusel/BP_Estudiante.png', alt: 'Buenas prácticas Estudiante' },
+      {
+        title: 'Manual',
+        imageSrc: '/carrusel/Manual.png',
+        alt: 'Manual de usuario',
+        href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+        hrefLabel: 'Abrir manual',
+      },
+    ]
+  }, [roleLabel])
 
   useEffect(() => {
-    if (isPaused) return
+    if (isPaused || slides.length <= 1) return
 
     const timer = window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % slides.length)
-    }, 6500)
+    }, 6000)
 
     return () => window.clearInterval(timer)
   }, [isPaused, slides.length])
 
+  const currentSlide = slides[activeSlide]
   const goToSlide = (index: number) => setActiveSlide(index)
   const goPrev = () => setActiveSlide((prev) => (prev - 1 + slides.length) % slides.length)
   const goNext = () => setActiveSlide((prev) => (prev + 1) % slides.length)
-  const currentSlide = slides[activeSlide]
-  const sidebarIconByKey = useMemo(() => {
-    return new Map(sidebarItems.map((item) => [item.key, item.icon]))
-  }, [sidebarItems])
 
   return (
     <div className="dashboard-body min-vh-100">
@@ -107,89 +123,49 @@ const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
 
           <section className="card shadow-sm border-0 mb-4">
             <div className="card-body">
-              <h4 className="mb-2">Bienvenido, {welcomeName || welcomeFallback}!</h4>
+              <h4 className="mb-2">¡Hola, {welcomeName || welcomeFallback}!</h4>
               <p className="text-muted mb-0">{welcomeDescription}</p>
             </div>
           </section>
 
-          <section className="role-hero mb-4" aria-label="Información destacada">
-            <div className="role-hero__badge">Portal Académico Univalle</div>
-            <h3 className="role-hero__title">Mantente informado y usa cada módulo con claridad</h3>
+          <section
+            className="role-carousel role-carousel--image-only mb-4"
+            role="region"
+            aria-label="Carrusel de imágenes"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+          >
+            <button type="button" className="role-carousel__control" onClick={goPrev} aria-label="Imagen anterior">
+              <i className="bi bi-chevron-left" />
+            </button>
 
-            <div
-              className="role-carousel"
-              role="region"
-              aria-live="polite"
-              aria-label="Carrusel de recomendaciones"
-              onMouseEnter={() => setIsPaused(true)}
-              onMouseLeave={() => setIsPaused(false)}
-            >
-              <button type="button" className="role-carousel__control" onClick={goPrev} aria-label="Mensaje anterior">
-                <i className="bi bi-chevron-left" />
-              </button>
-
-              <div className="role-carousel__viewport">
-                <article
-                  key={currentSlide.title}
-                  className={`role-carousel__slide ${currentSlide.kind === 'modules' ? 'role-carousel__slide--modules' : ''} ${currentSlide.kind === 'text' && currentSlide.variant === 'highlight' ? 'role-carousel__slide--highlight' : ''} is-active`}
-                >
-                  <h4>{currentSlide.title}</h4>
-                  <p>{currentSlide.text}</p>
-                  {currentSlide.kind === 'text' && Array.isArray(currentSlide.tips) && currentSlide.tips.length > 0 && (
-                    <ul className="role-carousel__tips">
-                      {currentSlide.tips.map((tip) => (
-                        <li key={tip}>{tip}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {currentSlide.kind === 'text' && currentSlide.ctaHref && currentSlide.ctaLabel && (
-                    <a
-                      className="role-carousel__cta"
-                      href={currentSlide.ctaHref}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <i className="bi bi-book me-2" />
-                      {currentSlide.ctaLabel}
-                    </a>
-                  )}
-                  {currentSlide.kind === 'modules' && (
-                    <div className="role-carousel-modules">
-                      {moduleCards.map((item) => (
-                        <button
-                          key={`slide-${item.key}`}
-                          type="button"
-                          className="role-carousel-module-card"
-                          onClick={() => onSidebarClick(item.key)}
-                        >
-                          <div className="role-carousel-module-card__title">
-                            <i className={sidebarIconByKey.get(item.key) ?? item.icon} />
-                            <span>{item.title}</span>
-                          </div>
-                          <small>{item.desc}</small>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </article>
-              </div>
-
-              <button type="button" className="role-carousel__control" onClick={goNext} aria-label="Mensaje siguiente">
-                <i className="bi bi-chevron-right" />
-              </button>
+            <div className="role-carousel__viewport role-carousel__viewport--image-only">
+              <article key={currentSlide.title} className="role-carousel__slide is-active">
+                {currentSlide.href ? (
+                  <a className="role-carousel__image-link" href={currentSlide.href} target="_blank" rel="noreferrer">
+                    <img className="role-carousel__image" src={currentSlide.imageSrc} alt={currentSlide.alt} />
+                  </a>
+                ) : (
+                  <img className="role-carousel__image" src={currentSlide.imageSrc} alt={currentSlide.alt} />
+                )}
+              </article>
             </div>
 
-            <div className="role-carousel__dots" aria-hidden="true">
-              {slides.map((slide, index) => (
-                <button
-                  key={`${slide.title}-dot`}
-                  type="button"
-                  className={`role-carousel__dot ${index === activeSlide ? 'is-active' : ''}`}
-                  onClick={() => goToSlide(index)}
-                />
-              ))}
-            </div>
+            <button type="button" className="role-carousel__control" onClick={goNext} aria-label="Imagen siguiente">
+              <i className="bi bi-chevron-right" />
+            </button>
           </section>
+
+          <div className="role-carousel__dots role-carousel__dots--image-only" aria-hidden="true">
+            {slides.map((slide, index) => (
+              <button
+                key={`${slide.title}-dot`}
+                type="button"
+                className={`role-carousel__dot ${index === activeSlide ? 'is-active' : ''}`}
+                onClick={() => goToSlide(index)}
+              />
+            ))}
+          </div>
 
           <section className="role-support card shadow-sm border-0 mb-4" aria-label="Atención y soporte">
             <div className="card-body">

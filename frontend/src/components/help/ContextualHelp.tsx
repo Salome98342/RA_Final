@@ -362,7 +362,7 @@ const HELP_MATCHERS: HelpMatcher[] = [
     match: (pathname) => pathname === '/coordinador/desempenio',
     content: {
       module: 'Dashboard de desempeño',
-      description: 'Este tablero identifica estudiantes con bajo desempeño y asignaturas críticas según filtros de período y asignatura.',
+      description: 'Este tablero identifica estudiantes con bajo desempeño y asignaturas con estudiantes en bajo desempeño según filtros de período y asignatura.',
       actions: [
         'Filtrar por período y asignatura para enfocar el análisis.',
         'Revisar estudiantes con RA(s) por debajo del umbral.',
@@ -374,8 +374,8 @@ const HELP_MATCHERS: HelpMatcher[] = [
           answer: 'Puede no haber datos con bajo desempeño en los filtros actuales. Cambia período o usa vista general.',
         },
         {
-          question: '¿Qué significa asignatura crítica?',
-          answer: 'Es una asignatura con estudiantes en bajo desempeño y porcentaje de riesgo superior a cero.',
+          question: '¿Qué son las asignaturas con estudiantes con bajo desempeño?',
+          answer: 'Son las asignaturas que tienen uno o más estudiantes con al menos un RA con nota inferior a 3.0.',
         },
         {
           question: '¿Este tablero altera notas o matrículas?',

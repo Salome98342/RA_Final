@@ -95,6 +95,15 @@ def _get_bulk_student_password() -> str:
     return password
 
 
+def _average_nota_for_ra_actividad(matricula_id: int, ra_actividad_id: int) -> float | None:
+    avg = NotasActividad.objects.filter(
+        matricula_id=matricula_id,
+        ra_actividad_id=ra_actividad_id,
+        nota_ra_actividad__isnull=False,
+    ).aggregate(avg=Avg("nota_ra_actividad"))["avg"]
+    return float(avg) if avg is not None else None
+
+
 def _validate_jornada_value(value):
     """Normaliza y valida jornada. Solo admite Diurna o Nocturna."""
     if value is None:
@@ -3552,9 +3561,9 @@ def coordinador_asignatura_avance_view(request):
     # Notas por (matricula, rel)
     notas = list(NotasActividad.objects.filter(matricula__in=mats, ra_actividad__ra__asignatura=asig)
                  .select_related("ra_actividad", "matricula"))
-    notas_map: dict[tuple[int, int], NotasActividad] = {}
+    notas_map: dict[tuple[int, int], list[NotasActividad]] = {}
     for n in notas:
-        notas_map[(n.matricula_id, n.ra_actividad_id)] = n
+        notas_map.setdefault((n.matricula_id, n.ra_actividad_id), []).append(n)
 
     threshold = 3.0
     ras_out = []
@@ -3574,7 +3583,11 @@ def coordinador_asignatura_avance_view(request):
                 w = float(rel.porcentaje_ra_actividad) / 100.0
                 sum_w += w
                 n = notas_map.get((m.id_matricula, rel.id_ra_actividad))
-                nota = float(n.nota_ra_actividad) if (n and n.nota_ra_actividad is not None) else None
+                if n:
+                    notas_validas = [float(item.nota_ra_actividad) for item in n if item.nota_ra_actividad is not None]
+                    nota = (sum(notas_validas) / len(notas_validas)) if notas_validas else None
+                else:
+                    nota = None
                 if nota is not None:
                     sum_wg += w
                     acc += nota * w
@@ -6584,8 +6597,7 @@ def course_grade_view(request, codigo_asignatura: str, id_estudiante: int):
         for rel in rels:
             w = float(rel.porcentaje_ra_actividad) / 100.0
             sum_w += w
-            nota_obj = NotasActividad.objects.filter(matricula=mat, ra_actividad=rel).first()
-            nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+            nota = _average_nota_for_ra_actividad(mat.id_matricula, rel.id_ra_actividad)
             if nota is not None:
                 sum_w_graded += w
                 acc_strict += nota * w
@@ -6726,8 +6738,7 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
             total_acts += 1
             w = float(rel.porcentaje_ra_actividad) / 100.0
             sum_w += w
-            nota_obj = NotasActividad.objects.filter(matricula=mat, ra_actividad=rel).first()
-            nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+            nota = _average_nota_for_ra_actividad(mat.id_matricula, rel.id_ra_actividad)
             if nota is not None:
                 sum_w_graded += w
                 acc_strict += nota * w
@@ -6776,8 +6787,7 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
             for rel in rels:
                 w = float(rel.porcentaje_ra_actividad) / 100.0
                 sum_w += w
-                nota_obj = NotasActividad.objects.filter(matricula=m, ra_actividad=rel).first()
-                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                nota = _average_nota_for_ra_actividad(m.id_matricula, rel.id_ra_actividad)
                 if nota is not None:
                     sum_w_graded += w
                     acc_strict += nota * w
@@ -6922,14 +6932,12 @@ def course_analytics_view(request, codigo_asignatura: str):
                 acts_totales += 1
                 w = float(rel.porcentaje_ra_actividad) / 100.0
                 sum_w += w
-                # Buscar en los datos ya prefetched
-                nota_obj = None
-                for nota in rel.notasactividad_set.all():
-                    if nota.matricula_id == mat.id_matricula:
-                        nota_obj = nota
-                        break
-                
-                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                notas_rel = [
+                    float(nota.nota_ra_actividad)
+                    for nota in rel.notasactividad_set.all()
+                    if nota.matricula_id == mat.id_matricula and nota.nota_ra_actividad is not None
+                ]
+                nota = (sum(notas_rel) / len(notas_rel)) if notas_rel else None
                 if nota is not None:
                     sum_w_graded += w
                     acc_strict += nota * w
@@ -6990,14 +6998,12 @@ def course_analytics_view(request, codigo_asignatura: str):
             for rel in rels:
                 w = float(rel.porcentaje_ra_actividad) / 100.0
                 sum_w += w
-                # Buscar en datos prefetched
-                nota_obj = None
-                for nota in rel.notasactividad_set.all():
-                    if nota.matricula_id == mat.id_matricula:
-                        nota_obj = nota
-                        break
-                
-                nota = float(nota_obj.nota_ra_actividad) if (nota_obj and nota_obj.nota_ra_actividad is not None) else None
+                notas_rel = [
+                    float(nota.nota_ra_actividad)
+                    for nota in rel.notasactividad_set.all()
+                    if nota.matricula_id == mat.id_matricula and nota.nota_ra_actividad is not None
+                ]
+                nota = (sum(notas_rel) / len(notas_rel)) if notas_rel else None
                 if nota is not None:
                     sum_w_graded += w
                     acc_strict += nota * w
@@ -7692,8 +7698,16 @@ def course_activities_grouped_view(request, codigo_asignatura: str):
             "indicadores": indicadores
         })
         
-        # Sumar al porcentaje total
-        activities_dict[act_id]["porcentaje_total"] += float(rel.porcentaje_ra_actividad)
+        # Sumar el peso real de la actividad en la asignatura:
+        # porcentaje del RA en la asignatura × porcentaje de la actividad dentro de ese RA.
+        # Esto evita duplicar el 100% por cada RA asociado.
+        porcentaje_ra = float(rel.ra.porcentaje_ra)
+        porcentaje_act_en_ra = float(rel.porcentaje_ra_actividad)
+        activities_dict[act_id]["porcentaje_total"] += (porcentaje_ra * porcentaje_act_en_ra) / 100.0
+
+    # Validación defensiva: ninguna actividad debe pesar más de 100% en la asignatura.
+    for activity in activities_dict.values():
+        activity["porcentaje_total"] = max(0.0, min(100.0, round(activity["porcentaje_total"], 2)))
     
     # Si se proporcionó id_matricula, agregar notas
     if id_matricula:

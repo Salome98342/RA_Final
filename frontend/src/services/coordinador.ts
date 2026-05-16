@@ -560,7 +560,19 @@ export interface HU11Asignatura {
   ras_afectados: Array<{
     id_ra: number
     nombre: string
+    estudiantes_bajo_desempenio: number
+    estudiantes_sin_bajo_desempenio: number
+    total_estudiantes: number
     porcentaje_bajo_desempenio: number
+    porcentaje_sin_bajo_desempenio: number
+    students?: Array<{
+      id: number
+      nombre: string
+      codigo: string
+      nota_ra: number | null
+      pct_aprobacion: number | null
+      aprobado: boolean
+    }>
   }>
 }
 
@@ -578,7 +590,7 @@ export interface DashboardDesempenioResponse {
     total_estudiantes_bajo_desempenio: number
     total_estudiantes_considerados?: number
     total_asignaturas: number
-    asignatura_con_mas_bajo_desempenio: string | null
+    asignatura_con_mas_bajo_desempenio: { codigo: string; nombre: string } | null
   }
 }
 
