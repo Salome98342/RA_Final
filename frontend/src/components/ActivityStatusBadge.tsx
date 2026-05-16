@@ -8,7 +8,7 @@ type ActivityStatusBadgeProps = {
 const ActivityStatusBadge: React.FC<ActivityStatusBadgeProps> = ({ estado, className = '' }) => {
   if (estado === 'calificado') {
     return (
-      <span className={`badge bg-warning text-dark ${className}`} title="Actividad completamente calificada">
+      <span className={`badge bg-success ${className}`} title="Actividad completamente calificada">
         <i className="bi bi-check-circle-fill me-1"></i>
         Calificado
       </span>

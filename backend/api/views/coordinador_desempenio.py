@@ -352,6 +352,23 @@ def coordinador_dashboard_desempenio_view(request):
             else:
                 nota_ra = None
             
+            # Registrar la nota del estudiante para este RA (si existe)
+            if ra.id_ra not in asignaturas_stats[asig_key]["ras_afectados"]:
+                asignaturas_stats[asig_key]["ras_afectados"][ra.id_ra] = {
+                    "nombre": ra.descripcion,
+                    "count": 0,
+                    "total": 0,
+                    "students_bajo": {},
+                    "student_notas": {}
+                }
+            # Registrar la nota del estudiante (o null) para este RA
+            asignaturas_stats[asig_key]["ras_afectados"][ra.id_ra]["student_notas"][estudiante.id_estudiante] = {
+                "id": estudiante.id_estudiante,
+                "nombre": estudiante.nombre,
+                "codigo": estudiante.codigo_estudiante,
+                "nota_ra": round(nota_ra, 2) if nota_ra is not None else None
+            }
+
             # Track RA bajo desempeño
             if nota_ra is not None and nota_ra < 3.0:
                 tiene_bajo_desempenio = True
@@ -414,11 +431,73 @@ def coordinador_dashboard_desempenio_view(request):
         # Calcular porcentaje de bajo desempeño por RA
         ras_afectados_list = []
         for ra_id, ra_stats in asig_data["ras_afectados"].items():
-            pct_bajo_ra = (ra_stats["count"] / ra_stats["total"] * 100) if ra_stats["total"] > 0 else 0
+            # Usar total_mat (total de matriculados en la asignatura) como divisor
+            pct_bajo_ra = (ra_stats.get("count", 0) / total_mat * 100) if total_mat > 0 else 0
+            count_sobre_3 = total_mat - ra_stats.get("count", 0)
+            # Construir lista de estudiantes con nota para este RA
+            # DEBUG: loguear cantidad de student_notas y primeras claves
+            try:
+                logger.info(f"DEBUG asig_key={asig_key} ra_id={ra_id} student_notas_count={len(ra_stats.get('student_notas', {}))} keys={list(ra_stats.get('student_notas', {}).keys())[:5]}")
+            except Exception:
+                pass
+            # Construir lista completa de estudiantes consultando las matrículas
+            students_list = []
+            try:
+                asig_id = asig_key[0]
+                ra_obj = ResultadoDeAprendizaje.objects.filter(id_ra=ra_id).first()
+                rels = RaActividad.objects.filter(ra=ra_obj)
+                matriculas_asig = Matricula.objects.filter(asignatura__id_asignatura=asig_id).select_related('estudiante')
+                for mat_item in matriculas_asig:
+                    estudiante_obj = mat_item.estudiante
+                    suma_w = 0.0
+                    suma_w_graded = 0.0
+                    acc_nota = 0.0
+                    for rel in rels:
+                        w = float(rel.porcentaje_ra_actividad) / 100.0
+                        suma_w += w
+                        nota_obj = NotasActividad.objects.filter(matricula=mat_item, ra_actividad=rel).first()
+                        if nota_obj and nota_obj.nota_ra_actividad is not None:
+                            nota = float(nota_obj.nota_ra_actividad)
+                            suma_w_graded += w
+                            acc_nota += nota * w
+
+                    if suma_w_graded > 0:
+                        nota_ra_val = round(acc_nota / suma_w_graded, 2)
+                    else:
+                        nota_ra_val = None
+
+                    pct_aprob = round((nota_ra_val / 5.0 * 100), 1) if nota_ra_val is not None else None
+                    students_list.append({
+                        "id": getattr(estudiante_obj, 'id_estudiante', None),
+                        "nombre": getattr(estudiante_obj, 'nombre', None),
+                        "codigo": getattr(estudiante_obj, 'codigo_estudiante', None),
+                        "nota_ra": nota_ra_val,
+                        "pct_aprobacion": pct_aprob,
+                        "aprobado": (nota_ra_val is not None and nota_ra_val >= 3.0)
+                    })
+            except Exception:
+                # Fallback: usar lo que esté en student_notas
+                for s in ra_stats.get("student_notas", {}).values():
+                    nota = s.get("nota_ra")
+                    pct_aprob = round((nota / 5.0 * 100), 1) if nota is not None else None
+                    students_list.append({
+                        "id": s.get("id"),
+                        "nombre": s.get("nombre"),
+                        "codigo": s.get("codigo"),
+                        "nota_ra": s.get("nota_ra"),
+                        "pct_aprobacion": pct_aprob,
+                        "aprobado": (s.get("nota_ra") is not None and s.get("nota_ra") >= 3.0)
+                    })
+
             ras_afectados_list.append({
                 "id_ra": ra_id,
                 "nombre": ra_stats["nombre"],
-                "porcentaje_bajo_desempenio": round(pct_bajo_ra, 1)
+                "estudiantes_bajo_desempenio": ra_stats.get("count", 0),
+                "estudiantes_sin_bajo_desempenio": count_sobre_3,
+                "total_estudiantes": total_mat,
+                "porcentaje_bajo_desempenio": round(pct_bajo_ra, 1),
+                "porcentaje_sin_bajo_desempenio": round(100 - pct_bajo_ra, 1),
+                "students": students_list
             })
         
         # Ordenar RAs por porcentaje de bajo desempeño
@@ -444,12 +523,17 @@ def coordinador_dashboard_desempenio_view(request):
     
     # ==================== RESUMEN Y RESPUESTA FINAL ====================
     
+    # Asignaturas con estudiantes en bajo desempeño (para mostrar en resumen)
     asignaturas_criticas = [
         a for a in hu11_ranking
         if a["estudiantes_bajo_desempenio"] > 0 and a["porcentaje_bajo_desempenio"] > 0
     ]
 
-    asignatura_con_mas_bajo = asignaturas_criticas[0]["nombre"] if asignaturas_criticas else None
+    asignatura_con_mas_bajo = asignaturas_criticas[0] if asignaturas_criticas else None
+    asignatura_con_mas_bajo_display = {
+        "codigo": asignatura_con_mas_bajo["codigo"],
+        "nombre": asignatura_con_mas_bajo["nombre"]
+    } if asignatura_con_mas_bajo else None
     
     respuesta = {
         "hu10_estudiantes_bajo_desempenio": hu10_estudiantes,
@@ -465,7 +549,7 @@ def coordinador_dashboard_desempenio_view(request):
             "total_estudiantes_bajo_desempenio": len(hu10_estudiantes),
             "total_estudiantes_considerados": total_estudiantes_considerados,
             "total_asignaturas": len(asignaturas_criticas),
-            "asignatura_con_mas_bajo_desempenio": asignatura_con_mas_bajo
+            "asignatura_con_mas_bajo_desempenio": asignatura_con_mas_bajo_display
         }
     }
     

@@ -33,6 +33,8 @@ const DesempenioEstudiantes: React.FC = () => {
   
   // Datos
   const [datosDesempenio, setDatosDesempenio] = useState<DashboardDesempenioResponse | null>(null)
+  const [expandedAsignatura, setExpandedAsignatura] = useState<string | null>(null)
+  const [expandedRA, setExpandedRA] = useState<string | null>(null)
 
   const sidebarItems = [
     { key: 'inicio', icon: 'bi-house-door', title: 'Inicio' },
@@ -417,14 +419,24 @@ const DesempenioEstudiantes: React.FC = () => {
                 <div className="card text-center border-0 shadow-sm">
                   <div className="card-body">
                     <h3 className="text-warning">{datosDesempenio.resumen.total_asignaturas}</h3>
-                    <p className="text-muted mb-0">Asignaturas Críticas</p>
+                    <p className="text-muted mb-0">Asignaturas con Estudiantes con Bajo Desempeño</p>
                   </div>
                 </div>
               </div>
               <div className="col-md-3">
                 <div className="card text-center border-0 shadow-sm">
                   <div className="card-body">
-                    <h5 className="text-info">{datosDesempenio.resumen.asignatura_con_mas_bajo_desempenio || 'N/A'}</h5>
+                    <h5 className="text-info">
+                      {datosDesempenio.resumen.asignatura_con_mas_bajo_desempenio ? (
+                        <>
+                          <strong>{datosDesempenio.resumen.asignatura_con_mas_bajo_desempenio.codigo}</strong>
+                          <br />
+                          <span style={{fontSize: '0.9rem'}}>{datosDesempenio.resumen.asignatura_con_mas_bajo_desempenio.nombre}</span>
+                        </>
+                      ) : (
+                        'N/A'
+                      )}
+                    </h5>
                     <p className="text-muted mb-0 small">Asignatura Más Crítica</p>
                   </div>
                 </div>
@@ -457,7 +469,7 @@ const DesempenioEstudiantes: React.FC = () => {
                 onClick={() => setActiveTab('asignaturas')}
                 type="button"
               >
-                <i className="bi bi-journal me-2"></i>Asignaturas Críticas
+                <i className="bi bi-journal me-2"></i>Rendimiento de Asignaturas
               </button>
             </li>
           </ul>
@@ -626,7 +638,7 @@ const DesempenioEstudiantes: React.FC = () => {
             </div>
           )}
 
-          {/* Panel: Asignaturas Críticas */}
+          {/* Panel: Asignaturas con Estudiantes con Bajo Desempeño */}
           {activeTab === 'asignaturas' && (
             <div className="card shadow-sm border-0">
               <div className="card-header bg-light border-bottom">
@@ -710,64 +722,159 @@ const DesempenioEstudiantes: React.FC = () => {
                     <div className="mt-5">
                       <h6 className="mb-3">
                         <i className="bi bi-table me-2"></i>
-                        Detalle Completo
+                        Detalle Completo (Haz clic para expandir RAs)
                       </h6>
                       <div className="table-responsive">
                         <table className="table table-hover">
                           <thead className="table-light">
                             <tr>
+                              <th style={{width: '30px'}}></th>
                               <th>Código</th>
                               <th>Nombre</th>
                               <th>Grupo</th>
                               <th>Matriculados</th>
                               <th>RA &lt; 3.0</th>
                               <th>RA &gt;= 3.0</th>
-                              <th>RAs Afectados</th>
                             </tr>
                           </thead>
                           <tbody>
                             {rankingFiltrado.map((asig: HU11Asignatura, idx: number) => {
-                              // Usar porcentaje y conteos basados en estudiantes con RA < 3.0
+                              const isExpanded = expandedAsignatura === `${asig.codigo}-${idx}`
                               const porcentajeNum = asig.porcentaje_bajo_desempenio ?? asig.porcentaje_promedio_bajo_3
                               let badgeClass = 'bg-success'
-                              if (porcentajeNum >= 50) badgeClass = 'bg-danger'
-                              else if (porcentajeNum >= 30) badgeClass = 'bg-warning text-dark'
-                              else if (porcentajeNum >= 15) badgeClass = 'bg-info'
+                              if (porcentajeNum > 0) badgeClass = 'bg-danger'
                               const bajo3 = asig.estudiantes_bajo_desempenio ?? asig.estudiantes_promedio_bajo_3
                               const sobre3 = Math.max(asig.total_matriculados - (bajo3 || 0), 0)
                               const pctBajo3 = asig.porcentaje_bajo_desempenio ?? ((bajo3 / (asig.total_matriculados || 1)) * 100)
                               const pctSobre3 = asig.porcentaje_promedio_sobre_3 ?? ((sobre3 / (asig.total_matriculados || 1)) * 100)
                               
                               return (
-                                <tr key={`${asig.codigo}-${idx}`}>
-                                  <td>
-                                    <strong className="badge bg-secondary">{asig.codigo}</strong>
-                                  </td>
-                                  <td>{asig.nombre}</td>
-                                  <td>{asig.grupo}</td>
-                                  <td>
-                                    <span className="badge bg-light text-dark">{asig.total_matriculados}</span>
-                                  </td>
-                                  <td>
-                                    <span className={`badge ${badgeClass}`}>
-                                      {bajo3} ({pctBajo3.toFixed(1)}%)
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <span className="badge bg-success">
-                                      {sobre3} ({pctSobre3.toFixed(1)}%)
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <div className="small">
-                                      {asig.ras_afectados.map((ra, i) => (
-                                        <span key={i} className="badge bg-light text-dark me-1">
-                                            {ra.nombre}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
+                                <React.Fragment key={`${asig.codigo}-${idx}`}>
+                                  <tr 
+                                    onClick={() => setExpandedAsignatura(isExpanded ? null : `${asig.codigo}-${idx}`)}
+                                    style={{cursor: 'pointer', backgroundColor: isExpanded ? '#f8f9fa' : 'transparent'}}
+                                  >
+                                    <td style={{textAlign: 'center'}}>
+                                      <i className={`bi ${isExpanded ? 'bi-chevron-down' : 'bi-chevron-right'}`}></i>
+                                    </td>
+                                    <td>
+                                      <strong className="badge bg-secondary">{asig.codigo}</strong>
+                                    </td>
+                                    <td>{asig.nombre}</td>
+                                    <td>{asig.grupo}</td>
+                                    <td>
+                                      <span className="badge bg-light text-dark">{asig.total_matriculados}</span>
+                                    </td>
+                                    <td>
+                                      <span className={`badge ${badgeClass}`}>
+                                        {bajo3} ({pctBajo3.toFixed(1)}%)
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span className="badge bg-success">
+                                        {sobre3} ({pctSobre3.toFixed(1)}%)
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  
+                                  {/* Filas expandidas: RAs detallados */}
+                                  {isExpanded && asig.ras_afectados.map((ra, raIdx) => {
+                                    const raKey = `${asig.codigo}-${ra.id_ra}`
+                                    const raExpanded = expandedRA === raKey
+                                    return (
+                                      <React.Fragment key={`ra-${raIdx}`}>
+                                        <tr
+                                          onClick={() => setExpandedRA(raExpanded ? null : raKey)}
+                                          style={{backgroundColor: '#f8f9fa', cursor: 'pointer'}}
+                                        >
+                                          <td colSpan={2} style={{paddingLeft: '40px', borderLeft: '3px solid #007bff'}}>
+                                            <i className={`bi ${raExpanded ? 'bi-chevron-down' : 'bi-chevron-right'}`} />
+                                          </td>
+                                          <td colSpan={2}>
+                                            <strong>{ra.nombre}</strong>
+                                          </td>
+                                          <td style={{textAlign: 'center'}}>
+                                            {ra.total_estudiantes}
+                                          </td>
+                                          <td>
+                                            <div>
+                                              <span className="badge bg-danger" style={{marginRight: '5px'}}>
+                                                {ra.estudiantes_bajo_desempenio} ({ra.porcentaje_bajo_desempenio.toFixed(1)}%)
+                                              </span>
+                                              <div style={{fontSize: '0.75rem', color: '#666', marginTop: '3px'}}>
+                                                con RA &lt; 3.0
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <div>
+                                              <span className="badge bg-success" style={{marginRight: '5px'}}>
+                                                {ra.estudiantes_sin_bajo_desempenio} ({ra.porcentaje_sin_bajo_desempenio.toFixed(1)}%)
+                                              </span>
+                                              <div style={{fontSize: '0.75rem', color: '#666', marginTop: '3px'}}>
+                                                con RA ≥ 3.0
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+
+                                        {raExpanded && ra.students && ra.students.length > 0 && (
+                                          <tr style={{backgroundColor: '#fff'}}>
+                                            <td colSpan={7} style={{paddingLeft: '60px'}}>
+                                              <div className="table-responsive">
+                                                <table className="table table-sm mb-0">
+                                                  <thead>
+                                                    <tr>
+                                                      <th style={{width: '80px'}}>Código</th>
+                                                      <th>Nombre</th>
+                                                      <th style={{width: '120px'}}>Nota RA</th>
+                                                      <th style={{width: '140px'}}>Pct. Aprobación</th>
+                                                      <th style={{width: '100px'}}>Estado</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {ra.students.map((s) => (
+                                                      <tr key={`s-${s.id}`}>
+                                                        <td><strong className="badge bg-light text-dark">{s.codigo}</strong></td>
+                                                        <td>{s.nombre}</td>
+                                                        <td>{s.nota_ra !== null ? s.nota_ra.toFixed(2) : '—'}</td>
+                                                        <td>{s.pct_aprobacion !== null ? `${s.pct_aprobacion.toFixed(1)}%` : '—'}</td>
+                                                        <td>
+                                                          {s.aprobado ? (
+                                                            <span className="badge bg-success">Aprobado</span>
+                                                          ) : (
+                                                            <span className="badge bg-danger">Bajo</span>
+                                                          )}
+                                                        </td>
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+
+                                        {raExpanded && (!ra.students || ra.students.length === 0) && (
+                                          <tr style={{backgroundColor: '#fff'}}>
+                                            <td colSpan={7} style={{paddingLeft: '60px', color: '#999'}}>
+                                              No hay notas registradas para este RA
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
+                                    )
+                                  })}
+                                  
+                                  {/* Fila sin RAs si está vacía */}
+                                  {isExpanded && asig.ras_afectados.length === 0 && (
+                                    <tr style={{backgroundColor: '#f8f9fa'}}>
+                                      <td colSpan={7} style={{textAlign: 'center', color: '#999', paddingLeft: '40px'}}>
+                                        No hay RAs con estudiantes en bajo desempeño
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               )
                             })}
                           </tbody>
@@ -835,7 +942,7 @@ const DesempenioEstudiantes: React.FC = () => {
                 ) : (
                   <div className="alert alert-info" role="alert">
                     <i className="bi bi-info-circle me-2"></i>
-                    No hay asignaturas críticas en los filtros seleccionados.
+                    No hay datos de rendimiento de asignaturas en los filtros seleccionados.
                   </div>
                   )}
               </div>

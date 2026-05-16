@@ -839,23 +839,28 @@ const Estudiante: React.FC = () => {
                   Sin actividades{actFilter !== 'todas' ? ` (filtro: ${actFilter})` : ''}.
                 </div>
               ) : (
-                <ul className="list-group ra-list-group">
+                <>
+                  <div className="alert alert-info py-2 px-3 mb-3 ra-small">
+                    <i className="bi bi-hand-index-thumb me-2"></i>
+                    Da click para ver más detalles.
+                  </div>
+                  <ul className="list-group ra-list-group">
                   {groupedActsFiltered.map(act => {
                     const due = act.fecha_cierre ? new Date(act.fecha_cierre) : null
                     const vencida = !act.nota && due && due.getTime() < now.getTime()
                     const estado = act.nota != null ? 'Calificada' : (vencida ? 'Vencida' : 'Pendiente')
-                    const badgeClass = act.nota != null ? 'bg-secondary' : (vencida ? 'bg-danger' : 'bg-warning')
+                    const badgeClass = act.nota != null ? 'bg-success' : 'bg-secondary'
                     return (
                       <li
                         key={act.id_actividad}
-                        className="list-group-item ra-clickable"
+                        className="list-group-item ra-clickable py-3 student-activity-item"
                         onClick={() => setSelectedGroupedActivity(act)}
                         title="Ver detalle e indicadores"
                       >
-                        <div className="d-flex justify-content-between align-items-start">
-                          <div className="flex-grow-1">
-                            <div className="fw-semibold">{act.nombre_actividad}</div>
-                            <div className="ra-small text-muted">
+                        <div className="d-flex justify-content-between align-items-start gap-3">
+                          <div className="flex-grow-1 d-flex flex-column gap-1">
+                            <div className="fw-semibold mb-1">{act.nombre_actividad}</div>
+                            <div className="ra-small text-muted lh-sm">
                               {act.tipo_actividad}
                               {act.fecha_cierre ? ` · Cierra: ${new Date(act.fecha_cierre).toLocaleDateString()}` : ''}
                               {act.nota != null ? ` · Nota: ${Number(act.nota).toFixed(1)}` : ''}
@@ -863,8 +868,8 @@ const Estudiante: React.FC = () => {
                             </div>
                             {/* Mostrar RAs asociados */}
                             <div className="mt-2">
-                              <div className="ra-small text-muted fw-semibold mb-1">Asociado a {act.ras_asociados.length} RA{act.ras_asociados.length !== 1 ? 's' : ''}:</div>
-                              <div className="d-flex flex-wrap gap-1">
+                              <div className="ra-small text-muted fw-semibold mb-2">Asociado a {act.ras_asociados.length} RA{act.ras_asociados.length !== 1 ? 's' : ''}:</div>
+                              <div className="d-flex flex-wrap gap-2">
                                 {act.ras_asociados.map(ra => (
                                   <span key={ra.id_ra_actividad} className="badge bg-light text-dark border">
                                     {ra.titulo_ra} ({ra.porcentaje_actividad}% del RA)
@@ -873,12 +878,13 @@ const Estudiante: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                          <span className={`badge ${badgeClass} ms-2`}>{estado}</span>
+                          <span className={`badge ${badgeClass} ms-2 align-self-start`}>{estado}</span>
                         </div>
                       </li>
                     )
                   })}
-                </ul>
+                  </ul>
+                </>
               )}
 
               <button className="btn btn-outline-danger mt-3" onClick={()=>{ setSelected(null); setView('cursos') }}>
@@ -889,213 +895,72 @@ const Estudiante: React.FC = () => {
 
           {/* Detalle de actividad agrupada */}
           {selected && selectedGroupedActivity && (
-            <section className="panel shown ra-detail-panel">
+            <section className="panel shown ra-detail-panel student-activity-panel">
               <div className="row g-3">
                 <div className="col-12">
-                  <div className="ra-card shadow-sm">
+                  <div className="ra-card shadow-sm student-activity-card">
                     <div className="ra-card-body">
                       <div className="d-flex align-items-center gap-2 mb-3">
                         <i className="bi bi-file-earmark-text text-primary"></i>
                         <span className="fw-bold">Detalle de actividad</span>
                       </div>
                       <div className="d-flex flex-column gap-3">
-                        <div className="border-bottom pb-2">
-                          <span className="ra-small text-muted d-block mb-1">Actividad</span>
+                        {(() => {
+                          const nota = selectedGroupedActivity.nota
+                          const aprobado = nota != null ? nota >= 3.0 : null
+                          return (
+                            <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                              <span className="ra-small text-muted d-block">Estado</span>
+                              {nota != null ? (
+                                <span className={`badge bg-${aprobado ? 'success' : 'danger'}`}>
+                                  {aprobado ? 'Aprobado' : 'Reprobado'}
+                                </span>
+                              ) : (
+                                <span className="badge bg-secondary">Sin calificar</span>
+                              )}
+                            </div>
+                          )
+                        })()}
+
+                        <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                          <span className="ra-small text-muted d-block">Actividad</span>
                           <span className="fw-semibold">{selectedGroupedActivity.nombre_actividad}</span>
                         </div>
-                        {selectedGroupedActivity.descripcion && (
-                          <div className="border-bottom pb-2">
-                            <span className="ra-small text-muted d-block mb-1">Descripción</span>
-                            <span>{selectedGroupedActivity.descripcion}</span>
-                          </div>
-                        )}
-                        <div className="border-bottom pb-2">
-                          <span className="ra-small text-muted d-block mb-1">Tipo</span>
-                          <span>{selectedGroupedActivity.tipo_actividad}</span>
-                        </div>
-                        {selectedGroupedActivity.fecha_cierre && (
-                          <div className="border-bottom pb-2">
-                            <span className="ra-small text-muted d-block mb-1">Fecha de cierre</span>
-                            <span>{new Date(selectedGroupedActivity.fecha_cierre).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        <div className="border-bottom pb-2">
-                          <span className="ra-small text-muted d-block mb-1">Peso total en la asignatura</span>
+
+                        <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                          <span className="ra-small text-muted d-block">Peso en la asignatura</span>
                           <span className="fw-semibold">{selectedGroupedActivity.porcentaje_total.toFixed(1)}%</span>
                         </div>
-                        <div className="border-bottom pb-2">
-                          <span className="ra-small text-muted d-block mb-1">Estado</span>
+
+                        <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                          <span className="ra-small text-muted d-block">Mi nota</span>
                           {selectedGroupedActivity.nota != null ? (
-                            <span className="badge bg-success">Calificada: {Number(selectedGroupedActivity.nota).toFixed(1)}</span>
+                            <div className="fs-4 fw-bold text-success">
+                              {Number(selectedGroupedActivity.nota).toFixed(2)} / 5.00
+                            </div>
                           ) : (
-                            <span className="badge bg-warning text-dark">Pendiente</span>
+                            <span className="text-muted">Sin calificar</span>
                           )}
                         </div>
-                        
-                        {/* Aporte a la nota definitiva - MEJORADO */}
-                        {selectedGroupedActivity.nota != null && (
-                          <div className="card border-success shadow-sm mb-3">
-                            <div className="card-header bg-success bg-opacity-10 border-success">
-                              <div className="d-flex align-items-center gap-2">
-                                <i className="bi bi-calculator-fill text-success fs-5"></i>
-                                <span className="fw-bold text-success">Impacto en tu nota final del curso</span>
-                              </div>
-                            </div>
-                            <div className="card-body">
-                              {(() => {
-                                const nota = Number(selectedGroupedActivity.nota)
-                                
-                                // La fórmula correcta del sistema es:
-                                // Cada RA tiene un peso (porcentaje_ra) en la asignatura
-                                // Cada actividad tiene un peso (porcentaje_actividad) dentro de ese RA
-                                // El aporte de la actividad al curso = Σ(nota_RA × peso_RA / 100)
-                                // donde nota_RA = nota_actividad × (peso_actividad_en_RA / 100)
-                                
-                                // Para mostrar de forma simplificada usamos el porcentaje_total
-                                // que ya suma todos los pesos de la actividad en todos los RAs donde aparece
-                                
-                                // Desglose por RA
-                                const desglosePorRA = selectedGroupedActivity.ras_asociados.map(ra => {
-                                  const notaEnRA = nota // La misma nota aplica en todos los RAs
-                                  const pesoActEnRA = ra.porcentaje_actividad // % de la actividad dentro del RA
-                                  const pesoRAEnCurso = ra.porcentaje_ra // % del RA en el curso
-                                  
-                                  // Contribución de esta actividad al RA (en escala 0-5)
-                                  const contribucionAlRA = (notaEnRA / 5) * (pesoActEnRA / 100)
-                                  
-                                  // Contribución del RA a la nota final del curso (en escala 0-5)
-                                  const contribucionAlCurso = contribucionAlRA * (pesoRAEnCurso / 100) * 5
-                                  
-                                  return {
-                                    titulo: ra.titulo_ra,
-                                    pesoActEnRA,
-                                    pesoRAEnCurso,
-                                    contribucionAlRA,
-                                    contribucionAlCurso
-                                  }
-                                })
-                                
-                                const aporteTotal = desglosePorRA.reduce((sum, ra) => sum + ra.contribucionAlCurso, 0)
-                                
-                                return (
-                                  <div>
-                                    {/* Resultado destacado */}
-                                    <div className="alert alert-success mb-3">
-                                      <div className="d-flex justify-content-between align-items-center">
-                                        <div>
-                                          <div className="ra-small text-muted mb-1">Tu nota en esta actividad</div>
-                                          <div className="fs-4 fw-bold text-success">{nota.toFixed(2)} / 5.0</div>
-                                        </div>
-                                        <div className="text-center">
-                                          <i className="bi bi-arrow-right fs-4 text-muted"></i>
-                                        </div>
-                                        <div className="text-end">
-                                          <div className="ra-small text-muted mb-1">Aporta a tu nota final</div>
-                                          <div className="fs-4 fw-bold text-success">{aporteTotal.toFixed(4)} / 5.0</div>
-                                          <div className="ra-small text-muted">({((aporteTotal / 5) * 100).toFixed(2)}% del curso)</div>
-                                        </div>
-                                      </div>
-                                    </div>
 
-                                    {/* Desglose detallado por RA */}
-                                    <div className="border-top pt-3">
-                                      <div className="fw-semibold mb-2 d-flex align-items-center gap-2">
-                                        <i className="bi bi-list-ol text-primary"></i>
-                                        Desglose por Resultado de Aprendizaje
-                                      </div>
-                                      {desglosePorRA.map((ra, idx) => (
-                                        <div key={idx} className="card bg-light mb-2">
-                                          <div className="card-body p-3">
-                                            <div className="fw-semibold text-primary mb-2">{ra.titulo}</div>
-                                            
-                                            <div className="d-flex flex-column gap-1 ra-small">
-                                              <div className="d-flex justify-content-between">
-                                                <span className="text-muted">• Peso de la actividad en este RA:</span>
-                                                <span className="fw-semibold">{ra.pesoActEnRA.toFixed(1)}%</span>
-                                              </div>
-                                              <div className="d-flex justify-content-between">
-                                                <span className="text-muted">• Peso del RA en el curso:</span>
-                                                <span className="fw-semibold">{ra.pesoRAEnCurso.toFixed(1)}%</span>
-                                              </div>
-                                              <div className="d-flex justify-content-between border-top pt-1 mt-1">
-                                                <span className="text-muted">• Contribución al RA:</span>
-                                                <code className="bg-white px-2 rounded">{nota.toFixed(2)} × {(ra.pesoActEnRA / 100).toFixed(4)} = {(ra.contribucionAlRA * 5).toFixed(4)} / 5.0</code>
-                                              </div>
-                                              <div className="d-flex justify-content-between bg-success bg-opacity-10 p-2 rounded mt-1">
-                                                <span className="fw-semibold text-success">→ Aporte al curso desde este RA:</span>
-                                                <span className="fw-bold text-success">{ra.contribucionAlCurso.toFixed(4)} / 5.0</span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-
-                                    {/* Fórmula resumida */}
-                                    <div className="border-top mt-3 pt-3">
-                                      <div className="ra-small text-muted">
-                                        <strong><i className="bi bi-lightbulb text-warning"></i> ¿Cómo se calcula?</strong>
-                                        <p className="mb-1 mt-2">
-                                          Tu nota ({nota.toFixed(2)}) se pondera según el peso de la actividad en cada RA donde aparece, 
-                                          y luego se multiplica por el peso de ese RA en la asignatura.
-                                        </p>
-                                        <div className="bg-light p-2 rounded mt-2">
-                                          <code className="text-dark">
-                                            Aporte = Σ [(Nota × Peso_Actividad_en_RA) × Peso_RA_en_Curso]
-                                          </code>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        )}
-                        {selectedGroupedActivity.retroalimentacion && (
-                          <div className="border-bottom pb-2">
-                            <span className="ra-small text-muted d-block mb-1">Retroalimentación</span>
-                            <span>{selectedGroupedActivity.retroalimentacion}</span>
-                          </div>
-                        )}
-
-                        {/* Sección de RAs asociados */}
-                        <div>
-                          <div className="d-flex align-items-center gap-2 mb-2">
-                            <i className="bi bi-diagram-3 text-info"></i>
-                            <span className="fw-bold">Resultados de aprendizaje asociados</span>
-                          </div>
-                          <div className="alert alert-info mb-2">
-                            <i className="bi bi-info-circle me-2"></i>
-                            Esta actividad contribuye a {selectedGroupedActivity.ras_asociados.length} resultado{selectedGroupedActivity.ras_asociados.length !== 1 ? 's' : ''} de aprendizaje
-                          </div>
-                          <ul className="list-group">
+                        <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                          <span className="ra-small text-muted d-block">Resultados de Aprendizaje afectados</span>
+                          <div className="d-flex flex-wrap gap-2">
                             {selectedGroupedActivity.ras_asociados.map(ra => (
-                              <li key={ra.id_ra_actividad} className="list-group-item">
-                                <div className="d-flex justify-content-between align-items-start mb-2">
-                                  <div className="flex-grow-1">
-                                    <div className="fw-semibold">{ra.titulo_ra}</div>
-                                    <div className="ra-small text-muted">
-                                      Peso en el RA: {ra.porcentaje_actividad}% · Peso del RA en la asignatura: {ra.porcentaje_ra}%
-                                    </div>
-                                  </div>
-                                </div>
-                                {/* Indicadores de este RA */}
-                                {ra.indicadores.length > 0 && (
-                                  <div className="mt-2">
-                                    <div className="ra-small text-muted fw-semibold mb-1">Indicadores evaluados:</div>
-                                    <div className="d-flex flex-wrap gap-1">
-                                      {ra.indicadores.map(ind => (
-                                        <span key={ind.id_ind} className="badge bg-light text-dark border" title={ind.descripcion}>
-                                          {ind.descripcion} ({ind.porcentaje_ind}%)
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </li>
+                              <span key={ra.id_ra_actividad} className="badge bg-light text-dark border">
+                                {ra.titulo_ra} ({ra.porcentaje_actividad.toFixed(1)}%)
+                              </span>
                             ))}
-                          </ul>
+                          </div>
+                        </div>
+
+                        <div className="d-flex flex-column gap-1">
+                          <span className="ra-small text-muted d-block">Retroalimentación</span>
+                          {selectedGroupedActivity.retroalimentacion ? (
+                            <span className="badge bg-success">Tiene retroalimentación</span>
+                          ) : (
+                            <span className="badge bg-secondary">Sin retroalimentación</span>
+                          )}
                         </div>
                       </div>
                     </div>
