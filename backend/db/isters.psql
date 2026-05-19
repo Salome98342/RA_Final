@@ -20,8 +20,9 @@ BEGIN;
 -- 1. TIPOS DE DOCUMENTO
 -- ============================================================
 INSERT INTO tipo_documento (descripcion) VALUES
-('Cédula de Ciudadanía'),
-('Tarjeta de Identidad');
+('C.C.'),
+('T.I.'),
+('C.R.');
 
 -- ============================================================
 -- 2. DOCENTES (3)

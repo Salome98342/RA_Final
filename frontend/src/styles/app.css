@@ -115,6 +115,10 @@ canvas {
   padding-bottom: 0.95rem;
 }
 
+.grade-summary-ra-row:hover {
+  background: #fff7f7;
+}
+
 .grade-summary-ra-card {
   display: flex;
   flex-direction: column;
@@ -166,16 +170,74 @@ canvas {
 
 .student-activity-panel {
   border-radius: 1.15rem;
-  background: linear-gradient(180deg, #fff 0%, #fffafb 100%);
-  border: 1px solid rgba(227, 6, 19, 0.12);
-  box-shadow: var(--uv-card);
-  padding: 0.25rem;
+  background:
+    radial-gradient(1200px 420px at 5% 0%, rgba(227, 6, 19, 0.06), transparent 60%),
+    linear-gradient(180deg, #fff 0%, #fff6f7 100%);
+  border: 1px solid rgba(227, 6, 19, 0.16);
+  box-shadow: 0 18px 40px rgba(29, 29, 27, 0.08);
+  padding: 0.4rem;
 }
 
 .student-activity-card {
   background: transparent;
   border: 0;
   box-shadow: none;
+}
+
+.student-activity-card .ra-card-body {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid rgba(29, 29, 27, 0.08);
+  box-shadow: 0 12px 24px rgba(29, 29, 27, 0.06);
+}
+
+.student-activity-card .ra-card-body .border-bottom {
+  border-color: rgba(29, 29, 27, 0.08) !important;
+}
+
+.student-activity-card .ra-card-body .ra-small {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #6f6f78;
+}
+
+.student-activity-panel .badge {
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.student-activity-panel .badge.bg-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.38rem 0.7rem;
+  background: linear-gradient(180deg, #ffffff, #f6f6f7);
+  border: 1px solid rgba(29, 29, 27, 0.14);
+  color: #1f1f1f;
+  box-shadow: 0 6px 14px rgba(29, 29, 27, 0.06);
+  line-height: 1.2;
+}
+
+.student-activity-panel .badge.bg-secondary {
+  border: 1px solid rgba(29, 29, 27, 0.12);
+}
+
+.student-activity-panel .fs-4.fw-bold {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.student-feedback-box {
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  background: #f8f9fb;
+  border: 1px solid rgba(29, 29, 27, 0.12);
+  color: #1f1f1f;
+  box-shadow: 0 6px 14px rgba(29, 29, 27, 0.06);
+  line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 .student-activity-list {
@@ -186,13 +248,34 @@ canvas {
   border: 1px solid rgba(29, 29, 27, 0.08);
   border-radius: 1rem;
   background: #fff;
-  box-shadow: 0 8px 18px rgba(29, 29, 27, 0.05);
+  box-shadow: 0 10px 24px rgba(29, 29, 27, 0.06);
   margin-bottom: 0.25rem;
 }
 
 .student-activity-list .student-activity-item:hover {
   background: #fffafa;
   border-color: rgba(227, 6, 19, 0.18);
+}
+
+.student-activity-list .student-activity-item .fw-semibold {
+  color: #1c1c1f;
+}
+
+.student-activity-list .student-activity-item .ra-small {
+  color: #6f6f78;
+}
+
+.student-activity-list .student-activity-item .badge.bg-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #f6f6f7);
+  border: 1px solid rgba(29, 29, 27, 0.14);
+  color: #1f1f1f;
+  box-shadow: 0 6px 14px rgba(29, 29, 27, 0.06);
+  line-height: 1.2;
 }
 
 .student-activity-list .student-activity-item:first-child {
@@ -1393,9 +1476,9 @@ progress::-moz-progress-bar,
 .prog-danger::-webkit-progress-value { background-color: var(--bs-success, #199A75); }
 .prog-danger::-moz-progress-bar { background-color: var(--bs-success, #199A75); }
 
-/* Forzar barra de Bootstrap en verde en todas las vistas */
-.progress .progress-bar {
-  background-color: var(--bs-success, #199A75) !important;
+/* Forzar barra verde solo si no se especifica un tono */
+.progress .progress-bar:not([class*='bg-']) {
+  background-color: var(--bs-success, #199A75);
 }
 
 /* Optional subtle border for contrast on light backgrounds */

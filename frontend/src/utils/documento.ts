@@ -20,7 +20,6 @@ export const formatTipoDocumentoAbbr = (
   if (compact === 'cc' || normalized.includes('cedula de ciudadania')) return 'C.C.'
   if (compact === 'cr' || normalized.includes('registro civil')) return 'C.R.'
   if (compact === 'ti' || normalized.includes('tarjeta de identidad')) return 'T.I.'
-  if (compact === 'ppt' || normalized.includes('permiso por proteccion temporal')) return 'PPT'
 
   return raw.toUpperCase()
 }

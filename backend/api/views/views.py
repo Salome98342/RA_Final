@@ -1360,19 +1360,21 @@ def coordinador_estudiantes_view(request):
             tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
 
         aliases_norm = {
-            "cc": "cedula de ciudadania",
-            "c.c": "cedula de ciudadania",
-            "c.c.": "cedula de ciudadania",
-            "ce": "cedula de extranjeria",
-            "c.e": "cedula de extranjeria",
-            "c.e.": "cedula de extranjeria",
-            "ti": "tarjeta de identidad",
-            "t.i": "tarjeta de identidad",
-            "t.i.": "tarjeta de identidad",
-            "pas": "pasaporte",
-            "pasaporte": "pasaporte",
-            "rc": "registro civil",
-            "nuip": "nuip",
+            "cc": "c.c.",
+            "c.c": "c.c.",
+            "c.c.": "c.c.",
+            "cedula de ciudadania": "c.c.",
+            "cedula": "c.c.",
+            "ti": "t.i.",
+            "t.i": "t.i.",
+            "t.i.": "t.i.",
+            "tarjeta de identidad": "t.i.",
+            "tarjeta identidad": "t.i.",
+            "cr": "c.r.",
+            "c.r": "c.r.",
+            "c.r.": "c.r.",
+            "rc": "c.r.",
+            "registro civil": "c.r.",
         }
 
         input_norm = _normalize_text(tipo_doc_desc)
@@ -1831,25 +1833,21 @@ def coordinador_docentes_view(request):
         tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
 
     aliases_norm = {
-        "cc": "cedula de ciudadania",
-        "c.c": "cedula de ciudadania",
-        "c.c.": "cedula de ciudadania",
-        "ce": "cedula de extranjeria",
-        "c.e": "cedula de extranjeria",
-        "c.e.": "cedula de extranjeria",
-        "ti": "tarjeta de identidad",
-        "t.i": "tarjeta de identidad",
-        "t.i.": "tarjeta de identidad",
-        "pas": "pasaporte",
-        "pasaporte": "pasaporte",
-        "rc": "registro civil",
-        "cr": "registro civil",
-        "c.r": "registro civil",
-        "c.r.": "registro civil",
-        "ppt": "permiso por proteccion temporal",
-        "p.p.t": "permiso por proteccion temporal",
-        "p.p.t.": "permiso por proteccion temporal",
-        "nuip": "nuip",
+        "cc": "c.c.",
+        "c.c": "c.c.",
+        "c.c.": "c.c.",
+        "cedula de ciudadania": "c.c.",
+        "cedula": "c.c.",
+        "ti": "t.i.",
+        "t.i": "t.i.",
+        "t.i.": "t.i.",
+        "tarjeta de identidad": "t.i.",
+        "tarjeta identidad": "t.i.",
+        "cr": "c.r.",
+        "c.r": "c.r.",
+        "c.r.": "c.r.",
+        "rc": "c.r.",
+        "registro civil": "c.r.",
     }
 
     input_norm = _normalize_text(tipo_doc_desc)
@@ -2159,34 +2157,29 @@ def coordinador_import_estudiantes_view(request):
         tipos_documento_map_desc_norm[td.descripcion.lower().strip()] = td
 
     # REGLA NEGOCIO: para importación masiva de estudiantes solo se aceptan
-    # C.C., C.R., T.I. y PPT (con o sin puntos/espacios).
+    # C.C., C.R. y T.I. (con o sin puntos/espacios).
     allowed_tipo_doc_aliases = {
-        "cc": "cedula de ciudadania",
-        "c.c": "cedula de ciudadania",
-        "c.c.": "cedula de ciudadania",
-        "cr": "registro civil",
-        "c.r": "registro civil",
-        "c.r.": "registro civil",
-        "ti": "tarjeta de identidad",
-        "t.i": "tarjeta de identidad",
-        "t.i.": "tarjeta de identidad",
-        "ppt": "permiso por proteccion temporal",
-        "p.p.t": "permiso por proteccion temporal",
-        "p.p.t.": "permiso por proteccion temporal",
+        "cc": "c.c.",
+        "c.c": "c.c.",
+        "c.c.": "c.c.",
+        "cedula de ciudadania": "c.c.",
+        "cedula": "c.c.",
+        "cr": "c.r.",
+        "c.r": "c.r.",
+        "c.r.": "c.r.",
+        "rc": "c.r.",
+        "registro civil": "c.r.",
+        "ti": "t.i.",
+        "t.i": "t.i.",
+        "t.i.": "t.i.",
+        "tarjeta de identidad": "t.i.",
+        "tarjeta identidad": "t.i.",
     }
-    # Garantizar que exista el tipo de documento para PPT.
-    ppt_norm = _normalize_text("permiso por proteccion temporal")
-    if ppt_norm not in tipos_documento_map_desc_norm:
-        tipo_ppt = TipoDocumento.objects.create(descripcion="Permiso por Protección Temporal")
-        tipos_documento_map_id[tipo_ppt.id_tipo_documento] = tipo_ppt
-        tipos_documento_map_desc_norm[_normalize_text(tipo_ppt.descripcion)] = tipo_ppt
-        tipos_documento_map_desc_norm[tipo_ppt.descripcion.lower().strip()] = tipo_ppt
 
     allowed_tipo_doc_norm_values = {
-        _normalize_text("cedula de ciudadania"),
-        _normalize_text("registro civil"),
-        _normalize_text("tarjeta de identidad"),
-        _normalize_text("permiso por proteccion temporal"),
+        _normalize_text("c.c."),
+        _normalize_text("c.r."),
+        _normalize_text("t.i."),
     }
 
     logger.info(f"[DEBUG] Tipos de documento disponibles (normalizados): {list(tipos_documento_map_desc_norm.keys())}")
@@ -2322,7 +2315,7 @@ def coordinador_import_estudiantes_view(request):
             errors.append({"row": row_num, "error": error_msg})
             continue
         
-        # Tipo documento: por política de importación solo C.C., C.R., T.I. y PPT.
+        # Tipo documento: por política de importación solo C.C., C.R. y T.I.
         tipo_doc = None
         if tipo_doc_id:
             try:
@@ -2336,13 +2329,13 @@ def coordinador_import_estudiantes_view(request):
         
         if not tipo_doc and tipo_doc_desc:
             desc_str = str(tipo_doc_desc).strip()
-            # 1. Validar código permitido de entrada (C.C., C.R., T.I., PPT)
+            # 1. Validar código permitido de entrada (C.C., C.R., T.I.)
             norm_input = _normalize_text(desc_str)
             mapped_full = allowed_tipo_doc_aliases.get(norm_input)
             if not mapped_full:
                 errors.append({
                     "row": row_num,
-                    "error": "tipo_documento invalido. Solo se acepta: C.C., C.R., T.I., PPT."
+                    "error": "tipo_documento invalido. Solo se acepta: C.C., C.R., T.I."
                 })
                 continue
 
@@ -2367,7 +2360,7 @@ def coordinador_import_estudiantes_view(request):
         if not tipo_doc:
             error_msg = (
                 f"TipoDocumento no encontrado para '{tipo_doc_id or tipo_doc_desc}'. "
-                "Solo se admite C.C., C.R., T.I. o PPT."
+                "Solo se admite C.C., C.R., T.I."
             )
             logger.error(f"[IMPORT ERROR] Fila {row_num}: {error_msg}")
             errors.append({
@@ -4601,33 +4594,24 @@ def coordinador_import_docentes_view(request):
     for td in TipoDocumento.objects.all():
         tipos_documento_map_desc_norm[_normalize_text(td.descripcion)] = td
 
-    # Mantener compatibilidad con abreviaturas usadas en estudiantes (C.C., C.R., T.I., PPT)
+    # Mantener compatibilidad con abreviaturas usadas en estudiantes (C.C., C.R., T.I.)
     allowed_tipo_doc_aliases = {
-        "cc": "cedula de ciudadania",
-        "c.c": "cedula de ciudadania",
-        "c.c.": "cedula de ciudadania",
-        "ce": "cedula de extranjeria",
-        "c.e": "cedula de extranjeria",
-        "c.e.": "cedula de extranjeria",
-        "ti": "tarjeta de identidad",
-        "t.i": "tarjeta de identidad",
-        "t.i.": "tarjeta de identidad",
-        "pas": "pasaporte",
-        "pasaporte": "pasaporte",
-        "rc": "registro civil",
-        "cr": "registro civil",
-        "c.r": "registro civil",
-        "c.r.": "registro civil",
-        "ppt": "permiso por proteccion temporal",
-        "p.p.t": "permiso por proteccion temporal",
-        "p.p.t.": "permiso por proteccion temporal",
-        "nuip": "nuip",
+        "cc": "c.c.",
+        "c.c": "c.c.",
+        "c.c.": "c.c.",
+        "cedula de ciudadania": "c.c.",
+        "cedula": "c.c.",
+        "ti": "t.i.",
+        "t.i": "t.i.",
+        "t.i.": "t.i.",
+        "tarjeta de identidad": "t.i.",
+        "tarjeta identidad": "t.i.",
+        "rc": "c.r.",
+        "cr": "c.r.",
+        "c.r": "c.r.",
+        "c.r.": "c.r.",
+        "registro civil": "c.r.",
     }
-
-    ppt_norm = _normalize_text("permiso por proteccion temporal")
-    if ppt_norm not in tipos_documento_map_desc_norm:
-        tipo_ppt = TipoDocumento.objects.create(descripcion="Permiso por Protección Temporal")
-        tipos_documento_map_desc_norm[_normalize_text(tipo_ppt.descripcion)] = tipo_ppt
     existing_docentes_by_code = {
         d.codigo_docente: d
         for d in Docente.objects.select_related('programa', 'tipo_documento').all()
@@ -4691,7 +4675,7 @@ def coordinador_import_docentes_view(request):
         if not (codigo and nombre and apellido and correo and tipo_doc_desc and num_documento):
             errors.append({"row": row_num, "error": "Faltan columnas requeridas"}); continue
         
-        # Tipo documento (tolerante a alias como CC, C.C., CR, T.I., PPT)
+        # Tipo documento (tolerante a alias como CC, C.C., CR, T.I.)
         tipo_doc = None
         input_norm = _normalize_text(tipo_doc_desc)
         mapped_norm = allowed_tipo_doc_aliases.get(input_norm, input_norm)

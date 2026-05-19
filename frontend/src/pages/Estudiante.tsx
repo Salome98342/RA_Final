@@ -255,6 +255,23 @@ const Estudiante: React.FC = () => {
     }
   }
 
+  const getFinalNoteFromSummary = (summary?: GradeSummaryResponse | null) => {
+    if (!summary) return null
+    const coveragePct =
+      typeof summary.total.coverage === 'number'
+        ? (summary.total.coverage <= 1 ? summary.total.coverage * 100 : summary.total.coverage)
+        : 0
+    const note = coveragePct >= 50 ? summary.total.progressive : summary.total.strict
+    return typeof note === 'number' ? note : null
+  }
+
+  const getNoteToneClass = (note: number | null) => {
+    if (note == null) return 'text-muted'
+    if (note < 3) return 'text-danger'
+    if (note < 3.5) return 'text-warning'
+    return 'text-success'
+  }
+
   // Abrir directamente el detalle de una tarea del cronograma
   const openTaskDetail = async (t: TaskItem) => {
     try {
@@ -783,7 +800,13 @@ const Estudiante: React.FC = () => {
               {/* Nota ponderada del curso */}
               {(() => {
                 const summary = gradeSummaryByCourse[selected.id]
-                if (summary) return <GradeSummary summary={summary} />
+                if (summary) {
+                  if (import.meta.env.DEV) {
+                    console.log('GradeSummaryResponse for', selected.id, summary)
+                    try { console.log('GradeSummaryResponse JSON', JSON.stringify(summary)) } catch (e) { /* ignore */ }
+                  }
+                  return <GradeSummary summary={summary} />
+                }
                 // Fallback anterior si aún no se cargó el summary
                 const s = courseStats[selected.id]
                 const note = s?.note ?? null
@@ -799,10 +822,17 @@ const Estudiante: React.FC = () => {
                         const pp = Math.max(0, Math.min(100, Math.round(pct)))
                         const step = Math.round(pp / 10) * 10
                         const widthClass = `w-pct-${step}`
+                        const toneClass = note == null
+                          ? 'bg-secondary'
+                          : note < 3
+                            ? 'bg-danger'
+                            : note < 3.5
+                              ? 'bg-warning text-dark'
+                              : 'bg-success'
                         return (
                           <div>
                             <div className="progress progress-compact">
-                              <div className={`progress-bar bg-danger ${widthClass}`} aria-hidden="true" />
+                              <div className={`progress-bar ${toneClass} ${widthClass}`} aria-hidden="true" />
                               <span className="visually-hidden" aria-live="polite">Porcentaje de nota: {pp}%</span>
                             </div>
                             <div className="ra-small text-muted mt-1 d-flex justify-content-between" aria-live="polite">
@@ -850,6 +880,10 @@ const Estudiante: React.FC = () => {
                     const vencida = !act.nota && due && due.getTime() < now.getTime()
                     const estado = act.nota != null ? 'Calificada' : (vencida ? 'Vencida' : 'Pendiente')
                     const badgeClass = act.nota != null ? 'bg-success' : 'bg-secondary'
+                    const summaryNote = getFinalNoteFromSummary(gradeSummaryByCourse[selected.id])
+                    const effectiveNote = act.porcentaje_total >= 99.9 && summaryNote != null
+                      ? summaryNote
+                      : act.nota
                     return (
                       <li
                         key={act.id_actividad}
@@ -863,7 +897,7 @@ const Estudiante: React.FC = () => {
                             <div className="ra-small text-muted lh-sm">
                               {act.tipo_actividad}
                               {act.fecha_cierre ? ` · Cierra: ${new Date(act.fecha_cierre).toLocaleDateString()}` : ''}
-                              {act.nota != null ? ` · Nota: ${Number(act.nota).toFixed(1)}` : ''}
+                              {effectiveNote != null ? ` · Nota: ${Number(effectiveNote).toFixed(2)}` : ''}
                               {` · Peso total: ${act.porcentaje_total.toFixed(1)}%`}
                             </div>
                             {/* Mostrar RAs asociados */}
@@ -906,7 +940,10 @@ const Estudiante: React.FC = () => {
                       </div>
                       <div className="d-flex flex-column gap-3">
                         {(() => {
-                          const nota = selectedGroupedActivity.nota
+                          const summaryNote = getFinalNoteFromSummary(gradeSummaryByCourse[selected.id])
+                          const nota = selectedGroupedActivity.porcentaje_total >= 99.9 && summaryNote != null
+                            ? summaryNote
+                            : selectedGroupedActivity.nota
                           const aprobado = nota != null ? nota >= 3.0 : null
                           return (
                             <div className="border-bottom pb-2 d-flex flex-column gap-1">
@@ -932,16 +969,25 @@ const Estudiante: React.FC = () => {
                           <span className="fw-semibold">{selectedGroupedActivity.porcentaje_total.toFixed(1)}%</span>
                         </div>
 
-                        <div className="border-bottom pb-2 d-flex flex-column gap-1">
-                          <span className="ra-small text-muted d-block">Mi nota</span>
-                          {selectedGroupedActivity.nota != null ? (
-                            <div className="fs-4 fw-bold text-success">
-                              {Number(selectedGroupedActivity.nota).toFixed(2)} / 5.00
+                        {(() => {
+                          const summaryNote = getFinalNoteFromSummary(gradeSummaryByCourse[selected.id])
+                          const nota = selectedGroupedActivity.porcentaje_total >= 99.9 && summaryNote != null
+                            ? summaryNote
+                            : selectedGroupedActivity.nota
+                          const toneClass = getNoteToneClass(nota)
+                          return (
+                            <div className="border-bottom pb-2 d-flex flex-column gap-1">
+                              <span className="ra-small text-muted d-block">Mi nota</span>
+                              {nota != null ? (
+                                <div className={`fs-4 fw-bold ${toneClass}`}>
+                                  {Number(nota).toFixed(2)} / 5.00
+                                </div>
+                              ) : (
+                                <span className="text-muted">Sin calificar</span>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-muted">Sin calificar</span>
-                          )}
-                        </div>
+                          )
+                        })()}
 
                         <div className="border-bottom pb-2 d-flex flex-column gap-1">
                           <span className="ra-small text-muted d-block">Resultados de Aprendizaje afectados</span>
@@ -957,9 +1003,11 @@ const Estudiante: React.FC = () => {
                         <div className="d-flex flex-column gap-1">
                           <span className="ra-small text-muted d-block">Retroalimentación</span>
                           {selectedGroupedActivity.retroalimentacion ? (
-                            <span className="badge bg-success">Tiene retroalimentación</span>
+                            <div className="student-feedback-box">
+                              {selectedGroupedActivity.retroalimentacion}
+                            </div>
                           ) : (
-                            <span className="badge bg-secondary">Sin retroalimentación</span>
+                            <span className="text-muted">Sin retroalimentación</span>
                           )}
                         </div>
                       </div>

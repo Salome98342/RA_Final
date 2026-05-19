@@ -33,8 +33,8 @@ psql -U postgres -d ra_manager -f ra_manager.psql
 
 **Contenido**:
 - **TRUNCATE** completo de todas las tablas con `RESTART IDENTITY CASCADE`
-- Datos de catálogos:
-  - 4 tipos de documento (CC, CE, Pasaporte, TI)
+-- Datos de catálogos:
+  - 3 tipos de documento (C.C., T.I., C.R.)
   - 8+ tipos de actividad (Taller, Quiz, Examen, Proyecto, etc.)
   - 5+ programas académicos
   - Periodos académicos (2025-1, 2025-2)
@@ -62,8 +62,8 @@ psql -U postgres -d ra_manager -f inserts.sql
 
 **Contenido**:
 - Tests de integridad después de ejecutar `inserts.sql`
-- Validaciones de conteos:
-  - ≥4 tipos de documento
+-- Validaciones de conteos:
+  - =3 tipos de documento
   - ≥8 tipos de actividad
   - ≥5 programas
   - =8 docentes
@@ -81,7 +81,7 @@ psql -U postgres -d ra_manager -f insert_test.sql
 
 **Output esperado**:
 ```
-PASS: tipo_documento >= 4 (4).
+PASS: tipo_documento = 3 (3).
 PASS: tipo_actividad >= 8 (8).
 PASS: programa >= 5 (5).
 PASS: docentes = 8.
