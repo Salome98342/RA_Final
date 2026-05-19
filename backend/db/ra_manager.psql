@@ -1,259 +1,271 @@
+-- ============================================================
+-- RA-Manager - Schema (app tables only)
+-- Updated to match current Django models
+-- ============================================================
 
+BEGIN;
 
--- Eliminación previa (solo si es necesario reiniciar)
+-- UUID support for notificacion.id
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Drop tables (app only)
+DROP TABLE IF EXISTS notificacion CASCADE;
+DROP TABLE IF EXISTS anuncio CASCADE;
+DROP TABLE IF EXISTS security_event CASCADE;
+DROP TABLE IF EXISTS account_lockout CASCADE;
+DROP TABLE IF EXISTS login_attempt CASCADE;
+DROP TABLE IF EXISTS ra_actividad_indicador CASCADE;
+DROP TABLE IF EXISTS recurso CASCADE;
 DROP TABLE IF EXISTS notas_actividad CASCADE;
+DROP TABLE IF EXISTS matricula CASCADE;
 DROP TABLE IF EXISTS ra_actividad CASCADE;
 DROP TABLE IF EXISTS actividad CASCADE;
 DROP TABLE IF EXISTS tipo_actividad CASCADE;
 DROP TABLE IF EXISTS indicadores_de_logro CASCADE;
 DROP TABLE IF EXISTS resultado_de_aprendizaje CASCADE;
 DROP TABLE IF EXISTS asignatura CASCADE;
-DROP TABLE IF EXISTS docente CASCADE;
 DROP TABLE IF EXISTS estudiante CASCADE;
+DROP TABLE IF EXISTS docente CASCADE;
+DROP TABLE IF EXISTS import_audit CASCADE;
+DROP TABLE IF EXISTS coordinador CASCADE;
 DROP TABLE IF EXISTS programa CASCADE;
 DROP TABLE IF EXISTS periodo_academico CASCADE;
 DROP TABLE IF EXISTS tipo_documento CASCADE;
-DROP TABLE IF EXISTS matricula CASCADE;
+DROP TABLE IF EXISTS password_reset_otp CASCADE;
 
--- ========================================
--- 1. Catálogo de tipos de documento
--- ========================================
+-- 1) Catalogs
 CREATE TABLE tipo_documento (
-  id_tipo_documento  BIGSERIAL PRIMARY KEY,
-  descripcion        VARCHAR(100) NOT NULL UNIQUE
+  id_tipo_documento BIGSERIAL PRIMARY KEY,
+  descripcion       VARCHAR(100) NOT NULL UNIQUE
 );
 
--- ========================================
--- 2. Docentes
--- ========================================
-CREATE TABLE docente (
-  id_docente           BIGSERIAL PRIMARY KEY,
-  nombre               VARCHAR(100) NOT NULL,
-  apellido             VARCHAR(100) NOT NULL,
-  codigo_docente       VARCHAR(50)  NOT NULL UNIQUE,
-  contrasenia_docente  VARCHAR(255) NOT NULL,
-  correo               VARCHAR(255) NOT NULL UNIQUE,
-  id_tipo_documento    BIGINT       NOT NULL REFERENCES tipo_documento(id_tipo_documento),
-  num_documento        VARCHAR(50)  NOT NULL UNIQUE,
-  num_telefono         VARCHAR(30)
-);
-
--- ========================================
--- 3. Estudiantes
--- ========================================
-CREATE TABLE estudiante (
-  id_estudiante          BIGSERIAL PRIMARY KEY,
-  nombre                 VARCHAR(100) NOT NULL,
-  apellido               VARCHAR(100) NOT NULL,
-  codigo_estudiante      VARCHAR(50)  NOT NULL UNIQUE,
-  contrasena_estudiante  VARCHAR(255) NOT NULL,
-  id_tipo_documento      BIGINT       NOT NULL REFERENCES tipo_documento(id_tipo_documento),
-  num_documento          VARCHAR(50)  NOT NULL UNIQUE,
-  correo                 VARCHAR(255) NOT NULL UNIQUE,
-  jornada                VARCHAR(50)
-);
-
--- ========================================
--- 4. Programa académico
--- ========================================
 CREATE TABLE programa (
-  id_programa      BIGSERIAL PRIMARY KEY,
-  nombre           VARCHAR(150) NOT NULL,
-  codigo_programa  VARCHAR(50)  NOT NULL UNIQUE
+  id_programa     BIGSERIAL PRIMARY KEY,
+  nombre          VARCHAR(150) NOT NULL,
+  codigo_programa VARCHAR(50) NOT NULL UNIQUE
 );
 
--- ========================================
--- 5. Periodo académico
--- ========================================
 CREATE TABLE periodo_academico (
-  id_periodo        BIGSERIAL PRIMARY KEY,
-  descripcion       VARCHAR(100) NOT NULL UNIQUE,
-  fecha_inicio      DATE NOT NULL,
+  id_periodo         BIGSERIAL PRIMARY KEY,
+  descripcion        VARCHAR(100) NOT NULL UNIQUE,
+  fecha_inicio       DATE NOT NULL,
   fecha_finalizacion DATE NOT NULL,
   CONSTRAINT chk_periodo_fechas CHECK (fecha_finalizacion >= fecha_inicio)
 );
 
--- ========================================
--- 6. Asignaturas
--- ========================================
+-- 2) Core users
+CREATE TABLE coordinador (
+  id_coordinador     BIGSERIAL PRIMARY KEY,
+  nombre             VARCHAR(100) NOT NULL,
+  codigo_coordinador VARCHAR(50) NOT NULL UNIQUE,
+  contrasenia_coord  VARCHAR(255) NOT NULL,
+  correo             VARCHAR(255) NOT NULL UNIQUE
+);
+
+CREATE TABLE docente (
+  id_docente          BIGSERIAL PRIMARY KEY,
+  nombre              VARCHAR(100) NOT NULL,
+  apellido            VARCHAR(100) NOT NULL,
+  codigo_docente      VARCHAR(50) NOT NULL UNIQUE,
+  contrasenia_docente VARCHAR(255) NOT NULL,
+  correo              VARCHAR(255) NOT NULL UNIQUE,
+  id_programa         BIGINT REFERENCES programa(id_programa) ON DELETE RESTRICT,
+  id_tipo_documento   BIGINT NOT NULL REFERENCES tipo_documento(id_tipo_documento) ON DELETE RESTRICT,
+  num_documento       VARCHAR(50) NOT NULL UNIQUE,
+  num_telefono        VARCHAR(30)
+);
+
+CREATE TABLE estudiante (
+  id_estudiante         BIGSERIAL PRIMARY KEY,
+  nombre                VARCHAR(100) NOT NULL,
+  apellido              VARCHAR(100) NOT NULL,
+  codigo_estudiante     VARCHAR(50) NOT NULL UNIQUE,
+  contrasena_estudiante VARCHAR(255) NOT NULL,
+  id_tipo_documento     BIGINT NOT NULL REFERENCES tipo_documento(id_tipo_documento) ON DELETE RESTRICT,
+  num_documento         VARCHAR(50) NOT NULL UNIQUE,
+  correo                VARCHAR(255) NOT NULL UNIQUE,
+  jornada               VARCHAR(50),
+  activo                BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- 3) Academics
 CREATE TABLE asignatura (
-  id_asignatura      BIGSERIAL PRIMARY KEY,
-  nombre             VARCHAR(150) NOT NULL,
-  codigo_asignatura  VARCHAR(50)  NOT NULL UNIQUE,
-  id_docente         BIGINT       NOT NULL REFERENCES docente(id_docente),
-  grupo              VARCHAR(20),
-  id_programa        BIGINT       NOT NULL REFERENCES programa(id_programa)
+  id_asignatura     BIGSERIAL PRIMARY KEY,
+  nombre            VARCHAR(150) NOT NULL,
+  codigo_asignatura VARCHAR(50) NOT NULL,
+  id_docente        BIGINT NOT NULL REFERENCES docente(id_docente) ON DELETE RESTRICT,
+  id_periodo        BIGINT REFERENCES periodo_academico(id_periodo) ON DELETE RESTRICT,
+  grupo             VARCHAR(20) NOT NULL,
+  sede              VARCHAR(80) NOT NULL,
+  creditos          SMALLINT NOT NULL DEFAULT 0,
+  id_programa       BIGINT NOT NULL REFERENCES programa(id_programa) ON DELETE RESTRICT,
+  CONSTRAINT uq_asignatura_codigo_grupo_sede_periodo UNIQUE (codigo_asignatura, grupo, sede, id_periodo)
 );
 
--- ========================================
--- 7. Resultados de Aprendizaje (RA)
--- ========================================
 CREATE TABLE resultado_de_aprendizaje (
-  id_ra          BIGSERIAL PRIMARY KEY,
-  id_asignatura  BIGINT NOT NULL REFERENCES asignatura(id_asignatura) ON DELETE CASCADE,
-  porcentaje_ra  NUMERIC(5,2) NOT NULL CHECK (porcentaje_ra BETWEEN 0 AND 100),
-  descripcion    TEXT
+  id_ra         BIGSERIAL PRIMARY KEY,
+  id_asignatura BIGINT NOT NULL REFERENCES asignatura(id_asignatura) ON DELETE CASCADE,
+  numero_ra     INTEGER NOT NULL DEFAULT 1,
+  porcentaje_ra NUMERIC(5,2) NOT NULL,
+  descripcion   TEXT,
+  CONSTRAINT chk_ra_pct CHECK (porcentaje_ra >= 0 AND porcentaje_ra <= 100),
+  CONSTRAINT uq_ra_numero_por_asignatura UNIQUE (id_asignatura, numero_ra)
 );
 
--- ========================================
--- 8. Indicadores de Logro
--- ========================================
 CREATE TABLE indicadores_de_logro (
-  id_ind         BIGSERIAL PRIMARY KEY,
-  id_ra          BIGINT NOT NULL REFERENCES resultado_de_aprendizaje(id_ra) ON DELETE CASCADE,
-  porcentaje_ind NUMERIC(5,2) NOT NULL CHECK (porcentaje_ind BETWEEN 0 AND 100),
-  descripcion    TEXT
+  id_ind     BIGSERIAL PRIMARY KEY,
+  id_ra      BIGINT NOT NULL REFERENCES resultado_de_aprendizaje(id_ra) ON DELETE CASCADE,
+  descripcion TEXT
 );
 
--- ========================================
--- 9. Tipo de Actividad
--- ========================================
 CREATE TABLE tipo_actividad (
   id_tipo_actividad BIGSERIAL PRIMARY KEY,
   descripcion       VARCHAR(100) NOT NULL UNIQUE
 );
 
--- ========================================
--- 10. Actividades
--- ========================================
 CREATE TABLE actividad (
-  id_actividad        BIGSERIAL PRIMARY KEY,
-  id_tipo_actividad   BIGINT NOT NULL REFERENCES tipo_actividad(id_tipo_actividad),
-  nombre_actividad    VARCHAR(150) NOT NULL,
-  descripcion         TEXT,
-  fecha_creacion      DATE NOT NULL,
-  fecha_cierre        DATE,
+  id_actividad      BIGSERIAL PRIMARY KEY,
+  id_tipo_actividad BIGINT NOT NULL REFERENCES tipo_actividad(id_tipo_actividad) ON DELETE RESTRICT,
+  nombre_actividad  VARCHAR(150) NOT NULL,
+  descripcion       TEXT,
+  fecha_creacion    DATE NOT NULL,
+  fecha_cierre      DATE,
   CONSTRAINT chk_act_fechas CHECK (fecha_cierre IS NULL OR fecha_cierre >= fecha_creacion)
 );
 
--- ========================================
--- 11. Relación RA - Actividad
--- ========================================
 CREATE TABLE ra_actividad (
   id_ra_actividad        BIGSERIAL PRIMARY KEY,
   id_actividad           BIGINT NOT NULL REFERENCES actividad(id_actividad) ON DELETE CASCADE,
   id_ra                  BIGINT NOT NULL REFERENCES resultado_de_aprendizaje(id_ra) ON DELETE CASCADE,
-  porcentaje_ra_actividad NUMERIC(5,2) NOT NULL CHECK (porcentaje_ra_actividad BETWEEN 0 AND 100),
-  CONSTRAINT uq_ra_act UNIQUE (id_actividad, id_ra)
+  porcentaje_ra_actividad NUMERIC(5,2) NOT NULL,
+  CONSTRAINT uq_ra_act UNIQUE (id_actividad, id_ra),
+  CONSTRAINT chk_ra_act_pct CHECK (porcentaje_ra_actividad >= 0 AND porcentaje_ra_actividad <= 100)
 );
 
--- ========================================
--- 12. Matrícula
--- ========================================
+CREATE TABLE ra_actividad_indicador (
+  id              BIGSERIAL PRIMARY KEY,
+  id_ra_actividad BIGINT NOT NULL REFERENCES ra_actividad(id_ra_actividad) ON DELETE CASCADE,
+  id_ind          BIGINT NOT NULL REFERENCES indicadores_de_logro(id_ind) ON DELETE CASCADE,
+  CONSTRAINT uq_ra_actividad_indicador UNIQUE (id_ra_actividad, id_ind)
+);
+
 CREATE TABLE matricula (
-  id_matricula   BIGSERIAL PRIMARY KEY,
-  id_estudiante  BIGINT NOT NULL REFERENCES estudiante(id_estudiante) ON DELETE CASCADE,
-  id_periodo     BIGINT NOT NULL REFERENCES periodo_academico(id_periodo),
-  id_asignatura  BIGINT NOT NULL REFERENCES asignatura(id_asignatura),
-  nota_final     NUMERIC(5,2) CHECK (nota_final BETWEEN 0 AND 5),
+  id_matricula  BIGSERIAL PRIMARY KEY,
+  id_estudiante BIGINT NOT NULL REFERENCES estudiante(id_estudiante) ON DELETE CASCADE,
+  id_periodo    BIGINT NOT NULL REFERENCES periodo_academico(id_periodo) ON DELETE RESTRICT,
+  id_asignatura BIGINT NOT NULL REFERENCES asignatura(id_asignatura) ON DELETE RESTRICT,
+  nota_final    NUMERIC(5,2),
+  CONSTRAINT chk_nota_final CHECK (nota_final IS NULL OR (nota_final >= 0 AND nota_final <= 5)),
   CONSTRAINT uq_matricula UNIQUE (id_estudiante, id_periodo, id_asignatura)
 );
 
--- ========================================
--- 13. Notas por actividad
--- ========================================
 CREATE TABLE notas_actividad (
-  id                 BIGSERIAL PRIMARY KEY,
-  id_matricula       BIGINT NOT NULL REFERENCES matricula(id_matricula) ON DELETE CASCADE,
-  id_ra_actividad    BIGINT NOT NULL REFERENCES ra_actividad(id_ra_actividad) ON DELETE CASCADE,
-  id_ind             BIGINT REFERENCES indicadores_de_logro(id_ind) ON DELETE SET NULL,
-  nota_ra_actividad  NUMERIC(5,2) CHECK (nota_ra_actividad BETWEEN 0 AND 5),
-  retroalimentacion  TEXT,
-  CONSTRAINT uq_notas_actividad UNIQUE (id_matricula, id_ra_actividad)
+  id               BIGSERIAL PRIMARY KEY,
+  id_matricula     BIGINT NOT NULL REFERENCES matricula(id_matricula) ON DELETE CASCADE,
+  id_ra_actividad  BIGINT NOT NULL REFERENCES ra_actividad(id_ra_actividad) ON DELETE CASCADE,
+  id_ind           BIGINT REFERENCES indicadores_de_logro(id_ind) ON DELETE SET NULL,
+  nota_ra_actividad NUMERIC(5,2),
+  retroalimentacion TEXT,
+  CONSTRAINT uq_notas_actividad_indicador UNIQUE (id_matricula, id_ra_actividad, id_ind),
+  CONSTRAINT chk_nota_ra CHECK (nota_ra_actividad IS NULL OR (nota_ra_actividad >= 0 AND nota_ra_actividad <= 5))
 );
 
--- ========================================
--- 14. Coordinador/Director
--- ========================================
-CREATE TABLE coordinador (
-  id_coordinador       BIGSERIAL PRIMARY KEY,
-  nombre               VARCHAR(100) NOT NULL,
-  codigo_coordinador   VARCHAR(50)  NOT NULL UNIQUE,
-  contrasenia_coord    VARCHAR(255) NOT NULL,
-  correo               VARCHAR(255) NOT NULL UNIQUE
+CREATE TABLE recurso (
+  id_recurso   BIGSERIAL PRIMARY KEY,
+  id_asignatura BIGINT NOT NULL REFERENCES asignatura(id_asignatura) ON DELETE CASCADE,
+  titulo       VARCHAR(200) NOT NULL,
+  archivo      VARCHAR(100) NOT NULL,
+  fecha_subida TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ========================================
--- ÍNDICES
--- ========================================
-CREATE INDEX idx_indicadores_ra ON indicadores_de_logro(id_ra);
-CREATE INDEX idx_ra_actividad_act ON ra_actividad(id_actividad);
+CREATE TABLE anuncio (
+  id               BIGSERIAL PRIMARY KEY,
+  id_asignatura    BIGINT NOT NULL REFERENCES asignatura(id_asignatura) ON DELETE CASCADE,
+  id_docente       BIGINT NOT NULL REFERENCES docente(id_docente) ON DELETE CASCADE,
+  titulo           VARCHAR(200) NOT NULL,
+  contenido        TEXT NOT NULL,
+  fecha_publicacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  es_importante    BOOLEAN NOT NULL DEFAULT FALSE
+);
 
--- ========================================
--- TRIGGERS
--- ========================================
+CREATE TABLE notificacion (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id_estudiante  BIGINT NOT NULL REFERENCES estudiante(id_estudiante) ON DELETE CASCADE,
+  tipo           VARCHAR(20) NOT NULL DEFAULT 'message',
+  texto          TEXT NOT NULL,
+  enlace         VARCHAR(500),
+  leida          BOOLEAN NOT NULL DEFAULT FALSE,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_lectura  TIMESTAMPTZ
+);
 
--- 1) Verificación indicador y RA consistentes
-CREATE OR REPLACE FUNCTION trg_notas_actividad_ind_ra_consistente()
-RETURNS trigger AS $$
-DECLARE
-  ra_from_ra_act BIGINT;
-  ra_from_ind    BIGINT;
-BEGIN
-  IF NEW.id_ind IS NULL THEN
-    RETURN NEW;
-  END IF;
+-- 4) Security and audit
+CREATE TABLE password_reset_otp (
+  id         BIGSERIAL PRIMARY KEY,
+  email      VARCHAR(255) NOT NULL,
+  otp_code   VARCHAR(6) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  is_used    BOOLEAN NOT NULL DEFAULT FALSE,
+  rol        VARCHAR(20) NOT NULL
+);
 
-  SELECT id_ra INTO ra_from_ra_act FROM ra_actividad WHERE id_ra_actividad = NEW.id_ra_actividad;
-  SELECT id_ra INTO ra_from_ind FROM indicadores_de_logro WHERE id_ind = NEW.id_ind;
+CREATE TABLE import_audit (
+  id            BIGSERIAL PRIMARY KEY,
+  id_coordinador BIGINT REFERENCES coordinador(id_coordinador) ON DELETE SET NULL,
+  kind          VARCHAR(32) NOT NULL,
+  filename      VARCHAR(255),
+  created_count INTEGER NOT NULL DEFAULT 0,
+  existing_count INTEGER NOT NULL DEFAULT 0,
+  errors_count  INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-  IF ra_from_ra_act IS DISTINCT FROM ra_from_ind THEN
-    RAISE EXCEPTION 'El indicador % no pertenece al mismo RA que ra_actividad %', NEW.id_ind, NEW.id_ra_actividad;
-  END IF;
+CREATE TABLE login_attempt (
+  id             BIGSERIAL PRIMARY KEY,
+  usuario_codigo VARCHAR(100) NOT NULL,
+  usuario_email  VARCHAR(255),
+  rol_intentado  VARCHAR(20),
+  exito          BOOLEAN NOT NULL DEFAULT FALSE,
+  motivo_fallo   VARCHAR(200),
+  ip_address     INET NOT NULL,
+  user_agent     TEXT,
+  timestamp      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+CREATE TABLE account_lockout (
+  id                   BIGSERIAL PRIMARY KEY,
+  usuario_codigo       VARCHAR(100) NOT NULL UNIQUE,
+  intentos_fallidos    INTEGER NOT NULL DEFAULT 0,
+  bloqueado            BOOLEAN NOT NULL DEFAULT FALSE,
+  fecha_bloqueo        TIMESTAMPTZ,
+  fecha_desbloqueo     TIMESTAMPTZ,
+  ultimo_intento_fallido TIMESTAMPTZ,
+  ultimo_intento_ip    INET,
+  notificacion_enviada BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-CREATE TRIGGER notas_actividad_ind_ra_consistente
-BEFORE INSERT OR UPDATE ON notas_actividad
-FOR EACH ROW
-EXECUTE FUNCTION trg_notas_actividad_ind_ra_consistente();
+CREATE TABLE security_event (
+  id             BIGSERIAL PRIMARY KEY,
+  evento         VARCHAR(50) NOT NULL,
+  usuario_codigo VARCHAR(100),
+  ip_address     INET,
+  detalles       TEXT,
+  timestamp      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
--- 2) Verificar suma de indicadores = 100%
-CREATE OR REPLACE FUNCTION trg_check_sum_indicadores()
-RETURNS trigger AS $$
-DECLARE
-  total NUMERIC(7,2);
-BEGIN
-  SELECT COALESCE(SUM(porcentaje_ind), 0) INTO total
-  FROM indicadores_de_logro WHERE id_ra = COALESCE(NEW.id_ra, OLD.id_ra);
+-- Indexes
+CREATE INDEX idx_import_kind_created ON import_audit (kind, created_at);
+CREATE INDEX idx_estudiante_activo ON estudiante (activo);
+CREATE INDEX idx_login_usuario_ts ON login_attempt (usuario_codigo, timestamp);
+CREATE INDEX idx_login_ip_ts ON login_attempt (ip_address, timestamp);
+CREATE INDEX idx_security_evento_ts ON security_event (evento, timestamp);
+CREATE INDEX idx_security_usuario_ts ON security_event (usuario_codigo, timestamp);
+CREATE INDEX idx_notif_estudiante_fecha ON notificacion (id_estudiante, fecha_creacion DESC);
+CREATE INDEX idx_notif_estudiante_leida ON notificacion (id_estudiante, leida);
+CREATE INDEX idx_anuncio_asig_fecha ON anuncio (id_asignatura, fecha_publicacion DESC);
+CREATE INDEX idx_otp_email ON password_reset_otp (email);
 
-  IF total <> 100.00 THEN
-    RAISE EXCEPTION 'Los indicadores del RA % suman %, deben sumar 100', COALESCE(NEW.id_ra, OLD.id_ra), total;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER chk_sum_indicadores_aiud
-AFTER INSERT OR UPDATE OR DELETE ON indicadores_de_logro
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW
-EXECUTE FUNCTION trg_check_sum_indicadores();
-
--- 3) Verificar suma de actividades = 100%
-CREATE OR REPLACE FUNCTION trg_check_sum_acts_por_ra()
-RETURNS trigger AS $$
-DECLARE
-  total NUMERIC(7,2);
-BEGIN
-  SELECT COALESCE(SUM(porcentaje_ra_actividad), 0) INTO total
-  FROM ra_actividad WHERE id_ra = COALESCE(NEW.id_ra, OLD.id_ra);
-
-  IF total <> 100.00 THEN
-    RAISE EXCEPTION 'Las actividades del RA % suman %, deben sumar 100', COALESCE(NEW.id_ra, OLD.id_ra), total;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER chk_sum_acts_por_ra_aiud
-AFTER INSERT OR UPDATE OR DELETE ON ra_actividad
-DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW
-EXECUTE FUNCTION trg_check_sum_acts_por_ra();
-
--- ===============================
--- FIN DEL SCRIPT
--- ===============================
+COMMIT;

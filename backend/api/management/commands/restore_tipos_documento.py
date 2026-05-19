@@ -14,16 +14,9 @@ class Command(BaseCommand):
             return
 
         defaults = [
-            'Cédula de Ciudadanía',
-            'Tarjeta de Identidad',
-            'Registro Civil',
-            'Cédula de Extranjería',
-            'Pasaporte',
-            'Documento Militar',
-            'NIT',
-            'Permiso Temporal',
-            'Tarjeta de Residencia',
-            'Otro',
+            'C.C.',
+            'T.I.',
+            'C.R.',
         ]
 
         existing = set(TipoDocumento.objects.values_list('descripcion', flat=True))

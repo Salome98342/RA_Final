@@ -126,7 +126,7 @@ const cardConfigs: ImportCardConfig[] = [
     title: 'Estudiantes',
     iconClass: 'bi bi-people-fill',
     accentClass: 'text-danger',
-    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico. En tipo_documento solo se acepta: C.C., C.R., T.I., PPT.',
+    description: 'Carga estudiantes nuevos con sus datos de identificación y correo institucional. Acepta formato RA Manager o Sistema de Registro Académico. En tipo_documento solo se acepta: C.C., C.R., T.I.',
     acceptedColumns: 'codigo_estudiante, nombre, apellido, correo, tipo_documento, num_documento, jornada',
     templateCandidates: [
       { fileName: 'plantilla_estudiantes.xlsx', downloadName: 'plantilla_estudiantes.xlsx' },

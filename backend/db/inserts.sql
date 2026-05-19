@@ -2,10 +2,15 @@
 -- Luego reinicia las secuencias de los IDs autoincrementales
 
 -- 1. Eliminar datos (de tablas hijas a padres)
-TRUNCATE notas_actividad
+TRUNCATE notificacion
+  , anuncio
+  , recurso
+  , ra_actividad_indicador
+  , notas_actividad
   , matricula
   , ra_actividad
   , actividad
+  , tipo_actividad
   , indicadores_de_logro
   , resultado_de_aprendizaje
   , asignatura
@@ -14,6 +19,11 @@ TRUNCATE notas_actividad
   , estudiante
   , docente
   , tipo_documento
+  , import_audit
+  , password_reset_otp
+  , security_event
+  , account_lockout
+  , login_attempt
   , coordinador
 RESTART IDENTITY CASCADE;
 
@@ -25,10 +35,9 @@ BEGIN;
 
 -- Tipo de documento
 INSERT INTO tipo_documento (id_tipo_documento, descripcion) VALUES
-  (1, 'Cédula de Ciudadanía'),
-  (2, 'Cédula de Extranjería'),
-  (3, 'Pasaporte'),
-  (4, 'Tarjeta de Identidad')
+  (1, 'C.C.'),
+  (2, 'T.I.'),
+  (3, 'C.R.')
 ON CONFLICT (id_tipo_documento) DO NOTHING;
 
 -- Tipo de actividad
@@ -59,16 +68,16 @@ ON CONFLICT (id_programa) DO NOTHING;
 -- Docentes
 INSERT INTO docente (
   id_docente, nombre, apellido, codigo_docente, contrasenia_docente,
-  correo, id_tipo_documento, num_documento, num_telefono
+  correo, id_programa, id_tipo_documento, num_documento, num_telefono
 ) VALUES
-  (1, 'Juan',   'Pérez',   'DOC-001', 'hash_pwd_juan',  'juan.perez@uni.edu',   1, '1001', '3001112233'),
-  (2, 'Ana',    'Gómez',   'DOC-002', 'hash_pwd_ana',   'ana.gomez@uni.edu',    1, '1002', '3001112244'),
-  (3, 'Pedro',  'López',   'DOC-003', 'hash_pwd_pedro', 'pedro.lopez@uni.edu',  2, '1003', '3001112255'),
-  (4, 'Marta',  'Díaz',    'DOC-004', 'hash_pwd_marta', 'marta.diaz@uni.edu',   1, '1004', '3001112266'),
-  (5, 'Luis',   'Herrera', 'DOC-005', 'hash_pwd_luis',  'luis.herrera@uni.edu', 1, '1005', '3001112277'),
-  (6, 'Sofía',  'Rojas',   'DOC-006', 'hash_pwd_sofia', 'sofia.rojas@uni.edu',  3, '1006', '3001112288'),
-  (7, 'Carlos', 'Medina',  'DOC-007', 'hash_pwd_cmed',  'carlos.medina@uni.edu',1, '1007', '3001112299'),
-  (8, 'Elena',  'Vargas',  'DOC-008', 'hash_pwd_elena', 'elena.vargas@uni.edu', 2, '1008', '3001112300')
+  (1, 'Juan',   'Pérez',   'DOC-001', 'hash_pwd_juan',  'juan.perez@uni.edu',    1, 1, '1001', '3001112233'),
+  (2, 'Ana',    'Gómez',   'DOC-002', 'hash_pwd_ana',   'ana.gomez@uni.edu',     1, 1, '1002', '3001112244'),
+  (3, 'Pedro',  'López',   'DOC-003', 'hash_pwd_pedro', 'pedro.lopez@uni.edu',   2, 2, '1003', '3001112255'),
+  (4, 'Marta',  'Díaz',    'DOC-004', 'hash_pwd_marta', 'marta.diaz@uni.edu',    4, 1, '1004', '3001112266'),
+  (5, 'Luis',   'Herrera', 'DOC-005', 'hash_pwd_luis',  'luis.herrera@uni.edu',  2, 1, '1005', '3001112277'),
+  (6, 'Sofía',  'Rojas',   'DOC-006', 'hash_pwd_sofia', 'sofia.rojas@uni.edu',   1, 3, '1006', '3001112288'),
+  (7, 'Carlos', 'Medina',  'DOC-007', 'hash_pwd_cmed',  'carlos.medina@uni.edu', 1, 1, '1007', '3001112299'),
+  (8, 'Elena',  'Vargas',  'DOC-008', 'hash_pwd_elena', 'elena.vargas@uni.edu',  5, 2, '1008', '3001112300')
 ON CONFLICT (id_docente) DO NOTHING;
 
 -- Estudiantes (24)
@@ -89,7 +98,7 @@ INSERT INTO estudiante (
   (11, 'Felipe',   'Acosta',    'EST-011', 'hash_pwd_felipe', 1, '2011', 'felipe.acosta@correo.edu',  'Nocturna', true),
   (12, 'Valeria',  'Mejía',     'EST-012', 'hash_pwd_vale',   1, '2012', 'valeria.mejia@correo.edu',  'Diurna', true),
   (13, 'Mario',    'Cortés',    'EST-013', 'hash_pwd_mario',  1, '2013', 'mario.cortes@correo.edu',   'Diurna', true),
-  (14, 'Sara',     'Rincón',    'EST-014', 'hash_pwd_sara',   4, '2014', 'sara.rincon@correo.edu',    'Nocturna', true),
+  (14, 'Sara',     'Rincón',    'EST-014', 'hash_pwd_sara',   2, '2014', 'sara.rincon@correo.edu',    'Nocturna', true),
   (15, 'Tomás',    'Mora',      'EST-015', 'hash_pwd_tomas',  1, '2015', 'tomas.mora@correo.edu',     'Diurna', true),
   (16, 'Daniela',  'Cruz',      'EST-016', 'hash_pwd_dani',   1, '2016', 'daniela.cruz@correo.edu',   'Diurna', true),
   (17, 'Hugo',     'Peña',      'EST-017', 'hash_pwd_hugo',   1, '2017', 'hugo.pena@correo.edu',      'Nocturna', true),
@@ -135,81 +144,81 @@ ON CONFLICT (id_asignatura) DO NOTHING;
 ---------------------------
 
 -- RA por asignatura (2 por curso, suman 100%)
-INSERT INTO resultado_de_aprendizaje (id_ra, id_asignatura, porcentaje_ra, descripcion) VALUES
+INSERT INTO resultado_de_aprendizaje (id_ra, id_asignatura, numero_ra, porcentaje_ra, descripcion) VALUES
   -- BD101
-  (1,  1, 50.00, 'Modela bases de datos relacionales'),
-  (2,  1, 50.00, 'Escribe consultas SQL'),
+  (1,  1, 1, 50.00, 'Modela bases de datos relacionales'),
+  (2,  1, 2, 50.00, 'Escribe consultas SQL'),
   -- PR101
-  (3,  2, 40.00, 'Comprende algoritmos básicos'),
-  (4,  2, 60.00, 'Programa soluciones estructuradas'),
+  (3,  2, 1, 40.00, 'Comprende algoritmos básicos'),
+  (4,  2, 2, 60.00, 'Programa soluciones estructuradas'),
   -- PR201
-  (5,  3, 50.00, 'Aplica estructuras de datos'),
-  (6,  3, 50.00, 'Domina programación orientada a objetos'),
+  (5,  3, 1, 50.00, 'Aplica estructuras de datos'),
+  (6,  3, 2, 50.00, 'Domina programación orientada a objetos'),
   -- MAT101
-  (7,  4, 50.00, 'Resuelve límites y derivadas'),
-  (8,  4, 50.00, 'Aplica integrales en problemas'),
+  (7,  4, 1, 50.00, 'Resuelve límites y derivadas'),
+  (8,  4, 2, 50.00, 'Aplica integrales en problemas'),
   -- FIS101
-  (9,  5, 50.00, 'Comprende cinemática y dinámica'),
-  (10, 5, 50.00, 'Aplica leyes de conservación'),
+  (9,  5, 1, 50.00, 'Comprende cinemática y dinámica'),
+  (10, 5, 2, 50.00, 'Aplica leyes de conservación'),
   -- ADM101
-  (11, 6, 50.00, 'Entiende teorías administrativas'),
-  (12, 6, 50.00, 'Aplica planeación estratégica'),
+  (11, 6, 1, 50.00, 'Entiende teorías administrativas'),
+  (12, 6, 2, 50.00, 'Aplica planeación estratégica'),
   -- WEB301
-  (13, 7, 50.00, 'Diseña interfaces web'),
-  (14, 7, 50.00, 'Construye APIs y backend'),
+  (13, 7, 1, 50.00, 'Diseña interfaces web'),
+  (14, 7, 2, 50.00, 'Construye APIs y backend'),
   -- AI201
-  (15, 8, 50.00, 'Modela problemas de ML'),
-  (16, 8, 50.00, 'Entrena y evalúa modelos'),
+  (15, 8, 1, 50.00, 'Modela problemas de ML'),
+  (16, 8, 2, 50.00, 'Entrena y evalúa modelos'),
   -- DIS101
-  (17, 9, 50.00, 'Aplica principios de composición'),
-  (18, 9, 50.00, 'Utiliza tipografía y color'),
+  (17, 9, 1, 50.00, 'Aplica principios de composición'),
+  (18, 9, 2, 50.00, 'Utiliza tipografía y color'),
   -- EST101
-  (19, 10, 50.00, 'Describe variables y distribuciones'),
-  (20, 10, 50.00, 'Inferencia y pruebas de hipótesis')
+  (19, 10, 1, 50.00, 'Describe variables y distribuciones'),
+  (20, 10, 2, 50.00, 'Inferencia y pruebas de hipótesis')
 ON CONFLICT (id_ra) DO NOTHING;
 
 -- Indicadores (2 por RA, suman 100%)
-INSERT INTO indicadores_de_logro (id_ind, id_ra, porcentaje_ind, descripcion) VALUES
-  (1,  1, 50.00, 'Identifica entidades y atributos'),
-  (2,  1, 50.00, 'Normaliza tablas'),
-  (3,  2, 50.00, 'Escribe consultas SELECT'),
-  (4,  2, 50.00, 'Utiliza JOIN correctamente'),
-  (5,  3, 50.00, 'Analiza problemas elementales'),
-  (6,  3, 50.00, 'Diseña algoritmos básicos'),
-  (7,  4, 50.00, 'Estructuras de control'),
-  (8,  4, 50.00, 'Funciones y modularización'),
-  (9,  5, 50.00, 'Usa listas, colas y pilas'),
-  (10, 5, 50.00, 'Usa árboles y grafos'),
-  (11, 6, 50.00, 'Clases y objetos'),
-  (12, 6, 50.00, 'Herencia y polimorfismo'),
-  (13, 7, 50.00, 'Resuelve límites'),
-  (14, 7, 50.00, 'Aplica derivadas'),
-  (15, 8, 50.00, 'Cálculo de áreas'),
-  (16, 8, 50.00, 'Integrales impropias'),
-  (17, 9, 50.00, 'Movimiento rectilíneo'),
-  (18, 9, 50.00, 'Leyes de Newton'),
-  (19, 10,50.00, 'Energía mecánica'),
-  (20, 10,50.00, 'Cantidad de movimiento'),
-  (21, 11,50.00, 'Escuelas de administración'),
-  (22, 11,50.00, 'Procesos organizacionales'),
-  (23, 12,50.00, 'Análisis estratégico'),
-  (24, 12,50.00, 'Indicadores de gestión'),
-  (25, 13,50.00, 'Wireframes y prototipos'),
-  (26, 13,50.00, 'Accesibilidad'),
-  (27, 14,50.00, 'Endpoints REST'),
-  (28, 14,50.00, 'Persistencia y ORM'),
-  (29, 15,50.00, 'Preprocesamiento de datos'),
-  (30, 15,50.00, 'Selección de modelos'),
-  (31, 16,50.00, 'Métricas de evaluación'),
-  (32, 16,50.00, 'Validación cruzada'),
-  (33, 17,50.00, 'Regla de tercios'),
-  (34, 17,50.00, 'Balance y contraste'),
-  (35, 18,50.00, 'Tipografías'),
-  (36, 18,50.00, 'Paletas de color'),
-  (37, 19,50.00, 'Medidas de tendencia'),
-  (38, 19,50.00, 'Dispersión'),
-  (39, 20,50.00, 'Intervalos de confianza'),
-  (40, 20,50.00, 'Pruebas t y chi-cuadrado')
+INSERT INTO indicadores_de_logro (id_ind, id_ra, descripcion) VALUES
+  (1,  1, 'Identifica entidades y atributos'),
+  (2,  1, 'Normaliza tablas'),
+  (3,  2, 'Escribe consultas SELECT'),
+  (4,  2, 'Utiliza JOIN correctamente'),
+  (5,  3, 'Analiza problemas elementales'),
+  (6,  3, 'Diseña algoritmos básicos'),
+  (7,  4, 'Estructuras de control'),
+  (8,  4, 'Funciones y modularización'),
+  (9,  5, 'Usa listas, colas y pilas'),
+  (10, 5, 'Usa árboles y grafos'),
+  (11, 6, 'Clases y objetos'),
+  (12, 6, 'Herencia y polimorfismo'),
+  (13, 7, 'Resuelve límites'),
+  (14, 7, 'Aplica derivadas'),
+  (15, 8, 'Cálculo de áreas'),
+  (16, 8, 'Integrales impropias'),
+  (17, 9, 'Movimiento rectilíneo'),
+  (18, 9, 'Leyes de Newton'),
+  (19, 10, 'Energía mecánica'),
+  (20, 10, 'Cantidad de movimiento'),
+  (21, 11, 'Escuelas de administración'),
+  (22, 11, 'Procesos organizacionales'),
+  (23, 12, 'Análisis estratégico'),
+  (24, 12, 'Indicadores de gestión'),
+  (25, 13, 'Wireframes y prototipos'),
+  (26, 13, 'Accesibilidad'),
+  (27, 14, 'Endpoints REST'),
+  (28, 14, 'Persistencia y ORM'),
+  (29, 15, 'Preprocesamiento de datos'),
+  (30, 15, 'Selección de modelos'),
+  (31, 16, 'Métricas de evaluación'),
+  (32, 16, 'Validación cruzada'),
+  (33, 17, 'Regla de tercios'),
+  (34, 17, 'Balance y contraste'),
+  (35, 18, 'Tipografías'),
+  (36, 18, 'Paletas de color'),
+  (37, 19, 'Medidas de tendencia'),
+  (38, 19, 'Dispersión'),
+  (39, 20, 'Intervalos de confianza'),
+  (40, 20, 'Pruebas t y chi-cuadrado')
 ON CONFLICT (id_ind) DO NOTHING;
 
 ---------------------------
@@ -387,7 +396,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (5, 2, 4.3, 'Buen diseño', 1),
   (6, 3, 3.4, 'JOIN confusos', 4),
   (6, 4, 3.9, 'Examen ok', 3)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- PR101 -> RA_Actividad {5,6,7,8}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -401,7 +410,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (8,  8, 3.7, 'Parcial regular',7),
   (25, 5, 4.3, 'Muy bien', 6),
   (26, 6, 4.0, 'Aceptable', 5)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- MAT101 -> RA_Actividad {13,14,15,16}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -409,7 +418,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (9,  14, 4.2, 'Derivadas bien',14),
   (10, 15, 3.9, 'Integrales ok', 15),
   (10, 16, 3.8, 'Aplicaciones ok',16)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- FIS101 -> RA_Actividad {17,18,19,20}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -419,7 +428,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (14, 20, 3.9, 'Proyecto correcto', 20),
   (27, 17, 4.2, 'Excelente', 18),
   (28, 18, 3.8, 'Bien', 17)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- ADM101 -> RA_Actividad {21,22,23,24}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -427,7 +436,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (11, 22, 4.0, 'Buen examen', 22),
   (12, 23, 3.7, 'Tarea correcta', 23),
   (12, 24, 4.1, 'Proyecto con enfoque', 24)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- WEB301 -> RA_Actividad {25,26,27,28}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -437,7 +446,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (16, 28, 4.0, 'Buen proyecto', 28),
   (29, 25, 3.9, 'Mejorar contraste', 26),
   (30, 28, 4.3, 'Excelente entrega', 28)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- AI201 -> RA_Actividad {29,30,31,32}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
@@ -445,7 +454,7 @@ INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, r
   (17, 30, 3.9, 'Lab correcto',        30),
   (18, 31, 3.7, 'Examen correcto',     31),
   (18, 32, 4.0, 'Proyecto funcional',  32)
-ON CONFLICT (id_matricula, id_ra_actividad) DO NOTHING;
+ON CONFLICT (id_matricula, id_ra_actividad, id_ind) DO NOTHING;
 
 -- DIS101 -> RA_Actividad {33,34,35,36}
 INSERT INTO notas_actividad (id_matricula, id_ra_actividad, nota_ra_actividad, retroalimentacion, id_ind) VALUES
