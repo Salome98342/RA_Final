@@ -82,6 +82,7 @@ CREATE TABLE estudiante (
   codigo_estudiante     VARCHAR(50) NOT NULL UNIQUE,
   contrasena_estudiante VARCHAR(255) NOT NULL,
   id_tipo_documento     BIGINT NOT NULL REFERENCES tipo_documento(id_tipo_documento) ON DELETE RESTRICT,
+  id_programa           BIGINT REFERENCES programa(id_programa) ON DELETE RESTRICT,
   num_documento         VARCHAR(50) NOT NULL UNIQUE,
   correo                VARCHAR(255) NOT NULL UNIQUE,
   jornada               VARCHAR(50),

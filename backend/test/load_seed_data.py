@@ -299,6 +299,7 @@ for est_data in estudiantes_data:
         defaults={
             **est_data,
             "tipo_documento": doc_cedula,
+            "programa": programa,
             "contrasena_estudiante": make_password(contraseña),
             "activo": True
         }

@@ -58,7 +58,8 @@ INSERT INTO programa (id_programa, nombre, codigo_programa) VALUES
   (2, 'Matemáticas',            'MA-01'),
   (3, 'Física',                 'FI-01'),
   (4, 'Administración',         'AD-01'),
-  (5, 'Diseño Gráfico',         'DI-01')
+  (5, 'Diseño Gráfico',         'DI-01'),
+  (2724, 'Programa 2724',       '2724')
 ON CONFLICT (id_programa) DO NOTHING;
 
 ---------------------------
@@ -83,32 +84,32 @@ ON CONFLICT (id_docente) DO NOTHING;
 -- Estudiantes (24)
 INSERT INTO estudiante (
   id_estudiante, nombre, apellido, codigo_estudiante, contrasena_estudiante,
-  id_tipo_documento, num_documento, correo, jornada, activo
+  id_tipo_documento, id_programa, num_documento, correo, jornada, activo
 ) VALUES
-  (1,  'Carlos',   'Ruiz',      'EST-001', 'hash_pwd_carlos', 1, '2001', 'carlos.ruiz@correo.edu',    'Diurna', true),
-  (2,  'Luisa',    'Martínez',  'EST-002', 'hash_pwd_luisa',  1, '2002', 'luisa.martinez@correo.edu', 'Nocturna', true),
-  (3,  'Diego',    'López',     'EST-003', 'hash_pwd_diego',  2, '2003', 'diego.lopez@correo.edu',    'Diurna', true),
-  (4,  'Paula',    'García',    'EST-004', 'hash_pwd_paula',  1, '2004', 'paula.garcia@correo.edu',   'Diurna', true),
-  (5,  'Andrés',   'Torres',    'EST-005', 'hash_pwd_andres', 1, '2005', 'andres.torres@correo.edu',  'Nocturna', true),
-  (6,  'María',    'Santos',    'EST-006', 'hash_pwd_maria',  1, '2006', 'maria.santos@correo.edu',   'Diurna', true),
-  (7,  'Javier',   'Quintero',  'EST-007', 'hash_pwd_javier', 3, '2007', 'javier.quintero@correo.edu','Diurna', true),
-  (8,  'Natalia',  'Vega',      'EST-008', 'hash_pwd_natalia',1, '2008', 'natalia.vega@correo.edu',   'Nocturna', true),
-  (9,  'Sergio',   'Cano',      'EST-009', 'hash_pwd_sergio', 1, '2009', 'sergio.cano@correo.edu',    'Diurna', true),
-  (10, 'Camila',   'Pardo',     'EST-010', 'hash_pwd_camila', 2, '2010', 'camila.pardo@correo.edu',   'Diurna', true),
-  (11, 'Felipe',   'Acosta',    'EST-011', 'hash_pwd_felipe', 1, '2011', 'felipe.acosta@correo.edu',  'Nocturna', true),
-  (12, 'Valeria',  'Mejía',     'EST-012', 'hash_pwd_vale',   1, '2012', 'valeria.mejia@correo.edu',  'Diurna', true),
-  (13, 'Mario',    'Cortés',    'EST-013', 'hash_pwd_mario',  1, '2013', 'mario.cortes@correo.edu',   'Diurna', true),
-  (14, 'Sara',     'Rincón',    'EST-014', 'hash_pwd_sara',   2, '2014', 'sara.rincon@correo.edu',    'Nocturna', true),
-  (15, 'Tomás',    'Mora',      'EST-015', 'hash_pwd_tomas',  1, '2015', 'tomas.mora@correo.edu',     'Diurna', true),
-  (16, 'Daniela',  'Cruz',      'EST-016', 'hash_pwd_dani',   1, '2016', 'daniela.cruz@correo.edu',   'Diurna', true),
-  (17, 'Hugo',     'Peña',      'EST-017', 'hash_pwd_hugo',   1, '2017', 'hugo.pena@correo.edu',      'Nocturna', true),
-  (18, 'Laura',    'Silva',     'EST-018', 'hash_pwd_laura',  2, '2018', 'laura.silva@correo.edu',    'Diurna', true),
-  (19, 'Santiago', 'Rojas',     'EST-019', 'hash_pwd_santi',  1, '2019', 'santiago.rojas@correo.edu', 'Diurna', true),
-  (20, 'Juana',    'Castaño',   'EST-020', 'hash_pwd_juana',  1, '2020', 'juana.castano@correo.edu',  'Nocturna', true),
-  (21, 'Esteban',  'Mendoza',   'EST-021', 'hash_pwd_esteban',1, '2021', 'esteban.mendoza@correo.edu','Diurna', true),
-  (22, 'Karol',    'Ramírez',   'EST-022', 'hash_pwd_karol',  3, '2022', 'karol.ramirez@correo.edu',  'Diurna', true),
-  (23, 'Brayan',   'Padilla',   'EST-023', 'hash_pwd_brayan', 1, '2023', 'brayan.padilla@correo.edu', 'Nocturna', true),
-  (24, 'Juliana',  'Arias',     'EST-024', 'hash_pwd_juli',   1, '2024', 'juliana.arias@correo.edu',  'Diurna', true)
+  (1,  'Carlos',   'Ruiz',      'EST-001', 'hash_pwd_carlos', 1, 2724, '2001', 'carlos.ruiz@correo.edu',    'Diurna', true),
+  (2,  'Luisa',    'Martínez',  'EST-002', 'hash_pwd_luisa',  1, 2724, '2002', 'luisa.martinez@correo.edu', 'Nocturna', true),
+  (3,  'Diego',    'López',     'EST-003', 'hash_pwd_diego',  2, 2724, '2003', 'diego.lopez@correo.edu',    'Diurna', true),
+  (4,  'Paula',    'García',    'EST-004', 'hash_pwd_paula',  1, 2724, '2004', 'paula.garcia@correo.edu',   'Diurna', true),
+  (5,  'Andrés',   'Torres',    'EST-005', 'hash_pwd_andres', 1, 2724, '2005', 'andres.torres@correo.edu',  'Nocturna', true),
+  (6,  'María',    'Santos',    'EST-006', 'hash_pwd_maria',  1, 2724, '2006', 'maria.santos@correo.edu',   'Diurna', true),
+  (7,  'Javier',   'Quintero',  'EST-007', 'hash_pwd_javier', 3, 2724, '2007', 'javier.quintero@correo.edu','Diurna', true),
+  (8,  'Natalia',  'Vega',      'EST-008', 'hash_pwd_natalia',1, 2724, '2008', 'natalia.vega@correo.edu',   'Nocturna', true),
+  (9,  'Sergio',   'Cano',      'EST-009', 'hash_pwd_sergio', 1, 2724, '2009', 'sergio.cano@correo.edu',    'Diurna', true),
+  (10, 'Camila',   'Pardo',     'EST-010', 'hash_pwd_camila', 2, 2724, '2010', 'camila.pardo@correo.edu',   'Diurna', true),
+  (11, 'Felipe',   'Acosta',    'EST-011', 'hash_pwd_felipe', 1, 2724, '2011', 'felipe.acosta@correo.edu',  'Nocturna', true),
+  (12, 'Valeria',  'Mejía',     'EST-012', 'hash_pwd_vale',   1, 2724, '2012', 'valeria.mejia@correo.edu',  'Diurna', true),
+  (13, 'Mario',    'Cortés',    'EST-013', 'hash_pwd_mario',  1, 2724, '2013', 'mario.cortes@correo.edu',   'Diurna', true),
+  (14, 'Sara',     'Rincón',    'EST-014', 'hash_pwd_sara',   2, 2724, '2014', 'sara.rincon@correo.edu',    'Nocturna', true),
+  (15, 'Tomás',    'Mora',      'EST-015', 'hash_pwd_tomas',  1, 2724, '2015', 'tomas.mora@correo.edu',     'Diurna', true),
+  (16, 'Daniela',  'Cruz',      'EST-016', 'hash_pwd_dani',   1, 2724, '2016', 'daniela.cruz@correo.edu',   'Diurna', true),
+  (17, 'Hugo',     'Peña',      'EST-017', 'hash_pwd_hugo',   1, 2724, '2017', 'hugo.pena@correo.edu',      'Nocturna', true),
+  (18, 'Laura',    'Silva',     'EST-018', 'hash_pwd_laura',  2, 2724, '2018', 'laura.silva@correo.edu',    'Diurna', true),
+  (19, 'Santiago', 'Rojas',     'EST-019', 'hash_pwd_santi',  1, 2724, '2019', 'santiago.rojas@correo.edu', 'Diurna', true),
+  (20, 'Juana',    'Castaño',   'EST-020', 'hash_pwd_juana',  1, 2724, '2020', 'juana.castano@correo.edu',  'Nocturna', true),
+  (21, 'Esteban',  'Mendoza',   'EST-021', 'hash_pwd_esteban',1, 2724, '2021', 'esteban.mendoza@correo.edu','Diurna', true),
+  (22, 'Karol',    'Ramírez',   'EST-022', 'hash_pwd_karol',  3, 2724, '2022', 'karol.ramirez@correo.edu',  'Diurna', true),
+  (23, 'Brayan',   'Padilla',   'EST-023', 'hash_pwd_brayan', 1, 2724, '2023', 'brayan.padilla@correo.edu', 'Nocturna', true),
+  (24, 'Juliana',  'Arias',     'EST-024', 'hash_pwd_juli',   1, 2724, '2024', 'juliana.arias@correo.edu',  'Diurna', true)
 ON CONFLICT (id_estudiante) DO NOTHING;
 
 ---------------------------
