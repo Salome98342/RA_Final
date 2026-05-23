@@ -38,8 +38,8 @@ def load_test_data():
     
     # Programa
     prog1, _ = Programa.objects.get_or_create(
-        id_programa=1,
-        defaults={'nombre': 'Ingeniería de Sistemas', 'codigo_programa': 'IS-01'}
+        id_programa=2724,
+        defaults={'nombre': 'Programa 2724', 'codigo_programa': '2724'}
     )
     
     # Período
@@ -78,6 +78,7 @@ def load_test_data():
             'apellido': 'Escobar',
             'contrasena_estudiante': make_password('Escobar1234'),  # Hasheada
             'tipo_documento': td1,
+            'programa': prog1,
             'num_documento': '2001',
             'correo': 'david.escobar@correounivalle.edu.co',
             'jornada': 'Diurna',
@@ -92,6 +93,7 @@ def load_test_data():
             'apellido': 'Hincapie',
             'contrasena_estudiante': make_password('Guadalupe2024'),  # Hasheada
             'tipo_documento': td1,
+            'programa': prog1,
             'num_documento': '2002',
             'correo': 'guadalupe.hincapie@correounivalle.edu.co',
             'jornada': 'Diurna',

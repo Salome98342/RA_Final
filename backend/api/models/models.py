@@ -112,6 +112,7 @@ class Estudiante(models.Model):
     codigo_estudiante = models.CharField(max_length=50, unique=True)
     contrasena_estudiante = models.CharField(max_length=255)
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.RESTRICT, db_column="id_tipo_documento")
+    programa = models.ForeignKey("Programa", on_delete=models.RESTRICT, db_column="id_programa", null=True, blank=True)
     num_documento = models.CharField(max_length=50, unique=True)
     correo = models.EmailField(max_length=255, unique=True)
     jornada = models.CharField(max_length=50, blank=True, null=True)

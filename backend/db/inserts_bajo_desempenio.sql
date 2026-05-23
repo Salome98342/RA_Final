@@ -11,14 +11,14 @@ BEGIN;
 
 INSERT INTO estudiante (
   id_estudiante, nombre, apellido, codigo_estudiante, contrasena_estudiante,
-  id_tipo_documento, num_documento, correo, jornada
+  id_tipo_documento, id_programa, num_documento, correo, jornada
 ) VALUES
-  (25, 'Rodrigo',   'Gutiérrez',  'EST-025', 'hash_pwd_rod',   1, '2025', 'rodrigo.gutierrez@correo.edu', 'Diurna'),
-  (26, 'Ináira',    'Flores',     'EST-026', 'hash_pwd_ina',   1, '2026', 'inaras.flores@correo.edu',     'Nocturna'),
-  (27, 'Gastón',    'Ramos',      'EST-027', 'hash_pwd_gaston',1, '2027', 'gaston.ramos@correo.edu',      'Diurna'),
-  (28, 'Valentina', 'Ibáñez',     'EST-028', 'hash_pwd_val',   1, '2028', 'valentina.ibanez@correo.edu',  'Diurna'),
-  (29, 'Iván',      'Soto',       'EST-029', 'hash_pwd_ivan',  2, '2029', 'ivan.soto@correo.edu',         'Nocturna'),
-  (30, 'Belén',     'Fuentes',    'EST-030', 'hash_pwd_belen', 1, '2030', 'belen.fuentes@correo.edu',     'Diurna')
+  (25, 'Rodrigo',   'Gutiérrez',  'EST-025', 'hash_pwd_rod',   1, 2724, '2025', 'rodrigo.gutierrez@correo.edu', 'Diurna'),
+  (26, 'Ináira',    'Flores',     'EST-026', 'hash_pwd_ina',   1, 2724, '2026', 'inaras.flores@correo.edu',     'Nocturna'),
+  (27, 'Gastón',    'Ramos',      'EST-027', 'hash_pwd_gaston',1, 2724, '2027', 'gaston.ramos@correo.edu',      'Diurna'),
+  (28, 'Valentina', 'Ibáñez',     'EST-028', 'hash_pwd_val',   1, 2724, '2028', 'valentina.ibanez@correo.edu',  'Diurna'),
+  (29, 'Iván',      'Soto',       'EST-029', 'hash_pwd_ivan',  2, 2724, '2029', 'ivan.soto@correo.edu',         'Nocturna'),
+  (30, 'Belén',     'Fuentes',    'EST-030', 'hash_pwd_belen', 1, 2724, '2030', 'belen.fuentes@correo.edu',     'Diurna')
 ON CONFLICT (id_estudiante) DO NOTHING;
 
 -- ==============================

@@ -1262,8 +1262,7 @@ def coordinador_estudiantes_view(request):
 
         include_inactive = str(request.query_params.get("include_inactive", "")).strip().lower() in {"1", "true", "yes", "si"}
 
-        # Lista todos los estudiantes activos (sin filtro por programa porque Estudiante no tiene relación directa a Programa)
-        # La relación es indirecta a través de Matricula -> Asignatura -> Programa
+        # Lista todos los estudiantes activos; el programa ahora queda guardado directamente en Estudiante.
         # NOTA: Se muestran todos los estudiantes porque:
         # - Los estudiantes nuevos importados aun no tienen matriculas
         # - Cuando se matriculan, se valida que sean del programa del coordinador
@@ -1275,6 +1274,8 @@ def coordinador_estudiantes_view(request):
             .select_related('tipo_documento')
             .order_by('apellido', 'nombre')
         )
+
+        estudiantes = estudiantes.filter(programa=detected_program)
 
         if not include_inactive:
             estudiantes = estudiantes.filter(activo=True)
@@ -1393,6 +1394,8 @@ def coordinador_estudiantes_view(request):
                 {"detail": f"Tipo de documento no válido: {tipo_doc_desc}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        detected_program = _infer_program_for_coordinador(coord)
         
         # Usar la misma contraseña genérica configurada para importación masiva
         password_provisional = _get_bulk_student_password()
@@ -1407,6 +1410,7 @@ def coordinador_estudiantes_view(request):
                 contrasena_estudiante=hashed_password,
                 correo=correo,
                 tipo_documento=tipo_doc,
+                programa=detected_program,
                 num_documento=num_documento,
                 jornada=jornada,
                 activo=True,
@@ -2218,6 +2222,10 @@ def coordinador_import_estudiantes_view(request):
     seen_codes_in_file = set()
     bulk_password = _get_bulk_student_password()
     passwords_for_emails = []  # Lista paralela: (correo, nombre, apellido, codigo, password)
+    detected_program = _infer_program_for_coordinador(coord)
+    programas = list(Programa.objects.all())
+    programas_by_code = { _norm_code(p.codigo_programa): p for p in programas if getattr(p, "codigo_programa", None) }
+    programas_by_name = { _normalize_text(p.nombre): p for p in programas if getattr(p, "nombre", None) }
     
     # Helper function para acceder a columnas de pandas de forma segura
     def get_col(row, *col_names):
@@ -2248,6 +2256,7 @@ def coordinador_import_estudiantes_view(request):
         tipo_doc_id = get_col(row, "tipo_documento_id", "tipo_doc_id", "id tipo documento")
         num_documento = get_col(row, "num_documento", "documento", "doc_number", "numero documento", "nro documento", "cedula", "identificacion", "id number", "no. documento")
         jornada = get_col(row, "jornada", "turno", "shift")
+        programa_raw = get_col(row, "programa", "codigo_programa", "programa_codigo", "programa academico", "programa académico")
         
         # Log de debug para primera fila - valores extraídos
         if idx == 0:
@@ -2260,6 +2269,7 @@ def coordinador_import_estudiantes_view(request):
             logger.info(f"  - tipo_doc_id: {tipo_doc_id}")
             logger.info(f"  - num_documento: {num_documento}")
             logger.info(f"  - jornada: {jornada}")
+            logger.info(f"  - programa_raw: {programa_raw}")
         
 
         # Helper limpieza Excel
@@ -2277,6 +2287,7 @@ def coordinador_import_estudiantes_view(request):
         tipo_doc_desc = clean_val(tipo_doc_desc)
         num_documento = clean_val(num_documento, 20)
         jornada, jornada_error = _validate_jornada_value(clean_val(jornada, 50))
+        programa_raw = clean_val(programa_raw, 100)
         
         # Log de debug para primera fila después de limpieza
         if idx == 0:
@@ -2288,6 +2299,7 @@ def coordinador_import_estudiantes_view(request):
             logger.info(f"  - tipo_doc_desc: '{tipo_doc_desc}'")
             logger.info(f"  - num_documento: '{num_documento}'")
             logger.info(f"  - jornada: '{jornada}'")
+            logger.info(f"  - programa_raw: '{programa_raw}'")
         
         # Validar campos requeridos
         if not (codigo and nombre and apellido and correo and (tipo_doc_desc or tipo_doc_id) and num_documento):
@@ -2367,6 +2379,26 @@ def coordinador_import_estudiantes_view(request):
                 "row": row_num,
                 "error": f"TipoDocumento no encontrado o no permitido: '{tipo_doc_desc}'"
             }); continue
+
+        programa = detected_program
+        if programa_raw:
+            prog_by_code = programas_by_code.get(_norm_code(programa_raw))
+            if prog_by_code:
+                programa = prog_by_code
+            else:
+                prog_norm = _normalize_text(programa_raw)
+                programa = programas_by_name.get(prog_norm)
+                if not programa:
+                    for key_norm, p in programas_by_name.items():
+                        if prog_norm in key_norm or key_norm in prog_norm:
+                            programa = p
+                            break
+            if not programa:
+                errors.append({
+                    "row": row_num,
+                    "error": f"Programa no encontrado: '{programa_raw}'"
+                })
+                continue
         
         # UPSERT: si el estudiante ya existe por código, documento o correo, actualizar su información.
         existing_student = existing_students_by_code.get(codigo)
@@ -2416,6 +2448,10 @@ def coordinador_import_estudiantes_view(request):
                 changed = True
             if getattr(existing_student, 'tipo_documento_id', None) != getattr(tipo_doc, 'id_tipo_documento', None):
                 existing_student.tipo_documento = tipo_doc
+                changed = True
+
+            if getattr(existing_student, 'programa_id', None) != getattr(programa, 'id_programa', None):
+                existing_student.programa = programa
                 changed = True
 
             jornada_value = jornada or None
@@ -2469,6 +2505,7 @@ def coordinador_import_estudiantes_view(request):
             contrasena_estudiante=hashed,
             correo=correo,
             tipo_documento=tipo_doc,
+            programa=programa,
             num_documento=num_documento,
             jornada=jornada or None
         ))
@@ -2519,7 +2556,7 @@ def coordinador_import_estudiantes_view(request):
             with transaction.atomic():
                 Estudiante.objects.bulk_update(
                     to_update,
-                    ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'num_documento', 'jornada'],
+                    ['codigo_estudiante', 'nombre', 'apellido', 'correo', 'tipo_documento', 'programa', 'num_documento', 'jornada'],
                     batch_size=500,
                 )
         except Exception as e:
@@ -6706,8 +6743,8 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
     total_strict = 0.0
     total_prog = 0.0
     total_coverage = 0.0
-    total_acts = 0
-    total_acts_graded = 0
+    total_acts_set = set()
+    total_acts_graded_set = set()
 
     ras_info = []
 
@@ -6719,7 +6756,8 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
         acts_graded = 0
 
         for rel in rels:
-            total_acts += 1
+            act_key = rel.actividad_id or rel.id_ra_actividad
+            total_acts_set.add(act_key)
             w = float(rel.porcentaje_ra_actividad) / 100.0
             sum_w += w
             nota = _average_nota_for_ra_actividad(mat.id_matricula, rel.id_ra_actividad)
@@ -6727,7 +6765,7 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
                 sum_w_graded += w
                 acc_strict += nota * w
                 acts_graded += 1
-                total_acts_graded += 1
+                total_acts_graded_set.add(act_key)
 
         ra_strict = acc_strict
         ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else None
@@ -6752,8 +6790,8 @@ def course_detail_view(request, codigo_asignatura: str, id_estudiante: int):
     estudiante_stats["nota_strict"] = round(total_strict, 2)
     estudiante_stats["nota_progressive"] = round(total_prog, 2) if total_prog != 0.0 else 0.0
     estudiante_stats["coverage"] = round(total_coverage * 100, 1)
-    estudiante_stats["actividades_totales"] = total_acts
-    estudiante_stats["actividades_calificadas"] = total_acts_graded
+    estudiante_stats["actividades_totales"] = len(total_acts_set)
+    estudiante_stats["actividades_calificadas"] = len(total_acts_graded_set)
 
     # Calcular estadísticas del curso (promedio de todos los estudiantes)
     # Obtenemos todas las matrículas del mismo periodo
@@ -6895,6 +6933,12 @@ def course_analytics_view(request, codigo_asignatura: str):
         'raactividad_set__notasactividad_set__matricula'
     ))
 
+    course_activity_ids = set()
+    for ra in ras:
+        for rel in ra.raactividad_set.all():
+            course_activity_ids.add(rel.actividad_id or rel.id_ra_actividad)
+    total_course_acts = len(course_activity_ids)
+
     # Calcular estadísticas por estudiante
     estudiantes_data = []
     notas_curso = []
@@ -6902,8 +6946,7 @@ def course_analytics_view(request, codigo_asignatura: str):
     for mat in matriculas_curso:
         nota_total = 0.0
         coverage_total = 0.0
-        acts_calificadas = 0
-        acts_totales = 0
+        graded_activity_ids = set()
 
         for ra in ras:
             # Usar datos ya prefetched para evitar N+1 queries
@@ -6913,7 +6956,6 @@ def course_analytics_view(request, codigo_asignatura: str):
             acc_strict = 0.0
             
             for rel in rels:
-                acts_totales += 1
                 w = float(rel.porcentaje_ra_actividad) / 100.0
                 sum_w += w
                 notas_rel = [
@@ -6925,7 +6967,7 @@ def course_analytics_view(request, codigo_asignatura: str):
                 if nota is not None:
                     sum_w_graded += w
                     acc_strict += nota * w
-                    acts_calificadas += 1
+                    graded_activity_ids.add(rel.actividad_id or rel.id_ra_actividad)
             
             ra_prog = acc_strict / sum_w_graded if sum_w_graded > 0.0 else 0.0
             coverage = min(1.0, max(0.0, sum_w_graded / (sum_w if sum_w > 0 else 1.0)))
@@ -6940,8 +6982,8 @@ def course_analytics_view(request, codigo_asignatura: str):
             "correo": mat.estudiante.correo,
             "nota": round(nota_total, 2),
             "coverage": round(coverage_total * 100, 1),
-            "actividades_calificadas": acts_calificadas,
-            "actividades_totales": acts_totales,
+            "actividades_calificadas": len(graded_activity_ids),
+            "actividades_totales": total_course_acts,
         })
 
     # Estadísticas del curso

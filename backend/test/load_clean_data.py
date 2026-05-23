@@ -73,7 +73,7 @@ print("\n[3/5] Creando programa y período académico...")
 
 programa = Programa.objects.create(
     nombre='Tecnología en Desarrollo de Software',
-    codigo_programa='TDDS'
+    codigo_programa='2724'
 )
 print(f"   ✓ Programa: {programa.nombre}")
 
@@ -212,6 +212,7 @@ for num_est in range(1, 21):
         codigo_estudiante=f'EST{num_est:04d}',
         contrasena_estudiante=make_password('Estudiante123!'),
         tipo_documento=tipo_cc,
+        programa=programa,
         num_documento=f'1234567{num_est:03d}',
         correo=f'estudiante{num_est}@example.com',
         jornada='Diurna' if num_est % 2 == 0 else 'Nocturna',
