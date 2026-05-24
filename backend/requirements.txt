@@ -19,3 +19,7 @@ xlrd>=2.0.1  # Requerido para leer archivos .xls antiguos
 
 # ==================== DOCUMENTACIÓN API ====================
 drf-spectacular>=0.27.0
+
+# Production WSGI server and static middleware
+gunicorn>=20.1.0
+whitenoise>=6.5.0

@@ -251,6 +251,8 @@ SEND_WELCOME_EMAILS_ON_IMPORT = _env_bool('SEND_WELCOME_EMAILS_ON_IMPORT', True)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+# Directory where `collectstatic` will place built static files in production
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
