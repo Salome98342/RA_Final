@@ -9,14 +9,12 @@ services:
     startCommand: gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120
     envVars:
       - key: SECRET_KEY
-        fromDatabase: false
+        sync: false
       - key: DEBUG
-        fromDatabase: false
+        sync: false
       - key: DATABASE_URL
-        fromDatabase: false
+        sync: false
       - key: FRONTEND_URL
-        fromDatabase: false
+        sync: false
       - key: CORS_ORIGINS
-        fromDatabase: false
-      - key: DB_CONN_MAX_AGE
-        fromDatabase: false
+        sync: false
