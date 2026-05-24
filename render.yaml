@@ -8,7 +8,7 @@ services:
     buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
     startCommand: gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120
     envVars:
-      - key: xj)4)m%!xkyuepq)coll=nd@rrldb9iqt+5^k3+w^#t)se%-sr
+      - key: SECRET_KEY
         fromDatabase: false
       - key: DEBUG
         fromDatabase: false
