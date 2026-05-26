@@ -75,7 +75,17 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 
-DB_CONN_MAX_AGE = int(os.getenv('DB_CONN_MAX_AGE', '0'))
+def _env_int(name: str, default: int = 0) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+DB_CONN_MAX_AGE = _env_int('DB_CONN_MAX_AGE', 0)
 
 
 DATABASES = {
