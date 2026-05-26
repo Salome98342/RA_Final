@@ -4,6 +4,7 @@ djangorestframework>=3.16.1,<4.0
 
 # ==================== BASE DE DATOS ====================
 psycopg2-binary>=2.9.0
+dj-database-url>=2.2.0
 
 # ==================== UTILIDADES ====================
 python-dotenv>=1.0.0
