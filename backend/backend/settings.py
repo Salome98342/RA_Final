@@ -58,13 +58,16 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # Security settings for production (only when DEBUG=False)
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
-SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', str(not DEBUG)) == 'True'
-CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', str(not DEBUG)) == 'True'
+# ✅ IMPORTANTE: Para desarrollo local con frontend en http://localhost:5173, 
+# SESSION_COOKIE_SECURE debe ser False. En producción con HTTPS, dejar en True.
+SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=False)
+CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=False)
 
 # Parse CORS origins from environment variable (comma-separated)
 cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
 CORS_ORIGIN_ALLOW_ALL = DEBUG  # Allow all in development, restrict in production
+CORS_ALLOW_CREDENTIALS = True  # ✅ Permite cookies/credenciales en peticiones cross-origin
 
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
