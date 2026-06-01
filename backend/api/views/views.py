@@ -41,7 +41,7 @@ from django.core.files.storage import default_storage
 import logging
 from django.utils.text import get_valid_filename
 from django.utils import timezone
-from django.db.models import Avg, Sum, Q
+from django.db.models import Avg, Sum, Q, Prefetch, Count
 from django.db import transaction, DatabaseError, IntegrityError
 from django.http import FileResponse
 import datetime
@@ -2613,7 +2613,11 @@ def coordinador_asignaturas_view(request):
     if docente_code:
         qs = qs.filter(docente__codigo_docente=docente_code)
     if periodo_desc:
-        qs = qs.filter(Q(periodo__descripcion=periodo_desc) | Q(matricula__periodo__descripcion=periodo_desc)).distinct()
+        # Optimización: usar IN subquery en lugar de JOIN + distinct
+        asig_ids_with_period = Matricula.objects.filter(
+            periodo__descripcion=periodo_desc
+        ).values_list('asignatura_id', flat=True).distinct()
+        qs = qs.filter(Q(periodo__descripcion=periodo_desc) | Q(id_asignatura__in=asig_ids_with_period))
     search = (request.query_params.get("search") or "").strip()
     if search:
         qs = qs.filter(
@@ -2635,6 +2639,7 @@ def coordinador_asignaturas_view(request):
     total = qs.count()
     
     rows = []
+    # Optimización: aplicar slicing ANTES de iterar
     for a in qs.order_by("nombre")[offset:offset+page_size]:
         rows.append({
             "id_asignatura": a.id_asignatura,
@@ -2678,33 +2683,30 @@ def coordinador_asignatura_ras_view(request):
     if not asig:
         return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
     
-    # Optimización: prefetch relacionados para evitar N+1 queries
-    ras = ResultadoDeAprendizaje.objects.filter(asignatura=asig).prefetch_related(
-        'raactividad_set',
-        'raactividad_set__notasactividad_set',
-        'raactividad_set__notasactividad_set__matricula',
-        'raactividad_set__notasactividad_set__matricula__periodo'
-    ).order_by("id_ra")
+    # Optimización: usar Count con filtrado en DB en lugar de prefetch + filtrado Python
+    if periodo_desc:
+        # Contar actividades que tienen notas de estudiantes matriculados en ese periodo
+        ras_qs = ResultadoDeAprendizaje.objects.filter(asignatura=asig).annotate(
+            total_actividades=Count(
+                'raactividad_set',
+                filter=Q(raactividad_set__notasactividad_set__matricula__periodo__descripcion=periodo_desc),
+                distinct=True
+            )
+        ).order_by("id_ra")
+    else:
+        # Contar todas las actividades asociadas a cada RA
+        ras_qs = ResultadoDeAprendizaje.objects.filter(asignatura=asig).annotate(
+            total_actividades=Count('raactividad_set', distinct=True)
+        ).order_by("id_ra")
     
     out = []
-    for ra in ras:
-        rels = ra.raactividad_set.all()
-        # Si se filtra periodo, contar solo actividades con al menos una nota de matriculas de ese periodo
-        if periodo_desc:
-            rels = [rel for rel in rels if any(
-                nota.matricula.periodo.descripcion == periodo_desc 
-                for nota in rel.notasactividad_set.all()
-            )]
-            count = len(rels)
-        else:
-            count = len(rels)
-        
+    for ra in ras_qs:
         out.append({
             "id_ra": ra.id_ra,
             "numero_ra": ra.numero_ra,
             "descripcion": ra.descripcion,
             "porcentaje_ra": float(ra.porcentaje_ra),
-            "total_actividades": count,
+            "total_actividades": ra.total_actividades,
         })
     return Response({
         "codigo_asignatura": codigo,
@@ -3576,23 +3578,27 @@ def coordinador_asignatura_avance_view(request):
     if not asig:
         return Response({"detail": "Asignatura no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
-    mats = Matricula.objects.filter(asignatura=asig)
+    # Optimización: usar select_related para todas las relaciones
+    mats = Matricula.objects.filter(asignatura=asig).select_related("periodo", "estudiante")
     if periodo_desc:
         mats = mats.filter(periodo__descripcion=periodo_desc)
-    mats = list(mats)
-    total_est = len(mats)
+    mat_list = list(mats)
+    total_est = len(mat_list)
+    mat_ids = [m.id_matricula for m in mat_list]
 
-    # RAs y relaciones actividad-RA
-    ras = list(ResultadoDeAprendizaje.objects.filter(asignatura=asig).order_by("id_ra"))
-    rels_by_ra: dict[int, list[RaActividad]] = {r.id_ra: [] for r in ras}
-    for rel in RaActividad.objects.filter(ra__asignatura=asig).select_related("actividad", "ra"):
-        rels_by_ra.setdefault(rel.ra_id, []).append(rel)
-
-    # Notas por (matricula, rel)
-    notas = list(NotasActividad.objects.filter(matricula__in=mats, ra_actividad__ra__asignatura=asig)
-                 .select_related("ra_actividad", "matricula"))
+    # RAs con prefetch optimizado
+    ras = list(ResultadoDeAprendizaje.objects.filter(asignatura=asig).prefetch_related(
+        Prefetch('raactividad_set', queryset=RaActividad.objects.select_related('actividad'))
+    ).order_by("id_ra"))
+    
+    # Notas optimizadas con select_related completo
+    notas_qs = NotasActividad.objects.filter(
+        matricula__in=mat_ids, 
+        ra_actividad__ra__asignatura=asig
+    ).select_related("ra_actividad", "matricula")
+    
     notas_map: dict[tuple[int, int], list[NotasActividad]] = {}
-    for n in notas:
+    for n in notas_qs:
         notas_map.setdefault((n.matricula_id, n.ra_actividad_id), []).append(n)
 
     threshold = 3.0
@@ -3603,9 +3609,9 @@ def coordinador_asignatura_avance_view(request):
 
     # Precalcular por estudiante: nota progresiva por RA y cobertura
     student_ra_prog: dict[tuple[int, int], tuple[float|None, float]] = {}
-    for m in mats:
+    for m in mat_list:
         for r in ras:
-            rels = rels_by_ra.get(r.id_ra, [])
+            rels = list(r.raactividad_set.all())
             sum_w = 0.0
             sum_wg = 0.0
             acc = 0.0
@@ -3630,7 +3636,7 @@ def coordinador_asignatura_avance_view(request):
         vals = []
         oks = 0
         cov_acc = 0.0
-        for m in mats:
+        for m in mat_list:
             prog, cov = student_ra_prog.get((m.id_matricula, r.id_ra), (None, 0.0))
             if prog is not None:
                 vals.append(prog)
@@ -3657,7 +3663,7 @@ def coordinador_asignatura_avance_view(request):
     course_vals = []
     course_oks = 0
     course_cov_acc = 0.0
-    for m in mats:
+    for m in mat_list:
         acc = 0.0
         acc_w = 0.0
         cov_w = 0.0

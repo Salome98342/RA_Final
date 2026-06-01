@@ -383,7 +383,7 @@ const DocenteCalificar: React.FC = () => {
     if (key === 'inicio') { navigate('/docente/inicio'); return }
     if (key === 'cursos') { navigate('/docente/cursos'); return }
     if (key === 'volver-coordinador') { navigate('/coordinador/asignaturas'); return }
-    if (key === 'crear') { if (curso) navigate(`/docente/${curso}/actividades/nueva`); return }
+    if (key === 'crear') { if (curso) navigate(`/docente/${curso}/ras`); return }
     if (key === 'recursos') { if (curso) navigate(`/docente/${curso}/recursos`); return }
     if (key === 'calificar') {
       const el = document.getElementById('student-list-panel') as HTMLDivElement | null
