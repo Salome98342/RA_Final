@@ -117,6 +117,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -269,6 +270,14 @@ SEND_WELCOME_EMAILS_ON_IMPORT = _env_bool('SEND_WELCOME_EMAILS_ON_IMPORT', True)
 STATIC_URL = 'static/'
 # Directory where `collectstatic` will place built static files in production
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise storage backend for serving static files in production
+# Compresses CSS/JS and serves with proper cache headers
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Optional: Pre-compress files during collectstatic (improves performance)
+WHITENOISE_COMPRESS_OFFLINE = not DEBUG
+WHITENOISE_AUTOREFRESH = DEBUG  # Auto-refresh statics in development
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(__file__).resolve().parent.parent / "media"
