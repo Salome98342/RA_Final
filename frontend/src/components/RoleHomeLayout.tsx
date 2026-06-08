@@ -60,7 +60,7 @@ const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
           title: 'Manual',
           imageSrc: '/carrusel/Manual.png',
           alt: 'Manual de usuario',
-          href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+          href: 'Docs/Manual de Usuario RA_Manager.pdf',
           hrefLabel: 'Abrir manual',
         },
       ]
@@ -75,7 +75,7 @@ const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
           title: 'Manual',
           imageSrc: '/carrusel/Manual.png',
           alt: 'Manual de usuario',
-          href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+          href: 'Docs/Manual de Usuario RA_Manager.pdf',
           hrefLabel: 'Abrir manual',
         },
       ]
@@ -89,7 +89,7 @@ const RoleHomeLayout: React.FC<RoleHomeLayoutProps> = ({
         title: 'Manual',
         imageSrc: '/carrusel/Manual.png',
         alt: 'Manual de usuario',
-        href: 'https://pbs.twimg.com/media/CiSvvYHWsAELI7v.jpg',
+        href: 'Docs/Manual de Usuario RA_Manager.pdf',
         hrefLabel: 'Abrir manual',
       },
     ]
